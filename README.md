@@ -23,7 +23,7 @@ Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](htt
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml   # Codex なら - codex（両方でもよい）
-apm install asuka1975/cradle#v0.1.0-alpha.1      # タグで固定する
+apm install asuka1975/cradle#v0.1.0-alpha.2      # タグで固定する
 apm compile --single-agents                      # Codex: 規約を 1 枚の AGENTS.md にする（Claude Code では不要）
 ```
 
