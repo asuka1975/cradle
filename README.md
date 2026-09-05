@@ -74,4 +74,4 @@ apm pack                          # Claude Code plugin 形式のバンドル
 
 ## ライセンス
 
-MIT（[LICENSE](LICENSE)）。
+GNU General Public License v3.0（[LICENSE](LICENSE)）。
