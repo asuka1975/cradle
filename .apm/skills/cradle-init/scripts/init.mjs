@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // init — 新しいプロダクトに Cradle の骨格を敷く。
-//   init --project <Root> [--dir <path>] [--backend <package>] [--dry-run] [--force]
+//   init --project <Root> [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
+//   --only <prefix> は、そのパスで始まるファイルだけを対象にする（例: --only lean/mockup --force で骨格由来のモックアップだけ更新）
 //   --backend <package> を付けると backend/ の骨格（ktlint 独自ルール・.editorconfig・gradle.properties）も敷く（例: com.example.notes）
 //   <Root> は Lean のルート名前空間（例: MonoWa）。lake の exe 名は小文字にしたもの。
 // 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm compile が rules / AGENTS.md に写す）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
@@ -16,6 +17,7 @@ const target = opt("dir", process.env.CRADLE_PROJECT_DIR ?? process.env.CLAUDE_P
 const backendPkg = opt("backend", null);
 const dryRun = args.includes("--dry-run");
 const force = args.includes("--force");
+const only = opt("only", null);
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 const lower = project.toLowerCase();
 const assets = join(import.meta.dirname, "..", "assets");
@@ -23,6 +25,7 @@ const assets = join(import.meta.dirname, "..", "assets");
 const written = [], skipped = [], failed = [];
 // 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する
 function put(rel, content, { exec = false } = {}) {
+  if (only && only !== true && !rel.startsWith(only.replace(/\/$/, ""))) return;
   const dest = join(target, rel);
   if (existsSync(dest) && !force) { skipped.push(rel); return; }
   if (dryRun) { written.push(rel); return; }
@@ -54,7 +57,7 @@ for (const f of walk(join(assets, "project"))) {
   put(relPath.replace(/\.tmpl$/, ""), rename(readFileSync(f, "utf8")));
 }
 put("cradle.json", rename(readFileSync(join(assets, "project", "cradle.json"), "utf8")));
-{
+if (!only) {
   const gi = join(target, ".gitignore");
   const add = readFileSync(join(assets, "project", ".gitignore"), "utf8");
   if (!existsSync(gi)) put(".gitignore", add);

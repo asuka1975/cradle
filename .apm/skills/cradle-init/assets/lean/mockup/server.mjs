@@ -46,19 +46,20 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-/** cradle の spec-query があればそれで meta を取る（無ければ scenarios だけを lakefile 近傍から推測）。 */
+/** cradle の spec-query で meta を取る。置き場は CRADLE_SPEC_QUERY > .claude/skills（Claude Code）> .agents/skills（Codex）。 */
 function meta() {
+  const root = join(LEAN_DIR, "..");
   const candidates = [
-    join(LEAN_DIR, "..", ".claude", "skills", "cradle", "scripts", "spec-query.mjs"),
     process.env.CRADLE_SPEC_QUERY,
+    ...[".claude", ".agents"].map(d => join(root, d, "skills", "cradle", "scripts", "spec-query.mjs")),
   ].filter(Boolean);
   for (const c of candidates) {
     if (!existsSync(c)) continue;
     try {
-      return JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: join(LEAN_DIR, ".."), encoding: "utf8", env: { ...process.env, CRADLE_PROJECT_DIR: join(LEAN_DIR, "..") } }));
+      return JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CRADLE_PROJECT_DIR: root } }));
     } catch (e) { return { error: String(e.message ?? e) }; }
   }
-  return { error: "spec-query が見つかりません（cradle をインストールすると /api/meta が使えます）" };
+  return { error: `spec-query が見つかりません（${candidates.join(" / ")} のどれにも無い。cradle を apm install するか CRADLE_SPEC_QUERY で場所を指定する）` };
 }
 
 const server = createServer(async (req, res) => {
