@@ -1,0 +1,77 @@
+---
+name: lean-domain-model
+description: Use to create, update or verify the Lean 4 executable specification under lean/ from the exploration documents (event-timeline, hotspots, ubiquitous-language, ux-review, model-review) — initial generation, reflecting a session's results, fixing lake build, adding a command or a screen, checking a proposed feature against the model. Formalization questions go to model-review.md as MQ, never to the expert directly.
+---
+
+# Lean 実行可能仕様の生成・更新
+
+`documents/ddd/` → `lean/` の一方向。documents を書き換えない（書けるのは `model-review.md` への MQ 起票と自分の起票行の訂正だけ）。
+規約の要点は `.claude/rules/lean-spec.md`、詳細と骨格例は `references/lean-conventions.md`。骨格は `/cradle-init` が敷く（動く最小ドメイン付き）。
+
+## 入力の読み方（5 ファイルとも必ず読む）
+
+| ファイル | 寄与 |
+|---|---|
+| `ubiquitous-language.md` | 型名・フィールド名の源（英語候補をそのまま識別子に）。「確定」だけ型にする |
+| `event-timeline.md` | 更新系イベント 1 つ = UseCase 1 ディレクトリ。主体「サイト」のイベントは execute の帰結 |
+| `hotspots.md` | resolved の結論だけを不変条件に。open はモデル化しない |
+| `ux-review.md` | 「却下」は反機能として固定。「反映済」は二重取り込みに注意。open は不可 |
+| `model-review.md` | 自分の起票の帳簿。反映済 / 却下になった MQ の暫定解釈を確定し `-- 起票候補` を出典参照に置き換える |
+
+## 手順
+
+### 初回
+
+1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ `/cradle-init`。
+2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格の例（最小ドメイン）を置き換える。
+3. `lake build` が通るまで直す。証明が難航するものは `sorry` + `-- TODO(proof):` で先に進み、全体を成立させてから戻る。
+4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。
+5. `cradle lean-check`、`lake exe <exe> <<< '{"cmd":"init","scenario":"basic","viewer":…}'` で疎通。
+6. golden を採る（モックアップの「golden として保存」か CLI の init / flow の応答をそのまま保存 + `<name>.request.json`）。
+
+### 差分更新（セッション後）
+
+1. `git diff` で documents の変更点（新 resolved HS・新イベント・却下 / 反映された UX・MQ の状態変化）を特定する。
+2. 影響するモジュールだけを更新する。resolved が撤回・変更されたら旧結論に基づく型・定理を必ず削除・改訂する（出典 ID を grep）。
+3. `lake build` → `cradle lean-check` → `cradle golden-check`。証明が壊れたら、それは documents とモデルの不整合の検知が機能した瞬間なので報告に含める。golden の変化は意図したものだけ `--update`。
+
+### コマンド（更新系）を増やす
+
+`Application/UseCase/<名前>UseCase/{Command,UseCase}.lean` → 失敗の語彙が要れば `Domain/Error.lean` → 対象 Entity にふるまいと `@[contract]` 定理 →
+`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ →
+`Runtime/Reachable.lean` の check 保存に 1 腕 → `Scenarios.lean` に `#guard`。
+
+### 画面（参照系）を増やす
+
+`Application/UseCase/<画面>UseCase/{ReadModel,QueryService,UseCase}.lean` → `Application/View.lean` に View の語彙 → `Runtime/Views.lean` の束に口を足す（`Option`）→ `Runtime/Json.lean` → `Laws/Properties.lean` に転送。
+Row に足りない事実が出たら、足す前に「そのフィールドを決定するドメイン事実は何か」を問う（MQ 起票）。
+
+### 追加ロジックの整合性検証
+
+独立ファイル `<Root>/Extensions/<Name>.lean` に書き、既存の契約定理・反機能への証明義務を課す。書けない証明がそのまま矛盾点の一覧。マージしない。
+
+## マッピング
+
+- 確定した用語は英語候補で型・フィールドに。英語候補が空の用語は文脈から命名し、日本語の原語を docstring に残す。
+- 同一性が探索で確定しているものは構造で表す（同名の並存は「防がない」のではなく「同一性に関与しないから当然」）。定理が `rfl` で済むならモデルが正しい証拠。
+- resolved HS は (a) 型で表現不能にする (b) per-Root の `valid` にする (c) 集約ローカルの定理にする、の順で割り当てる。
+- 却下された UX 提案は反機能として `Runtime/Command.lean` の一覧に書き、コマンドが無いこととフレーム定理で固定する。
+- すべての型・定理・分岐の docstring に出典（`[HS-xxx]` `[イベント#n]`）。ステータス語は書かない。導出した事実は「(導出)」。
+
+## MQ の起票
+
+型にしようとして初めて露呈する曖昧さは最大の副産物。勝手に決めず、作業を最後まで進めてから**バッチで** `model-review.md` に起票する
+（種別: 曖昧 / 対立 / 未決、「形式化で詰まった箇所」「モデルの暫定解釈」必須）。モデル側はゆるい解釈を採り `-- 起票候補: [MQ-xxx]` を残す。
+報告本文にしか書かない起票は禁止。既存 MQ と重複しない。
+
+## 報告
+
+```
+## モデル更新報告
+- 反映した documents の変更: [HS-xxx resolved, UX-xxx 却下, MQ-xxx 反映済, …]
+- 更新モジュール: …
+- ビルド: 成功 / 失敗（原因）  lean-check: OK / NG  golden-check: 全一致 / CHANGED n 件（意図: …）
+- 証明状況: sorry n 件（一覧と TODO 理由）
+- 反機能の防波堤: 追加 / 更新した「存在しないこと」
+- 起票した MQ（model-review.md に起票済み）: …
+```

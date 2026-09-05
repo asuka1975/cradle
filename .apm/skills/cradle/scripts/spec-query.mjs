@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// spec-query — Lean 実行可能仕様への決定論的な問い合わせ。
+// 仕様に関する問いは推測で答えず、この道具で Lean を動かした結果を引用する。
+//
+//   spec-query meta                               シナリオ・コマンド・失敗語彙・画面の口を JSON で
+//   spec-query scenarios | commands | errors | outlets（画面の口）
+//   spec-query print <Name>...                    `lake env lean` の #print（型・構成子・フィールド）
+//   spec-query init  --scenario S [--viewer J] [--actor J] [--today D]
+//   spec-query run   --scenario S --commands J|@file [--actor J] [--viewer J] [--today D] [--full]
+//   spec-query step  --state @file --command J --actor J [--viewer J] [--today D]
+//   spec-query views --state @file --viewer J [--today D]
+//   spec-query raw   @request.json | -            プロトコルそのままの素通し
+//   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk } from "./lib.mjs";
+
+const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
+const [cmd, ...rest] = opts._;
+const cfg = loadConfig();
+const build = opts.build ?? "auto";
+
+const printJson = (v) => process.stdout.write(JSON.stringify(v, null, 2) + "\n");
+
+function scenarios() {
+  const files = walk(cfg.lean.rootDir, { ext: [".lean"] });
+  const names = new Set();
+  for (const f of files) {
+    const text = readFileSync(f, "utf8");
+    const m = text.match(/def\s+scenarioByName[\s\S]*?(?=\n\S|$)/);
+    if (!m) continue;
+    for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
+  }
+  return [...names];
+}
+
+/** #print の出力から構成子名だけを抜く。 */
+function constructorsOf(fullName) {
+  const r = leanEval(cfg, `import ${cfg.lean.root}\n#print ${fullName}\n`);
+  const lines = r.stdout.split("\n");
+  const i = lines.findIndex(l => l.startsWith("constructors:"));
+  if (i < 0) return { error: (r.stderr || r.stdout).trim().slice(0, 500), constructors: [] };
+  const ctors = [];
+  for (const l of lines.slice(i + 1)) {
+    const m = l.match(/^(\S+)\s*:\s*(.*)$/);
+    if (m && m[1].startsWith(fullName + ".")) ctors.push({ name: m[1].slice(fullName.length + 1), type: m[2].trim() });
+  }
+  return { constructors: ctors };
+}
+
+function commands() { return constructorsOf(`${cfg.lean.root}.Runtime.Command`); }
+function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
+
+function outlets() {
+  const s = scenarios();
+  if (!s.length) return { error: "シナリオが見つかりません（scenarioByName）", outlets: [] };
+  const res = callLean(cfg, { cmd: "init", scenario: s[0] }, { build });
+  if (!res.ok) return { error: res, outlets: [] };
+  return { scenario: s[0], outlets: Object.keys(res.ok.views ?? {}), stateKeys: Object.keys(res.ok.state ?? {}) };
+}
+
+function commonFields() {
+  const out = {};
+  if (opts.viewer !== undefined) out.viewer = jsonArg(opts.viewer);
+  if (opts.actor !== undefined) out.actor = jsonArg(opts.actor);
+  if (opts.today !== undefined) out.today = opts.today;
+  return out;
+}
+
+function summarizeTrace(trace) {
+  return trace.map((t, i) => {
+    const cmdName = t.command && typeof t.command === "object" ? Object.keys(t.command)[0] : JSON.stringify(t.command);
+    const who = t.actor ? JSON.stringify(t.actor) : "-";
+    if (t.domainError !== undefined) return `#${i + 1} ${cmdName} by ${who} → domainError: ${JSON.stringify(t.domainError)}`;
+    if (t.error !== undefined) return `#${i + 1} ${cmdName} by ${who} → protocol error: ${t.error}`;
+    return `#${i + 1} ${cmdName} by ${who} → ok`;
+  });
+}
+
+try {
+  switch (cmd) {
+    case "scenarios": printJson(scenarios()); break;
+    case "commands": printJson(commands()); break;
+    case "errors": printJson(errors()); break;
+    case "outlets": printJson(outlets()); break;
+    case "meta": printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, exe: cfg.lean.exe, bin: cfg.lean.bin },
+      scenarios: scenarios(), commands: commands().constructors.map(c => c.name), errors: errors().constructors.map(c => c.name), views: outlets() }); break;
+    case "print": {
+      if (!rest.length) fail("print には名前が要ります（例: MonoWa.Runtime.Command）");
+      const src = `import ${cfg.lean.root}\n` + rest.map(n => `#print ${n}`).join("\n") + "\n";
+      const r = leanEval(cfg, src);
+      process.stdout.write(r.stdout);
+      if (r.stderr.trim()) process.stderr.write(r.stderr);
+      process.exit(r.status ?? 0);
+    }
+    case "init": {
+      if (!opts.scenario) fail("--scenario が要ります");
+      printJson(callLean(cfg, { cmd: "init", scenario: opts.scenario, ...commonFields() }, { build })); break;
+    }
+    case "run": {
+      if (!opts.scenario) fail("--scenario が要ります");
+      const commandsArg = jsonArg(opts.commands);
+      if (!Array.isArray(commandsArg)) fail("--commands は配列（JSON か @file）");
+      const res = callLean(cfg, { cmd: "flow", scenario: opts.scenario, commands: commandsArg, ...commonFields() }, { build });
+      if (!res.ok) { printJson(res); process.exit(1); }
+      const trace = res.ok.trace;
+      if (opts.full || opts.json) { printJson(res); break; }
+      for (const line of summarizeTrace(trace)) console.log(line);
+      const last = [...trace].reverse().find(t => t.views);
+      if (last) { console.log("--- final views ---"); printJson(last.views); }
+      break;
+    }
+    case "step": {
+      const state = jsonArg(opts.state); const command = jsonArg(opts.command);
+      if (!state || !command) fail("--state @file と --command が要ります");
+      printJson(callLean(cfg, { cmd: "step", state, command, ...commonFields() }, { build })); break;
+    }
+    case "views": {
+      const state = jsonArg(opts.state);
+      if (!state) fail("--state @file が要ります");
+      printJson(callLean(cfg, { cmd: "views", state, ...commonFields() }, { build })); break;
+    }
+    case "raw": {
+      const req = jsonArg(rest[0] ?? "-");
+      printJson(callLean(cfg, req, { build })); break;
+    }
+    default:
+      console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter(l => l.startsWith("//")).map(l => l.slice(3)).join("\n"));
+      process.exit(cmd ? 1 : 0);
+  }
+} catch (e) { fail(e.message, e.exitCode ?? 1); }

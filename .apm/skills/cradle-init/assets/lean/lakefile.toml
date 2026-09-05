@@ -1,0 +1,12 @@
+# 実行可能仕様（Domain 層 + Application 層 + 境界）の lake プロジェクト。
+# `lake build` が通ること = 型検査・証明検査・#guard によるシナリオ表明の一括検査。
+# 依存はゼロ（Lean core のみ）。mathlib は入れない。
+name = "sprout-lean"
+defaultTargets = ["Sprout", "sprout"]
+
+[[lean_lib]]
+name = "Sprout"
+
+[[lean_exe]]
+name = "sprout"
+root = "Main"

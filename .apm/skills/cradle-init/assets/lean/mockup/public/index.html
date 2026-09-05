@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<!--
+  仕様アニメーション（Cradle 標準の汎用モックアップ）。
+
+  鉄則: ここにドメインの判断を 1 行も書かない。
+    - state は Lean の返答をそのまま持ち、そのまま送り返す。UI で変形しない。
+    - 並び順・フィルタ・集計・可否判定は Lean の views / validate の結果を映すだけ。
+    - シナリオは必ず {"cmd":"init"} で Lean から取る。ベタ書きしない。
+    - ボタンを段階で隠さない。拒否は domainError としてその場に出す（モデルの帰結を見せる）。
+
+  この画面は views の JSON を汎用に描く（表と木）。ドメインの語彙で作り込みたくなったら、
+  それは「表示に足りない事実を Views に足す（Lean）→ ここに描画を足す」の順で行う。
+  「誰として」の切り替えはセッションの切り替えであって名義の選択ではない — viewer と actor は必ず同時に動く。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>仕様アニメーション</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; margin: 0; font-size: 14px; color: #222; background: #fbfaf7; }
+  header { padding: .6rem 1rem; border-bottom: 1px solid #ccc; background: #f2f0ea; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+  header label { font-size: 12px; color: #555; display: flex; gap: .3rem; align-items: center; }
+  header input, header select { font: inherit; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; }
+  section { border: 1px solid #ddd; background: #fff; padding: .6rem .8rem; border-radius: 6px; min-height: 8rem; }
+  h2 { font-size: 13px; margin: 0 0 .4rem; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: .6rem; }
+  th, td { border: 1px solid #e5e5e5; padding: .2rem .4rem; text-align: left; vertical-align: top; }
+  th { background: #f6f6f6; font-weight: 600; }
+  .absent { color: #999; font-style: italic; }
+  .error { background: #fdd; border: 1px solid #c00; padding: .5rem 1rem; margin: 0 1rem; }
+  .ok { background: #e6f5e6; border: 1px solid #6a6; padding: .3rem 1rem; margin: 0 1rem; }
+  textarea { width: 100%; height: 5rem; font-family: monospace; font-size: 12px; }
+  button { font: inherit; }
+  .trace { font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+  .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0; }
+  .chips button { font-size: 12px; padding: .1rem .4rem; }
+  details { margin-top: .4rem; }
+</style>
+</head>
+<body>
+<header>
+  <label>シナリオ <select id="scenario"></select></label>
+  <label>今日 <input id="today" type="date"></label>
+  <label>誰として（viewer = actor） <input id="who" type="text" placeholder='{"user":{"id":1}}' size="24"></label>
+  <button id="reload">開き直す</button>
+  <span id="binfo" style="color:#777;font-size:12px"></span>
+</header>
+<div id="notice" hidden></div>
+<main>
+  <section id="viewsBox"><h2>views（Lean が返した見え方をそのまま）</h2><div id="views">読み込み中…</div></section>
+  <section>
+    <h2>操作（step）</h2>
+    <div class="chips" id="cmdChips"></div>
+    <p style="font-size:12px;color:#666;margin:.2rem 0">command JSON は <code>{"&lt;構成子&gt;": &lt;ペイロード&gt;}</code>。actor は上の「誰として」から作られる。</p>
+    <textarea id="rawcmd">{}</textarea>
+    <button id="send">送る</button>
+    <details><summary>state（Lean が返したまま。読むだけ）</summary><pre id="state" class="trace"></pre></details>
+    <h2 style="margin-top:.8rem">操作ログ <span id="logcount">0</span> 件 <button id="savegolden">golden として保存</button> <button id="clearlog">消す</button></h2>
+    <div id="log" class="trace"></div>
+  </section>
+</main>
+<script>
+// ---- 状態: Lean の返答をそのまま保持。UI では変形しない ----
+let state = null, views = null;
+const commandLog = [];   // {actor, command}
+let meta = { scenarios: [], commands: [], errors: [] };
+
+const $ = (id) => document.getElementById(id);
+async function lean(req) {
+  const res = await fetch("/api/lean", { method: "POST", body: JSON.stringify(req) });
+  return res.json();
+}
+function actorOf() {
+  const t = $("who").value.trim();
+  if (!t) return undefined;
+  try { return JSON.parse(t); } catch { return undefined; }
+}
+function viewerOf() {
+  const a = actorOf();
+  if (!a) return undefined;
+  // 名義から同一性だけを取り出す規約: 最初のフィールドの値（{"user":{"id":1}} → {"id":1}）
+  const k = Object.keys(a)[0];
+  return k ? a[k] : undefined;
+}
+function common() {
+  const o = {};
+  const v = viewerOf(); if (v !== undefined) o.viewer = v;
+  const a = actorOf(); if (a !== undefined) o.actor = a;
+  if ($("today").value) o.today = $("today").value;
+  return o;
+}
+function notice(kind, msg) {
+  const el = $("notice");
+  el.className = kind; el.textContent = msg; el.hidden = !msg;
+}
+
+async function init() {
+  const r = await lean({ cmd: "init", scenario: $("scenario").value, ...common() });
+  if (r.ok) { state = r.ok.state; views = r.ok.views; commandLog.length = 0; renderAll(); notice("", ""); }
+  else notice("error", "init 失敗: " + JSON.stringify(r));
+}
+async function reproject() {
+  if (!state) return init();
+  const r = await lean({ cmd: "views", state, ...common() });
+  if (r.ok) { state = r.ok.state; views = r.ok.views; renderAll(); }
+  else notice("error", "views 失敗: " + JSON.stringify(r));
+}
+async function send(command) {
+  const actor = actorOf();
+  const r = await lean({ cmd: "step", state, command, ...common() });
+  if (r.ok) {
+    state = r.ok.state; views = r.ok.views;
+    commandLog.push({ actor, command });
+    log(`ok        ${JSON.stringify(command)}  by ${JSON.stringify(actor)}`);
+    renderAll(); notice("ok", "通りました: " + Object.keys(command)[0]);
+  } else if (r.domainError !== undefined) {
+    log(`refused   ${JSON.stringify(command)}  → ${JSON.stringify(r.domainError)}`);
+    notice("error", "業務として断られました: " + JSON.stringify(r.domainError) + "（state は変わっていません）");
+  } else {
+    notice("error", "プロトコルエラー: " + JSON.stringify(r));
+  }
+}
+function log(line) { $("log").textContent += line + "\n"; $("logcount").textContent = commandLog.length; }
+
+// ---- 描画: views を写すだけ。ここで並べ替え・フィルタをしない ----
+function renderAll() {
+  $("state").textContent = JSON.stringify(state, null, 1);
+  const box = $("views"); box.replaceChildren();
+  if (!views || typeof views !== "object") { box.textContent = JSON.stringify(views); return; }
+  for (const [name, v] of Object.entries(views)) {
+    const h = document.createElement("h3"); h.textContent = name; h.style.margin = ".4rem 0 .2rem"; h.style.fontSize = "13px";
+    box.append(h);
+    if (v === null) { const p = document.createElement("div"); p.className = "absent"; p.textContent = "null（そこに無い / 見られない）"; box.append(p); continue; }
+    if (Array.isArray(v)) {
+      if (!v.length) { const p = document.createElement("div"); p.className = "absent"; p.textContent = "[]（見えたうえで空）"; box.append(p); continue; }
+      box.append(table(v)); continue;
+    }
+    const pre = document.createElement("pre"); pre.className = "trace"; pre.textContent = JSON.stringify(v, null, 1); box.append(pre);
+  }
+}
+function table(rows) {
+  const cols = [...new Set(rows.flatMap(r => (r && typeof r === "object" && !Array.isArray(r)) ? Object.keys(r) : ["value"]))];
+  const t = document.createElement("table");
+  const tr = document.createElement("tr"); for (const c of cols) { const th = document.createElement("th"); th.textContent = c; tr.append(th); } t.append(tr);
+  for (const r of rows) {
+    const row = document.createElement("tr");
+    for (const c of cols) { const td = document.createElement("td"); const val = (r && typeof r === "object" && !Array.isArray(r)) ? r[c] : r; td.textContent = val === undefined ? "" : (typeof val === "object" ? JSON.stringify(val) : String(val)); row.append(td); }
+    t.append(row);
+  }
+  return t;
+}
+
+// ---- 配線 ----
+async function loadMeta() {
+  try { meta = await (await fetch("/api/meta")).json(); } catch { meta = { scenarios: [], commands: [], errors: [] }; }
+  const sel = $("scenario"); sel.replaceChildren();
+  for (const s of meta.scenarios ?? []) { const o = document.createElement("option"); o.value = s; o.textContent = s; sel.append(o); }
+  if (!sel.options.length) { const o = document.createElement("option"); o.value = "basic"; o.textContent = "basic"; sel.append(o); }
+  const chips = $("cmdChips"); chips.replaceChildren();
+  for (const c of meta.commands ?? []) { const b = document.createElement("button"); b.textContent = c; b.onclick = () => { $("rawcmd").value = JSON.stringify({ [c]: {} }, null, 1); }; chips.append(b); }
+  $("binfo").textContent = meta.lean?.exe ? `CLI: ${meta.lean.exe}` : (meta.error ?? "");
+}
+$("reload").onclick = () => reproject();
+$("scenario").onchange = () => init();
+$("send").onclick = () => { try { send(JSON.parse($("rawcmd").value)); } catch (e) { notice("error", "JSON が不正: " + e.message); } };
+$("clearlog").onclick = () => { commandLog.length = 0; $("log").textContent = ""; $("logcount").textContent = "0"; };
+$("savegolden").onclick = async () => {
+  const name = prompt("golden の名前（<name>-init.json / <name>-flow.json）", "session");
+  if (!name) return;
+  const base = { scenario: $("scenario").value, ...common() };
+  const body = { name, init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands: commandLog } };
+  const res = await fetch("/api/golden", { method: "POST", body: JSON.stringify(body) });
+  notice("ok", "保存: " + JSON.stringify(await res.json()));
+};
+loadMeta().then(init);
+</script>
+</body>
+</html>

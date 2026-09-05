@@ -1,0 +1,31 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit|NotebookEdit|Agent",
+      "hooks": [
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" pre-guard", "timeout": 10 }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" post-edit", "timeout": 10 }
+      ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" post-bash", "timeout": 10 }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" stop", "timeout": 60 }
+      ]
+    }
+  ]
+}

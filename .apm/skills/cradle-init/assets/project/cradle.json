@@ -1,0 +1,10 @@
+{
+  "cradle": 1,
+  "project": "__PROJECT__",
+  "lean": { "dir": "lean", "exe": "__PROJECT_LOWER__", "root": "__PROJECT__", "golden": "lean/golden", "sorryMax": 0 },
+  "backend": { "dir": "backend", "generated": ["backend/src/generated"], "regenerate": "./gradlew generateKotlinFromLean", "build": "./gradlew build" },
+  "frontend": { "dir": "frontend", "generated": ["frontend/src/api/generated"], "genApi": "pnpm gen:api" },
+  "documents": { "dir": "documents", "ddd": "documents/ddd", "aiNotes": "documents/ai-notes", "developer": "documents/developer", "infraDesign": "documents/infra-design", "openapi": "documents/codebase/openapi.yaml" },
+  "ports": { "mockup": 8787, "frontend": 5173, "backend": 8080, "idp": 8090 },
+  "protected": ["documents/developer/**"]
+}

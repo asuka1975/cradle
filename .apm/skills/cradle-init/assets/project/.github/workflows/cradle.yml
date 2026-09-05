@@ -1,0 +1,26 @@
+name: cradle
+on: [push, pull_request]
+jobs:
+  spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: install elan
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json') }}-${{ hashFiles('lean/**/*.lean') }}
+          restore-keys: lake-${{ runner.os }}-${{ hashFiles('lean/lean-toolchain', 'lean/lake-manifest.json') }}-
+      - name: lake build
+        run: cd lean && lake build
+      - name: cradle checks
+        run: |
+          node .claude/skills/cradle/scripts/cradle.mjs lean-check
+          node .claude/skills/cradle/scripts/cradle.mjs golden-check
+          node .claude/skills/cradle/scripts/cradle.mjs unslop --all

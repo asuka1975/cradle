@@ -1,0 +1,81 @@
+openapi: 3.1.0
+
+info:
+  title: __PROJECT__ REST API
+  version: 0.0.1
+  description: |
+    すべて `/api` 配下。閲覧は 1 画面 1 エンドポイント、書き込みはコマンドの構成子と 1 対 1（成功は 204）。
+
+    ## 名義
+
+    **名義はリクエストに現れない。** 「誰として操作しているか」は `Authorization` ヘッダのトークンだけが決める。
+    「今日」もリクエストからは受け取らず、サーバの時計を使う。
+
+    ## エラー契約
+
+    本文は全経路で `{"code","message"}`（`Error`）。画面が分岐に使うのは `code` だけ。
+    400 / 401 / 405 / 415 / 500 はどの操作でも起こりうるので個々の operation には書かない。
+    403（立場）と 404（宛先なし）は業務失敗（422）と分ける。各操作の 422 には、その UseCase が返しうる失敗語彙を列挙する。
+
+    ここには「いまどうであるか」だけを書く。経緯・未決・存在しない操作の一覧・ID・申し送りは書かない。
+
+servers:
+  - url: /
+    description: 画面から見ると常に same-origin。
+
+security:
+  - bearer: []
+
+paths:
+  /api/healthcheck:
+    get:
+      operationId: healthcheck
+      security: []
+      tags: [health]
+      responses:
+        "200":
+          description: 稼働している。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 認証基盤が発行した ID トークン。名義（誰として操作しているか）はここだけが決める。
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: 画面が分岐に使う語彙。共通の語彙は ErrorCode、業務失敗は各操作の 422 に列挙 }
+        message: { type: string, description: 利用者向けの文言。内部の例外メッセージを写さない }
+    ErrorCode:
+      type: string
+      description: 共通の失敗語彙（業務失敗の語彙は各操作の 422 が持つ）。
+      enum: [badRequest, unauthenticated, forbidden, notFound, methodNotAllowed, unsupportedMediaType, notAcceptable, internalError]
+  responses:
+    NoContent:
+      description: 通った。板は読み直す。
+    BadRequest:
+      description: 形・構築の誤り。
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthenticated:
+      description: トークンが無い・検証に失敗した。
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: 名義・立場ゆえに叩けない。
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: 宛先が無い。
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: 業務として断られた。code は各操作に列挙した失敗語彙。
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

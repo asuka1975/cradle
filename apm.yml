@@ -1,0 +1,19 @@
+name: cradle
+version: "0.1.0"
+description: Lean 仕様駆動開発のハーネス — 仕様は決定論的なハーネスである。探索から E2E まで、プロダクトオーナーがゆりかごに身を任せて開発をやりきるための skills / agents / rules / hooks。
+author: asuka1975
+license: MIT
+repository: https://github.com/asuka1975/cradle
+keywords: [lean, spec-driven, ddd, harness, claude-code]
+
+# Claude Code を主ターゲットにする（hooks / agents / commands は Claude Code 固有の形）。
+targets:
+  - claude
+
+includes: auto
+
+dependencies:
+  apm: []
+  mcp: []
+
+scripts: {}
