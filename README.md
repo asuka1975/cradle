@@ -71,3 +71,7 @@ apm compile --validate            # 構造検査
 apm install --dry-run --target claude
 apm pack                          # Claude Code plugin 形式のバンドル
 ```
+
+## ライセンス
+
+MIT（[LICENSE](LICENSE)）。
