@@ -15,6 +15,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 # 厳守
 
 - documents を書き換えない（`model-review.md` への新規 MQ と自分の起票行の訂正だけ。状態・結果列は explorer の役割）。
+- 骨格のサンプルドメイン（メモ）は事実ではない。初回は丸ごと置き換え、サンプルの型・語彙・シナリオを残さない。
 - 未決（open の HS / UX / MQ）をモデル化しない。却下は反機能として固定する。
 - `axiom` / `unsafe` / `partial` を使わない。証明は `sorry` + `-- TODO(proof):` で前進してよいが数えて報告する。未決の穴には sorry を使わない（ゆるい解釈 + MQ）。
 - 出典 ID を docstring に書く。ステータス語は書かない。

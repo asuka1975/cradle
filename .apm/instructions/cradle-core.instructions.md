@@ -21,6 +21,7 @@ description: Cradle の芯 — 仕様はハーネスであり、ハーネスは�
 - **正本は 1 か所**。ドメインの事実 = `documents/ddd/`、設計の決定 = `documents/infra-design/`、REST 契約 = `documents/codebase/openapi.yaml`、
   実行可能仕様 = `lean/`、生成物の源 = Lean と契約。同じ情報を 2 か所に写さない（写した瞬間から片方が腐る）。
 - **生成物は編集しない。** `backend/src/generated/`・`build/generated/`・`frontend/src/api/generated/` は再生成で全上書きされる。直すなら源を直して再生成する。hook が直接編集を止める。
+- **骨格のサンプルドメインは事実ではない。** `cradle status` が Lean を「骨格のサンプル」と言う間、`lean/` の型・ユースケース・シナリオ（メモ）を探索・設計・実装の根拠にしない。探索は `documents/ddd/` だけを見て始め、実ドメインの形式化でサンプルを丸ごと置き換える。
 - **`documents/developer/` は人間専用。** 読むのは自由だが AI は作成も編集もしない。
 - **`documents/ai-notes/` は規約ではない。** AI の申し送りと規約の候補で、ユーザーが承認したものだけが規約になる。そこを根拠にコードを書かない。
 - **Lean を変えたら**: `lake build` → `cradle golden-check`（変えるつもりのなかった流れが変わっていないか）→ 変えた意図があるものだけ `--update`。

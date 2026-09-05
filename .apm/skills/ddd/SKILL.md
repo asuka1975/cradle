@@ -28,14 +28,15 @@ description: Use to run or continue domain exploration with the product owner as
 ## フルループ
 
 1. **開始**: `ddd.mjs start`（5 ファイルの存在確認と `.session` 印。印がある間だけ hook が `documents/ddd/` の編集を許す）。
-2. **セッション起動**: `ddd-domain-explorer` を起動する。プロンプトに書くのは「探索セッションを 1 回実施する」「その時点で聞けるものは 1 巡に全部載せる」「テーマ: …（指定があれば）」だけ。現状の要約は渡さない（自分で読む）。
+2. **セッション起動**: `ddd-domain-explorer` を起動する。プロンプトに書くのは「探索セッションを 1 回実施する」「その時点で聞けるものは 1 巡に全部載せる」「読むのは documents/ddd/ だけ（lean/ は読まない）」「テーマ: …（指定があれば）」だけ。現状の要約は渡さない（自分で読む）。
    - Claude Code: Agent ツールで **フォアグラウンド**（`run_in_background: false`）。返事は SendMessage。
    - Codex: `spawn_agent`（`agent_type: "ddd-domain-explorer"`）。`wait_agent` を最終状態になるまで繰り返す。タイムアウト（空の status）は待ち直すだけで、`send_input` で「完了して報告を返せ」と急かさない（急かすと問いが捨てられる）。返事は `send_input`。
 3. **質問中継**（`[SESSION_REPORT]` が返るまで繰り返す）:
    - explorer が `[QUESTIONS]` + JSON を返す → 問いが少なければ（その時点で聞けるものが他にあるなら）差し戻す。
    - `ddd.mjs questions @<json を保存したファイル>` で `documents/ddd/questions.md` を書く（改変せず写す。書式は `references/question-format.md`）。
    - 選択肢ごとのプローブを用意する: 状態で表せるものは `Runtime/Scenarios.lean` に一時シナリオ（`probe-q1-a` 命名）、規則が変わるものは一時の枝。JS でこしらえない。用意できない選択肢は表に「—」と理由。
-   - `cd lean && lake build` が通ることを確かめる（通らないプローブは出さない）。
+     `ddd.mjs start` が「骨格のサンプル」と言う間はプローブを用意しない（questions.md にモックアップ欄が出ない）。サンプルのメモは実ドメインではなく、中継役も探索の根拠に `lean/` を使わない。
+   - プローブを置いたら `cd lean && lake build` が通ることを確かめる（通らないプローブは出さない）。
    - ユーザーには**ファイルの場所と起動コマンドだけ**を伝えて待つ。問いをチャットに書き写さない。
    - 回答が来たら `ddd.mjs answers` の出力（「質問 → 回答」の列、空欄は「未回答」）を **一字一句そのまま** explorer に返す。回答の代わりの指示（中断・テーマ変更）もそのまま伝える。
    - 2 巡目以降は前の巡のプローブを片づけてから次を置く。AskUserQuestion は使わない。

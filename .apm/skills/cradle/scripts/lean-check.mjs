@@ -18,10 +18,11 @@
 //   usecase   : Application/UseCase/<X>/ は Command+UseCase（更新系）か ReadModel+QueryService+UseCase（参照系）で、validate / execute / query の固定名を持つ
 //   --smoke   : CLI に init を流して ok が返ることを確かめる
 //   orphan    : <Root>.lean から import で辿れないモジュール（lake build が検査しないファイル）
+//   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { readdirSync, statSync } from "node:fs";
-import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfig();
@@ -139,6 +140,14 @@ for (const f of files) {
       if (readSide && !/\bdef\s+query\b/.test(read("QueryService.lean"))) add("usecase", "error", join(d, "QueryService.lean"), 1, "固定名 query が無い");
     }
   }
+}
+
+// scaffold: 骨格のサンプルドメインが残っている。探索の事実（出来事の行）があるなら、形式化されるべきものがされていない
+{
+  const sample = scaffoldSampleFiles(cfg);
+  const timeline = join(cfg.root, cfg.documents.ddd, "event-timeline.md");
+  const events = existsSync(timeline) ? (readFileSync(timeline, "utf8").match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length : 0;
+  if (sample.length && events) for (const f of sample) add("scaffold", "warn", f, 1, `骨格のサンプルドメイン（メモ）が残っている。documents/ddd に出来事 ${events} 件の事実があるので、lean-domain-model スキルで実ドメインに丸ごと置き換える`);
 }
 
 // orphan: ルートから import で辿れないモジュール

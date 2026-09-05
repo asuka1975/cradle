@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -49,7 +49,12 @@ else {
   const goldens = existsSync(goldenDir) ? readdirSync(goldenDir).filter(f => f.endsWith("-flow.json")).length : 0;
   const bin = existsSync(cfg.lean.bin);
   const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
-  phase("Lean 実行可能仕様", "進行中", [`${leanFiles.length} ファイル / UseCase ${useCases} 件`, `sorry ${sorry}`, `golden ${goldens} 組`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`, `モックアップ ${mockup ? "あり" : "なし"}`],
+  const sample = scaffoldSampleFiles(cfg);
+  if (sample.length) {
+    const events = (read(`${cfg.documents.ddd}/event-timeline.md`).match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+    phase("Lean 実行可能仕様", "骨格のサンプル", [`実ドメインは未形式化（メモのサンプル: ${sample.map(f => rel(cfg.root, f)).join(", ")}）`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`],
+      events ? "lean-domain-model スキルで骨格のサンプルを丸ごと置き換える" : "ddd スキルで探索する（サンプルは探索の根拠にしない）。事実が集まったら lean-domain-model スキルで置き換える");
+  } else phase("Lean 実行可能仕様", "進行中", [`${leanFiles.length} ファイル / UseCase ${useCases} 件`, `sorry ${sorry}`, `golden ${goldens} 組`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`, `モックアップ ${mockup ? "あり" : "なし"}`],
     !bin ? "cd lean && lake build" : !mockup ? "domain-mockup スキルで仕様アニメーションを作る" : goldens === 0 ? "モックアップで流れを確かめ golden を採る" : "cradle golden-check で回帰を確かめ、次フェーズへ");
 }
 

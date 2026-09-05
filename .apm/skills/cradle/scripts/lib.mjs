@@ -80,6 +80,15 @@ export function loadConfig(root = findProjectRoot()) {
   return cfg;
 }
 
+/** 骨格のサンプルドメイン（メモ）が残っている Lean ファイル。空なら実ドメインが形式化済み。マーカーの無い古い骨格はサンプルの docstring で拾う。 */
+export function scaffoldSampleFiles(cfg) {
+  if (!existsSync(cfg.lean.modelDir)) return [];
+  return walk(cfg.lean.modelDir, { ext: [".lean"] }).filter(f => {
+    const t = readFileSync(f, "utf8");
+    return t.includes("Cradle の骨格のサンプルドメイン") || t.includes("メモ。書いた本人だけが閉じられる");
+  });
+}
+
 /** cradle.json が無いとき: lean/lakefile.toml の lean_lib 名からルート名前空間を推測する。 */
 function guessProject(root) {
   const lakefile = join(root, "lean", "lakefile.toml");

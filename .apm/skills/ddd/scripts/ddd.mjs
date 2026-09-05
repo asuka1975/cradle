@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -22,6 +22,8 @@ const marker = join(ddd, ".session");
 const sha = (t) => createHash("sha256").update(t).digest("hex");
 const readSession = () => { try { return JSON.parse(readFileSync(marker, "utf8")); } catch { return null; } };
 const writeSession = (s) => writeFileSync(marker, JSON.stringify(s) + "\n");
+// lean/ が骨格のサンプル（メモ）のままなら、プローブもモックアップも無い巡になる（サンプルは実ドメインではない）
+const scaffold = scaffoldSampleFiles(cfg).length > 0;
 
 function countRows(text, idRe, statusRe) {
   return (text.match(new RegExp(`^\\|\\s*${idRe}\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length;
@@ -31,8 +33,9 @@ switch (cmd) {
   case "start": {
     const missing = FILES.filter(f => !existsSync(join(ddd, f)));
     if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（cradle-init スキルで骨格を作る）`);
-    writeFileSync(marker, JSON.stringify({ theme: opts.theme ?? null }) + "\n");
+    writeSession({ theme: opts.theme ?? null, scaffold });
     console.log(`セッション開始（${cfg.documents.ddd}/.session）。終わりに ddd.mjs end を必ず実行する。`);
+    if (scaffold) console.log(`${cfg.lean.dir}/ は骨格のサンプルドメイン（メモ）のまま。実ドメインではないので探索の根拠にせず、この巡はプローブもモックアップも使わない（questions.md にモックアップ欄は出ない）。`);
     break;
   }
   case "questions": {
@@ -42,21 +45,23 @@ switch (cmd) {
     const lines = ["# 探索セッションの問い", "", "> これは一時ファイルです。ddd スキルが作り、回答が済んだら削除します。コミットしないでください。", ""];
     if (j.theme) lines.push(`テーマ: ${j.theme}`, "");
     if (j.preface) lines.push(j.preface, "");
-    lines.push("## 確かめ方", "", "選択肢ごとに「選ぶとどうなるか」をモデルで動かせます。", "", "```bash",
+    if (scaffold) lines.push("モデルはまだ骨格のサンプル（実ドメインは未形式化）なので、この巡にプローブは無い。業務の事実として答えてください。", "");
+    else lines.push("## 確かめ方", "", "選択肢ごとに「選ぶとどうなるか」をモデルで動かせます。", "", "```bash",
       `cd ${cfg.lean.dir} && lake build && node mockup/server.mjs   # → http://localhost:${cfg.ports.mockup}`, "```", "",
       "画面の「シナリオ」から、下の表の「モックアップ」欄の名前を選んでください。表示されるのはモデルを実際に動かした結果です。", "");
     j.questions.forEach((q, i) => {
       const n = i + 1;
-      lines.push(`## Q${n}. ${q.question}${q.multiSelect ? "（複数選択可）" : ""}`, "", "| | 選択肢 | 選ぶとどうなるか | モックアップ |", "|---|---|---|---|");
+      lines.push(`## Q${n}. ${q.question}${q.multiSelect ? "（複数選択可）" : ""}`, "",
+        scaffold ? "| | 選択肢 | 選ぶとどうなるか |" : "| | 選択肢 | 選ぶとどうなるか | モックアップ |", scaffold ? "|---|---|---|" : "|---|---|---|---|");
       (q.options ?? []).forEach((o, k) => {
         const letter = String.fromCharCode(97 + k);
-        lines.push(`| **${letter}** | ${o.label} | ${o.description ?? ""} | \`probe-q${n}-${letter}\` |`);
+        lines.push(`| **${letter}** | ${o.label} | ${o.description ?? ""} |${scaffold ? "" : ` \`probe-q${n}-${letter}\` |`}`);
       });
       lines.push("", "**回答:**", "", "<!-- 選択肢の記号か、自由に書いてください。「前提が違う」「問いが成り立たない」もそのまま。 -->", "");
     });
     writeFileSync(qfile, lines.join("\n"));
     writeSession({ ...(readSession() ?? { theme: null }), questions: sha(lines.join("\n")), answered: null });
-    console.log(`${cfg.documents.ddd}/questions.md に ${j.questions.length} 問を書いた。プローブ名は仮置き（用意できない選択肢は — と理由に書き換える）。`);
+    console.log(`${cfg.documents.ddd}/questions.md に ${j.questions.length} 問を書いた。${scaffold ? "骨格のサンプルのままなのでプローブ欄は無い。" : "プローブ名は仮置き（用意できない選択肢は — と理由に書き換える）。"}`);
     break;
   }
   case "answers": {
@@ -94,7 +99,7 @@ switch (cmd) {
     console.log(JSON.stringify({
       events, hotspots: { open: countRows(hs, "HS-\\d+", "open"), resolved: countRows(hs, "HS-\\d+", "resolved") },
       ux: { open: countRows(ux, "UX-\\d+", "open") }, mq: { open: countRows(mq, "MQ-\\d+", "open") }, terms,
-      session: existsSync(marker), questionsPending: existsSync(qfile),
+      session: existsSync(marker), questionsPending: existsSync(qfile), scaffoldSample: scaffold,
     }, null, 2));
     break;
   }

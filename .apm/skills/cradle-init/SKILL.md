@@ -21,7 +21,7 @@ node <skills>/cradle-init/scripts/init.mjs --project <Root> [--dir <path>] [--ba
 
 1. `.apm/instructions/project.instructions.md` の「ドメイン」を埋め、`apm compile`（Codex は `apm compile --single-agents`）で rules / AGENTS.md に写す。
 2. `cd lean && lake build` → `cradle status`（Lean が「ビルド済」になる）。`lean/README.md` のドメインの節を書く。
-3. ddd スキルで探索を始める。最小ドメイン（Note）は形式化の最初のセッションで置き換える（形は残す）。
+3. ddd スキルで探索を始める。最小ドメイン（Note）は探索の根拠にならず（`cradle status` が「骨格のサンプル」と示す）、形式化の最初のセッションで丸ごと置き換える（層の形は残す）。
 4. backend / frontend / e2e / infra は各フェーズのスキルが順に作る（順序を飛ばさない）。
 
 ## Lean の骨格に含まれるもの

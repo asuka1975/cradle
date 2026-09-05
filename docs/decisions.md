@@ -25,3 +25,4 @@
 | 21 | Lean CLI は非同期の `spawn` で呼び、stdin を流してから閉じる | Codex のサンドボックスでは `spawnSync` に `input` を渡すと EOF が届かず、`cat` でも固まる。golden-check・spec-query・smoke が全部この 1 本を通る |
 | 22 | `ddd.mjs end` は同じ版の questions.md に `answers` を中継した後でだけ通る（`.session` に問いの版と中継の記録を持つ）。問いを捨てるのは `--abandon` だけ | 探索役が回答を受け取らないまま片付けた事故を機械で止める。hook も Codex の探索役（agent_type）が ddd.mjs・questions.md・.session に触るのを止める |
 | 23 | 骨格を敷く道具は書けない場所があっても止まらず、残りを敷いてから書けなかった一覧を出す | Codex のサンドボックスでは `.codex/` が書けない。途中で落ちると据え置きの判定が効かず、再実行の手間が増える |
+| 24 | 骨格のサンプルドメイン（メモ）はコメントのマーカーで機械検出し、`cradle status`・`ddd.mjs start`・`lean-check` が「実ドメインではない」と言う。サンプルの間は questions.md にモックアップ欄を出さず、探索役は `lean/` を読まない | 探索役が `lean/` のサンプルを「現在のモデル」と信じて問いを組み立てた。散文の注意書きより、状態を機械が言うほうが確実 |
