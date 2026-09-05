@@ -3,7 +3,7 @@ name: ddd
 description: Use to run or continue domain exploration with the product owner as domain expert — event storming interviews, hotspots (HS), ubiquitous language, UX review of the domain, checking or resolving open MQ/UX items, or a status summary of documents/ddd. Also use when the user starts explaining their business, purpose or workflow. Never edit documents/ddd directly; go through this skill.
 ---
 
-# 探索ループ（/ddd）
+# 探索ループ（ddd スキル）
 
 `documents/ddd/` を育てる。登場人物:
 
@@ -13,7 +13,7 @@ description: Use to run or continue domain exploration with the product owner as
 - **`lean-domain-modeler`**（フェーズ 2）= 形式化役。正式ドキュメントを `lean/` に翻訳し、詰まった曖昧さを `model-review.md` に MQ として起票する。
 - **あなた** = 中継役。探索の中身に立ち入らない。正式ドキュメントを直接編集しない。
 
-道具: `node .claude/skills/ddd/scripts/ddd.mjs <start|questions|answers|end|status>`（以下 `ddd.mjs`）。
+道具: このスキルの `scripts/ddd.mjs <start|questions|answers|end|status>`（`node <skills>/ddd/scripts/ddd.mjs`。以下 `ddd.mjs`）。
 
 ## 引数
 
@@ -23,7 +23,7 @@ description: Use to run or continue domain exploration with the product owner as
 | `status` | `ddd.mjs status` の出力を示すだけ |
 | `review` | UX レビューだけ |
 | `clean` | 後片付けだけ（手順 5） |
-| それ以外 | テーマ指定でフルループ（例: `/ddd MQ-003 を検証したい`） |
+| それ以外 | テーマ指定でフルループ（例: ddd スキルに `MQ-003 を検証したい` を渡す） |
 
 ## フルループ
 
@@ -50,5 +50,5 @@ description: Use to run or continue domain exploration with the product owner as
 ## 厳守
 
 - 質問に自分で答えない。質問・選択肢・回答を要約・補足・翻案しない。
-- セッションは 1 回の起動につき 1 回。続きは次の /ddd。
-- `documents/ddd/` が無いときは `/cradle-init` を案内する。
+- セッションは 1 回の起動につき 1 回。続きは次の ddd スキルの起動。
+- `documents/ddd/` が無いときは cradle-init スキルを案内する。

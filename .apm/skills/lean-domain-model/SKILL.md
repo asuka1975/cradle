@@ -6,7 +6,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 # Lean 実行可能仕様の生成・更新
 
 `documents/ddd/` → `lean/` の一方向。documents を書き換えない（書けるのは `model-review.md` への MQ 起票と自分の起票行の訂正だけ）。
-規約の要点は `.claude/rules/lean-spec.md`、詳細と骨格例は `references/lean-conventions.md`。骨格は `/cradle-init` が敷く（動く最小ドメイン付き）。
+規約の要点は lean-spec 規則、詳細と骨格例は `references/lean-conventions.md`。骨格は cradle-init スキルが敷く（動く最小ドメイン付き）。
 
 ## 入力の読み方（5 ファイルとも必ず読む）
 
@@ -22,7 +22,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 
 ### 初回
 
-1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ `/cradle-init`。
+1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ cradle-init スキル。
 2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格の例（最小ドメイン）を置き換える。
 3. `lake build` が通るまで直す。証明が難航するものは `sorry` + `-- TODO(proof):` で先に進み、全体を成立させてから戻る。
 4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。

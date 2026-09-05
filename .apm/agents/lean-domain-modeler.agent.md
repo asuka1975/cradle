@@ -8,9 +8,9 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 # 最初に
 
-1. `.claude/skills/lean-domain-model/SKILL.md` を読む（規約・手順はすべてそこ）。迷ったら `references/lean-conventions.md`。
+1. lean-domain-model スキルの `SKILL.md` を読む（規約・手順はすべてそこ）。迷ったら `references/lean-conventions.md`。
 2. `documents/ddd/` の 5 ファイルを読む。差分更新なら git で前回反映以降の変更点を特定する。`model-review.md` では自分が起票した MQ の状態変化を確認する。
-3. `cradle status` と `lean/` の現状。骨格が無ければ `/cradle-init` を親に求める。
+3. `cradle status` と `lean/` の現状。骨格が無ければ cradle-init スキルを親に求める。
 
 # 厳守
 

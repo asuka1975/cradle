@@ -15,7 +15,7 @@ import org.jetbrains.kotlin.psi.KtNamedDeclaration
 /**
  * 層のパッケージ直下にトップレベル宣言を置かせない。
  *
- * `.claude/rules/backend-kotlin.md` が定義しているのは `application/usecase/<名前>/` などの
+ * `backend-kotlin 規則` が定義しているのは `application/usecase/<名前>/` などの
  * **サブディレクトリ**だけで、`application/` 直下は規約の空白地帯だった。
  * 未定義の場所はどの規約にも違反しないので、どこにも属さない共有ヘルパが溜まる
  * (共有ヘルパの置き場になりやすい)。置き場が決まらないものは、
@@ -59,7 +59,7 @@ class PackageRootDeclarationRule :
 		val name = declaration.name ?: "(匿名)"
 		emit(
 			declaration.nameIdentifier?.textOffset ?: declaration.textOffset,
-			"'$name' が $packageName 直下にある。ここは .claude/rules/backend-kotlin.md が定義していない置き場で、" +
+			"'$name' が $packageName 直下にある。ここは backend-kotlin 規則が定義していない置き場で、" +
 				"どの層にも属さない共有ヘルパの溜まり場になる。使う側の usecase/<ユースケース名>/ か、" +
 				"層をまたぐものなら infrastructure/ など役割の決まった場所へ移す",
 			false,

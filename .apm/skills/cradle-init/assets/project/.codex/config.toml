@@ -1,0 +1,3 @@
+# Codex のプロジェクト設定（Codex がこのプロジェクトを信頼したときだけ読まれる）。
+# Cradle の規約は `apm compile --single-agents` で 1 枚の AGENTS.md になり、Codex の既定の上限（32 KiB）を超える。超えた分は黙って切られるので上げる。
+project_doc_max_bytes = 262144

@@ -29,7 +29,7 @@ ktlint_cradle_java_config_bean_project_package_prefix = __PACKAGE__
 ktlint_cradle_single_class_per_file_allow_sealed_subtypes = true
 
 # jOOQ に触ってよいのは infrastructure 側と、参照系の QueryServiceImpl だけ
-# (.claude/rules/backend-kotlin.md「抽象化層を挟まず直接 ORM にアクセス」の実効化 — 共有のクエリヘルパを
+# (backend-kotlin 規則「抽象化層を挟まず直接 ORM にアクセス」の実効化 — 共有のクエリヘルパを
 # DSLContext の拡張関数として書くと字面では違反にならないので、import の場所で縛る)。
 # import を書かない完全修飾の参照と、許可されたファイルへの非 private な同居も同じルールが見る。
 # infra は jOOQ の Settings 組み立て、config は それを @Bean で返す JavaConfig。
@@ -37,25 +37,25 @@ ktlint_cradle_jooq_access_site_import_prefixes = org.jooq,__PACKAGE__.infra.jooq
 ktlint_cradle_jooq_access_site_allowed_packages = __PACKAGE__.infrastructure,__PACKAGE__.infra,__PACKAGE__.config
 ktlint_cradle_jooq_access_site_allowed_type_suffixes = QueryServiceImpl
 
-# 層のパッケージ直下は .claude/rules/backend-kotlin.md が定義していない置き場。
+# 層のパッケージ直下は backend-kotlin 規則が定義していない置き場。
 # 未定義の場所は何にも違反しないので、どの層にも属さない共有ヘルパが溜まる。
 # カンマ区切りで層を足せる(判定は完全一致なので usecase/ 配下などは対象外)。
 # __PACKAGE__ 直下の起動クラス(Application.kt)は Spring Boot の定石なので
 # 理由コメント付きの @Suppress で明示的に例外にしてある。
 ktlint_cradle_package_root_declaration_packages = __PACKAGE__,__PACKAGE__.domain,__PACKAGE__.application,__PACKAGE__.application.usecase,__PACKAGE__.presentation
 
-# 性能バイパス(.claude/rules/backend-kotlin.md「性能バイパス」)の置き場。宣言は消費する UseCase のディレクトリ、
+# 性能バイパス(backend-kotlin 規則「性能バイパス」)の置き場。宣言は消費する UseCase のディレクトリ、
 # 実装は infrastructure。import を書けるのも実装側だけ(消費する UseCaseImpl は宣言と
 # 同じパッケージに置くので import が要らない — import が現れた時点で共有の兆候)。
 ktlint_cradle_bypass_site_declaration_package_prefix = __PACKAGE__.application.usecase
 ktlint_cradle_bypass_site_implementation_package_prefix = __PACKAGE__.infrastructure
 
-# Controller は UseCase の execute だけを呼ぶ(.claude/rules/backend-kotlin.md)。validate は公開の
-# テストシームで、単独で呼ぶのは生成された契約テストだけ(.claude/rules/backend-kotlin.md)。
+# Controller は UseCase の execute だけを呼ぶ(backend-kotlin 規則)。validate は公開の
+# テストシームで、単独で呼ぶのは生成された契約テストだけ(backend-kotlin 規則)。
 ktlint_cradle_presentation_calls_execute_only_packages = __PACKAGE__.presentation
 
 # Repository の実装(supertype が *Repository)を置いてよいのは本番実装の infrastructure だけ。
-# テストソースは下の [src/test/**/*.kt] で許可を空に戻す = InMemory ダミーはどこにも置けない(.claude/rules/backend-kotlin.md)。
+# テストソースは下の [src/test/**/*.kt] で許可を空に戻す = InMemory ダミーはどこにも置けない(backend-kotlin 規則)。
 ktlint_cradle_no_repository_fake_allowed_packages = __PACKAGE__.infrastructure
 
 # ── 標準ルールの調整 ────────────────────────────────────────────────────
@@ -69,11 +69,11 @@ ktlint_standard_class-signature = disabled
 ktlint_standard_function-signature = disabled
 
 # ── テストソースの例外 ──────────────────────────────────────────────────
-# 契約テストは fake を挟まず実 DB を相手にする(.claude/rules/backend-kotlin.md)ため、jOOQ に触る必要がある。
+# 契約テストは fake を挟まず実 DB を相手にする(backend-kotlin 規則)ため、jOOQ に触る必要がある。
 # 層の話は本番コードの規約なので、テストではこのルールだけ切る。
 [src/test/**/*.kt]
 ktlint_cradle_jooq-access-site = disabled
-# テストに Repository の実装(InMemory ダミー)を置いてよい場所は無い — 許可を空に戻して全報告にする(.claude/rules/backend-kotlin.md)。
+# テストに Repository の実装(InMemory ダミー)を置いてよい場所は無い — 許可を空に戻して全報告にする(backend-kotlin 規則)。
 ktlint_cradle_no_repository_fake_allowed_packages =
 # テストは名義を与えて動かすので構築が要る。認証アダプタを通す道がそもそも無い
 # (トークンが無い)ため、ここは切る。本番コードでの限定は残る。

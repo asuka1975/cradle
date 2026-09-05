@@ -113,5 +113,5 @@ class NoRepositoryFakeRuleTest {
 		name: String,
 		where: String,
 	): String = "'$name' が AlbumRepository を実装している。$where。" +
-		"テストダミー(InMemory 実装)は本番コードを一切通らないテストを作る — 本番実装を実 DB 相手にそのまま使う(.claude/rules/backend-kotlin.md)"
+		"テストダミー(InMemory 実装)は本番コードを一切通らないテストを作る — 本番実装を実 DB 相手にそのまま使う(backend-kotlin 規則)"
 }

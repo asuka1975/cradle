@@ -13,8 +13,8 @@ applyTo: "documents/**"
 | `documents/ddd/ux-review.md` | 利用者視点の仮説（UX-xxx） | 起票は `ddd-ux-reviewer`、状態・結果列は explorer |
 | `documents/ddd/model-review.md` | 形式化で詰まった問い（MQ-xxx） | 起票は `lean-domain-modeler`、状態・結果列は explorer |
 | `documents/ddd/questions.md` | 探索セッションの問いかけ（一時ファイル） | メインエージェント。セッション終了時に必ず消す |
-| `documents/infra-design/` | インフラ設計の正本（INFRA-D / INFRA-A / INFRA-Q） | /infra-design。構成を変えたらここも直す |
-| `documents/codebase/openapi.yaml` | REST 契約の正本 | /api-contract。実装より先に直す |
+| `documents/infra-design/` | インフラ設計の正本（INFRA-D / INFRA-A / INFRA-Q） | infra-design スキル。構成を変えたらここも直す |
+| `documents/codebase/openapi.yaml` | REST 契約の正本 | api-contract スキル。実装より先に直す |
 | `documents/ai-notes/YYYYMMDD-NN-<topic>.md` | AI の申し送り・保留・規約の候補 | AI。冒頭に「これは規約ではありません」 |
 | `documents/decisions.md` | ai-notes から昇格した、このプロジェクト固有の決めごと | ユーザーの承認を経て AI が転記 |
 | `documents/developer/` | 人間専用 | 人間だけ |

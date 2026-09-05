@@ -94,7 +94,7 @@ class PackageRootDeclarationRuleTest {
 	}
 
 	private fun violationFor(name: String): String =
-		"'$name' が com.example.application 直下にある。ここは .claude/rules/backend-kotlin.md が定義していない置き場で、" +
+		"'$name' が com.example.application 直下にある。ここは backend-kotlin 規則が定義していない置き場で、" +
 			"どの層にも属さない共有ヘルパの溜まり場になる。使う側の usecase/<ユースケース名>/ か、" +
 			"層をまたぐものなら infrastructure/ など役割の決まった場所へ移す"
 }

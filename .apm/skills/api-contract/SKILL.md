@@ -15,7 +15,7 @@ description: Use when adding or changing REST endpoints or the OpenAPI contract 
 4. 文字列には長さ上限、識別子には形式。入力検証は契約から生成させる。
 5. View の値は View 自身の語彙（日付は ISO 文字列）。契約の語彙 = 画面の語彙。
 6. 生成: backend は `./gradlew generateApi`（Controller interface + Request/Response）、frontend は `pnpm gen:api`。写し漏れはコンパイルエラーで出る。
-7. `node .claude/skills/api-contract/scripts/contract-check.mjs` で、コマンドと書き込み操作・画面の口と GET が 1 対 1 であること、モデルに無い操作（反機能の疑い）が契約に無いことを確かめる。
+7. このスキルの `scripts/contract-check.mjs` で、コマンドと書き込み操作・画面の口と GET が 1 対 1 であること、モデルに無い操作（反機能の疑い）が契約に無いことを確かめる。
 
 ## 書かないもの
 

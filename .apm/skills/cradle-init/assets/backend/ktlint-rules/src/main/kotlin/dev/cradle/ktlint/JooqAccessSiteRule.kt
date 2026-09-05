@@ -19,7 +19,7 @@ import org.jetbrains.kotlin.psi.KtPackageDirective
 /**
  * jOOQ に触ってよい場所の限定。
  *
- * 参照系の QueryService は「抽象化層を挟まず直接 ORM にアクセスする」(.claude/rules/backend-kotlin.md)。
+ * 参照系の QueryService は「抽象化層を挟まず直接 ORM にアクセスする」(backend-kotlin 規則)。
  * この規約は「画面ごとに読み取りモデルを独立させる」ためにあるが、**共有のクエリヘルパを
  * `DSLContext` の拡張関数として書くと字面では違反にならない** — 呼び出し側は
  * `dsl.fetchAll…()` で jOOQ を直接叩いているのと区別がつかず、interface もポートも
@@ -44,7 +44,7 @@ import org.jetbrains.kotlin.psi.KtPackageDirective
  * - `ktlint_cradle_jooq_access_site_allowed_packages` 無条件に許すパッケージ
  * - `ktlint_cradle_jooq_access_site_allowed_type_suffixes` 許す型名の接尾辞
  *
- * テストは実 DB を相手にする(fake を挟まない — .claude/rules/backend-kotlin.md)ため jOOQ に触る必要がある。
+ * テストは実 DB を相手にする(fake を挟まない — backend-kotlin 規則)ため jOOQ に触る必要がある。
  * `.editorconfig` の `[src/test/**/*.kt]` でこのルールを切ってある。
  *
  * 例外を認めるときは **ファイル先頭に** `@file:Suppress("ktlint:cradle:jooq-access-site")` を
@@ -137,7 +137,7 @@ class JooqAccessSiteRule :
 			declaration.nameIdentifier?.textOffset ?: declaration.textOffset,
 			"'$name' が ${allowedTypeSuffixes.joinToString("・") { "*$it" }} のファイルに private でない形で同居している。" +
 				"接尾辞の許可は jOOQ の接点を 1 ファイルに閉じるためのもので、公開のトップレベル宣言は共有クエリヘルパの再来になる。" +
-				"private にするか、役割の決まった場所へ移す(.claude/rules/backend-kotlin.md)",
+				"private にするか、役割の決まった場所へ移す(backend-kotlin 規則)",
 			false,
 		)
 	}
@@ -147,7 +147,7 @@ class JooqAccessSiteRule :
 		return "$packageName は jOOQ に触ってよい場所ではない($offence)。" +
 			"許されるのは ${allowedPackages.joinToString("・")} と " +
 			"${allowedTypeSuffixes.joinToString("・") { "*$it" }} を宣言するファイルだけ。" +
-			"画面をまたぐクエリヘルパを作らず、各 QueryServiceImpl に直接書く(.claude/rules/backend-kotlin.md)。" +
+			"画面をまたぐクエリヘルパを作らず、各 QueryServiceImpl に直接書く(backend-kotlin 規則)。" +
 			"DSLContext の拡張関数にしても、共有すれば同じ抽象化層である"
 	}
 

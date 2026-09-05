@@ -49,7 +49,21 @@ if (cmd === "doctor") {
     }
     process.exit(0);
   }
-  const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["apm", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
+  // ハーネスの置き場と配線: Claude Code は .claude/skills + .claude/settings.json、Codex は .agents/skills + .codex/hooks.json + AGENTS.md
+  const { existsSync, readFileSync, statSync } = await import("node:fs");
+  const { findProjectRoot } = await import("./lib.mjs");
+  const root = findProjectRoot();
+  const homes = [".claude/skills/cradle", ".agents/skills/cradle"].filter(d => existsSync(join(root, d)));
+  console.log(`${homes.length ? "ok     " : "missing"} harness    ${homes.join(", ") || "（apm install で配る）"}`);
+  const wired = (f) => existsSync(join(root, f)) && readFileSync(join(root, f), "utf8").includes("hook.mjs");
+  console.log(`${wired(".claude/settings.json") || wired(".codex/hooks.json") ? "ok     " : "missing"} hooks      claude=${wired(".claude/settings.json") ? "ok" : "-"} codex=${wired(".codex/hooks.json") ? "ok" : "-"}`);
+  if (existsSync(join(root, "AGENTS.md"))) {
+    const size = statSync(join(root, "AGENTS.md")).size;
+    const toml = existsSync(join(root, ".codex/config.toml")) ? readFileSync(join(root, ".codex/config.toml"), "utf8") : "";
+    const limit = Number((toml.match(/^\s*project_doc_max_bytes\s*=\s*(\d+)/m) ?? [])[1] ?? 32768);
+    console.log(`${size > limit ? "STALE  " : "ok     "} AGENTS.md  ${size} bytes / Codex の上限 ${limit}${size > limit ? "（.codex/config.toml の project_doc_max_bytes を上げる。超えた分は黙って切られる）" : ""}`);
+  }
+  const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["apm", ["--version"]], ["claude", ["--version"]], ["codex", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
   for (const [bin, args] of tools) {
     const r = spawnSync(bin, args, { encoding: "utf8" });
     const v = ((r.stdout || "") + (r.stderr || "")).split("\n")[0].trim();

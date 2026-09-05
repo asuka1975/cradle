@@ -34,7 +34,7 @@ class BypassSiteRuleTest {
 			11,
 			"'NoteBulkAddBypass' の宣言が com.example.domain.repository にある。" +
 				"バイパスの宣言は消費する UseCase のディレクトリ(com.example.application.usecase 配下)に置き、" +
-				"複数の UseCase から共有しない(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				"複数の UseCase から共有しない(backend-kotlin 規則「性能バイパス」)",
 		)
 	}
 
@@ -65,7 +65,7 @@ class BypassSiteRuleTest {
 			3,
 			7,
 			"'LocalNoteBulkAddBypass' は NoteBulkAddBypass の実装だが com.example.application.usecase.postnoteusecase にある。" +
-				"バイパスの実装は com.example.infrastructure 配下に置く(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				"バイパスの実装は com.example.infrastructure 配下に置く(backend-kotlin 規則「性能バイパス」)",
 		)
 	}
 
@@ -82,7 +82,7 @@ class BypassSiteRuleTest {
 			3,
 			12,
 			"'(匿名)' は NoteBulkAddBypass の実装だが com.example.application.usecase.postnoteusecase にある。" +
-				"バイパスの実装は com.example.infrastructure 配下に置く(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				"バイパスの実装は com.example.infrastructure 配下に置く(backend-kotlin 規則「性能バイパス」)",
 		)
 	}
 
@@ -102,7 +102,7 @@ class BypassSiteRuleTest {
 			1,
 			"com.example.application.usecase.postnoteusecase.NoteBulkAddBypass を import している。" +
 				"*Bypass を import してよいのは実装側(com.example.infrastructure 配下)だけ — " +
-				"消費する UseCaseImpl は宣言と同じパッケージに置くので import は要らない(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				"消費する UseCaseImpl は宣言と同じパッケージに置くので import は要らない(backend-kotlin 規則「性能バイパス」)",
 		)
 	}
 

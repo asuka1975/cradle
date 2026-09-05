@@ -257,13 +257,13 @@ class JooqAccessSiteRuleTest {
 		offence: String,
 	): String = "$packageName は jOOQ に触ってよい場所ではない($offence)。" +
 		"許されるのは com.example.infrastructure・com.example.infra と *QueryServiceImpl を宣言するファイルだけ。" +
-		"画面をまたぐクエリヘルパを作らず、各 QueryServiceImpl に直接書く(.claude/rules/backend-kotlin.md)。" +
+		"画面をまたぐクエリヘルパを作らず、各 QueryServiceImpl に直接書く(backend-kotlin 規則)。" +
 		"DSLContext の拡張関数にしても、共有すれば同じ抽象化層である"
 
 	private fun cohabitationViolationFor(name: String): String =
 		"'$name' が *QueryServiceImpl のファイルに private でない形で同居している。" +
 			"接尾辞の許可は jOOQ の接点を 1 ファイルに閉じるためのもので、公開のトップレベル宣言は共有クエリヘルパの再来になる。" +
-			"private にするか、役割の決まった場所へ移す(.claude/rules/backend-kotlin.md)"
+			"private にするか、役割の決まった場所へ移す(backend-kotlin 規則)"
 
 	private companion object {
 		const val ALLOWED_PACKAGES = "com.example.infrastructure,com.example.infra"

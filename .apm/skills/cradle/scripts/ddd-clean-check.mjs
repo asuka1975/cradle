@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ddd-clean-check — 探索セッション（/ddd）が残したプローブ・問いかけファイル・セッション印が消えていることを機械で確かめる。
+// ddd-clean-check — 探索セッション（ddd スキル）が残したプローブ・問いかけファイル・セッション印が消えていることを機械で確かめる。
 //   ddd-clean-check [--build]
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

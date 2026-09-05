@@ -18,7 +18,7 @@
 //   suppress-no-why  [warn]  @Suppress / eslint-disable / oxlint-disable に理由コメントが無い
 //   console-log      [warn]  frontend の本番コードに console.log
 //   emoji            [warn]  コードや docstring の装飾絵文字
-//   stale-path       [error] コメント・ドキュメントが指すリポジトリ内パスが存在しない（README や CLAUDE.md の腐りも拾う）
+//   stale-path       [error] コメント・ドキュメントが指すリポジトリ内パスが存在しない（README・CLAUDE.md・AGENTS.md の腐りも拾う）
 //   restate          [warn]  直下の宣言名をそのまま繰り返すだけのコメント
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -31,6 +31,9 @@ const disabled = new Set(cfg.unslop.disable ?? []);
 const CODE_EXT = [".kt", ".kts", ".ts", ".tsx", ".js", ".mjs", ".lean", ".sql", ".tf", ".css", ".html"];
 const DOC_EXT = [".md", ".yaml", ".yml"];
 const codeDirs = [cfg.lean.dir, cfg.backend.dir, cfg.frontend.dir, cfg.e2e.dir, cfg.infra.dir].map(d => join(cfg.root, d));
+// ハーネスの散文（APM が配る rules / skills / agents と、Codex 向けに compile された AGENTS.md）
+const HARNESS_DIRS = [".claude/rules", ".claude/skills", ".claude/agents", ".claude/commands", ".agents/skills"];
+const isHarnessProse = (relPath) => HARNESS_DIRS.some(d => relPath.startsWith(d + "/")) || relPath === "AGENTS.md" || relPath.startsWith(".codex/");
 
 function candidateFiles() {
   if (opts._.length) return opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p)).filter(existsSync);
@@ -38,7 +41,7 @@ function candidateFiles() {
     const code = codeDirs.flatMap(d => walk(d, { ext: CODE_EXT }));
     const docs = [...walk(join(cfg.root, cfg.documents.dir), { ext: DOC_EXT }), ...["CLAUDE.md", "README.md", "AGENTS.md"].map(f => join(cfg.root, f)).filter(existsSync),
       ...codeDirs.flatMap(d => walk(d, { ext: [".md"] })),
-      ...["rules", "skills", "agents", "commands"].flatMap(d => walk(join(cfg.root, ".claude", d), { ext: [".md"] }))];
+      ...HARNESS_DIRS.flatMap(d => walk(join(cfg.root, d), { ext: [".md"] }))];
     return [...new Set([...code, ...docs])];
   }
   let names = [];
@@ -150,8 +153,8 @@ for (const file of candidateFiles()) {
       const p = m[1];
       if (/^(https?:|\$|\{|<)/.test(p) || p.includes("*") || p.includes("{") || p.includes("<")) continue;
       if (IGNORED_PATHS.some(re => re.test(p))) continue;
-      // ハーネス散文（.claude/ 配下）は「これから作られる」パスを指すことがある — トップレベルのディレクトリがまだ無ければ見ない
-      if (relPath.startsWith(".claude/") && !existsSync(join(cfg.root, p.split("/")[0]))) continue;
+      // ハーネス散文は「これから作られる」パスを指すことがある — トップレベルのディレクトリがまだ無ければ見ない
+      if (isHarnessProse(relPath) && !existsSync(join(cfg.root, p.split("/")[0]))) continue;
       if (!pathExistsSomewhere(p, file)) add("stale-path", "error", file, i + 1, `存在しないパスを指しています: ${p}`);
     }
   });

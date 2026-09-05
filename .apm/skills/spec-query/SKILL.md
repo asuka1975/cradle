@@ -6,7 +6,7 @@ description: Use whenever a question is about what the specification says or doe
 # 仕様問い合わせ — Lean を動かして答える
 
 仕様に関する問いは推測で答えない。モデルを動かし、その出力を引用して答える。
-道具は `node .claude/skills/cradle/scripts/spec-query.mjs`（以下 `spec-query`）。
+道具は `cradle spec-query`（cradle スキルの `scripts/spec-query.mjs`。以下 `spec-query`）。
 
 ## 問いの種類と手順
 
@@ -23,8 +23,8 @@ description: Use whenever a question is about what the specification says or doe
 
 - 実行したコマンドと出力（該当部分）を引用してから結論を書く。「モデルは〜と答えた」の形。
 - 「できない」は `domainError` の語彙で言う（`notAuthor` など）。語彙の意味は `Domain/Error.lean` の docstring。
-- 出発点のシナリオに欲しい状況が無いときは、既存シナリオから手を打って作る。**Scenarios.lean に一時シナリオを足さない**（それは /ddd のプローブの仕事）。
-- モデルが答えられない問い（型に無い事実・未決）は「モデルに無い」と言い、決めたければ /ddd に戻す。勝手に補わない。
+- 出発点のシナリオに欲しい状況が無いときは、既存シナリオから手を打って作る。**Scenarios.lean に一時シナリオを足さない**（それは ddd スキルのプローブの仕事）。
+- モデルが答えられない問い（型に無い事実・未決）は「モデルに無い」と言い、決めたければ ddd スキルに戻す。勝手に補わない。
 - 出力が長いときは `views` の該当する口だけを引用する。
 
 ## 例

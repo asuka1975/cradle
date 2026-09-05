@@ -14,7 +14,7 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtImportDirective
 
 /**
- * 性能バイパス(.claude/rules/backend-kotlin.md「性能バイパス」)の置き場の限定。
+ * 性能バイパス(backend-kotlin 規則「性能バイパス」)の置き場の限定。
  *
  * 生成された Repository interface はドメイン契約の写しなので、性能のための一括操作は
  * 契約に足さず `*Bypass` interface として作る。その置き場は規約で決まっている:
@@ -73,7 +73,7 @@ class BypassSiteRule :
 			node.startOffset,
 			"${imported.asString()} を import している。*$BYPASS_SUFFIX を import してよいのは" +
 				"実装側($implementationPackagePrefix 配下)だけ — 消費する UseCaseImpl は宣言と同じパッケージに置くので" +
-				" import は要らない(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				" import は要らない(backend-kotlin 規則「性能バイパス」)",
 			false,
 		)
 	}
@@ -94,7 +94,7 @@ class BypassSiteRule :
 				offset,
 				"'${declaration.name}' の宣言が $packageName にある。" +
 					"バイパスの宣言は消費する UseCase のディレクトリ($declarationPackagePrefix 配下)に置き、" +
-					"複数の UseCase から共有しない(.claude/rules/backend-kotlin.md「性能バイパス」)",
+					"複数の UseCase から共有しない(backend-kotlin 規則「性能バイパス」)",
 				false,
 			)
 			return
@@ -106,7 +106,7 @@ class BypassSiteRule :
 		emit(
 			offset,
 			"'${declaration.name ?: "(匿名)"}' は $bypassSupertype の実装だが $packageName にある。" +
-				"バイパスの実装は $implementationPackagePrefix 配下に置く(.claude/rules/backend-kotlin.md「性能バイパス」)",
+				"バイパスの実装は $implementationPackagePrefix 配下に置く(backend-kotlin 規則「性能バイパス」)",
 			false,
 		)
 	}

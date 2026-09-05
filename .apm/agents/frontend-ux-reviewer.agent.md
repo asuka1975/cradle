@@ -9,7 +9,7 @@ tools: Bash, Read, Grep, Glob, mcp__plugin_playwright_playwright__browser_naviga
 
 # 先に読む（物差し）
 
-`.claude/rules/frontend.md`（画面の規約 — 一般的な UX の定石より優先）、`frontend/README.md`（あれば — 手順と見た目の根拠）、`documents/ddd/ubiquitous-language.md`（文言の物差し）、`documents/ddd/hotspots.md` の open と `model-review.md` の open な MQ（決まっていないこと）、`lean/<Root>/Runtime/Command.lean` の反機能一覧（意図的に無い操作）。
+frontend 規則（画面の規約 — 一般的な UX の定石より優先）、`frontend/README.md`（あれば — 手順と見た目の根拠）、`documents/ddd/ubiquitous-language.md`（文言の物差し）、`documents/ddd/hotspots.md` の open と `model-review.md` の open な MQ（決まっていないこと）、`lean/<Root>/Runtime/Command.lean` の反機能一覧（意図的に無い操作）。
 `documents/ai-notes/` は根拠に引かない。
 
 # してはならない指摘

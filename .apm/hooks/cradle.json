@@ -3,7 +3,11 @@
     {
       "matcher": "Edit|Write|MultiEdit|NotebookEdit|Agent",
       "hooks": [
-        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" pre-guard", "timeout": 10 }
+        {
+          "type": "command",
+          "command": "d=${CLAUDE_PROJECT_DIR:-$PWD}; while :; do for s in .claude .agents; do h=$d/$s/skills/cradle/scripts/hook.mjs; [ -f \"$h\" ] && exec node \"$h\" pre-guard; done; [ \"$d\" = / ] && exit 0; d=$(dirname \"$d\"); done",
+          "timeout": 10
+        }
       ]
     }
   ],
@@ -11,20 +15,32 @@
     {
       "matcher": "Edit|Write|MultiEdit",
       "hooks": [
-        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" post-edit", "timeout": 10 }
+        {
+          "type": "command",
+          "command": "d=${CLAUDE_PROJECT_DIR:-$PWD}; while :; do for s in .claude .agents; do h=$d/$s/skills/cradle/scripts/hook.mjs; [ -f \"$h\" ] && exec node \"$h\" post-edit; done; [ \"$d\" = / ] && exit 0; d=$(dirname \"$d\"); done",
+          "timeout": 10
+        }
       ]
     },
     {
       "matcher": "Bash",
       "hooks": [
-        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" post-bash", "timeout": 10 }
+        {
+          "type": "command",
+          "command": "d=${CLAUDE_PROJECT_DIR:-$PWD}; while :; do for s in .claude .agents; do h=$d/$s/skills/cradle/scripts/hook.mjs; [ -f \"$h\" ] && exec node \"$h\" post-bash; done; [ \"$d\" = / ] && exit 0; d=$(dirname \"$d\"); done",
+          "timeout": 10
+        }
       ]
     }
   ],
   "Stop": [
     {
       "hooks": [
-        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/cradle/scripts/hook.mjs\" stop", "timeout": 60 }
+        {
+          "type": "command",
+          "command": "d=${CLAUDE_PROJECT_DIR:-$PWD}; while :; do for s in .claude .agents; do h=$d/$s/skills/cradle/scripts/hook.mjs; [ -f \"$h\" ] && exec node \"$h\" stop; done; [ \"$d\" = / ] && exit 0; d=$(dirname \"$d\"); done",
+          "timeout": 60
+        }
       ]
     }
   ]

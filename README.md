@@ -3,7 +3,7 @@
 **仕様はハーネスである。ハーネスは決定論的であるべきである。だから Lean で書かれた仕様は効果的なハーネスになる。**
 
 Cradle は、プロダクトオーナーがゆりかごに身を任せるようにプロダクトの開発を最後までやりきるための、
-Claude Code 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
+Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
 探索（イベントストーミング）→ インフラ設計 → Lean 実行可能仕様 → 仕様アニメーション → API 契約 → フロントエンド → 人間による確認 → バックエンド → E2E の
 一方向のパイプラインと、それを守る規約・スキル・エージェント・hook・決定論的な道具を配る。
 
@@ -22,18 +22,25 @@ Claude Code 向けの配布可能なハーネス（[Microsoft APM](https://githu
 ```bash
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>
-printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml
-apm install asuka1975/cradle#v0.1.0-alpha.1      # .claude/ に rules / skills / agents / hooks が入る（タグで固定する）
+printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml   # Codex なら - codex（両方でもよい）
+apm install asuka1975/cradle#v0.1.0-alpha.1      # タグで固定する
+apm compile --single-agents                      # Codex: 規約を 1 枚の AGENTS.md にする（Claude Code では不要）
 ```
 
-Claude Code で:
+| | Claude Code | Codex |
+|---|---|---|
+| 配られる場所 | `.claude/rules` `.claude/skills` `.claude/agents` `.claude/settings.json`（hooks） | `AGENTS.md`（compile）`.agents/skills` `.codex/agents` `.codex/hooks.json` |
+| スキルの呼び方 | `/cradle-init` | `$cradle-init` |
 
 ```
-/cradle-init --project MyProduct     # 骨格を敷く（cradle.json, documents/, lean/）
+cradle-init --project MyProduct      # 骨格を敷く（cradle.json, .apm/instructions/project.instructions.md, documents/, lean/）
+apm compile [--single-agents]        # 固有の事実を rules / AGENTS.md に写す
 cd lean && lake build
-/cradle-status                       # 現在地
-/ddd                                 # 探索を始める
+cradle-status                        # 現在地
+ddd                                  # 探索を始める
 ```
+
+Codex はプロジェクトを「信頼」したときだけ `.codex/`（hooks・agents・設定）を読み、hooks は起動時のレビューで信頼したものだけが動く。骨格が置く `.codex/config.toml` は AGENTS.md の読込上限（既定 32 KiB）を上げる。
 
 要件: Node 20+、elan / lake（Lean 4）、JDK 21（backend）、pnpm（frontend）。生成器 [lean2kotlin](https://github.com/asuka1975/lean2kotlin) は backend フェーズで使う。
 
@@ -52,7 +59,7 @@ cd lean && lake build
 | `contract-check`（api-contract スキル） | Lean のコマンド・画面と openapi の操作が 1 対 1 か |
 | `flows-from-golden`（e2e-parity スキル） | golden から E2E の台本 |
 
-すべて `node .claude/skills/cradle/scripts/cradle.mjs <command>`。
+すべて `node <skills>/cradle/scripts/cradle.mjs <command>`（`<skills>` は Claude Code `.claude/skills` / Codex `.agents/skills`）。
 
 ## ドキュメント
 
@@ -69,7 +76,8 @@ cd lean && lake build
 ```bash
 apm compile --validate            # 構造検査
 apm install --dry-run --target claude
-apm pack                          # Claude Code plugin 形式のバンドル
+apm install --dry-run --target codex
+apm pack                          # Claude Code plugin 形式のバンドル（残る .claude-plugin/ と build/ は消す。残っていると local install が plugin 扱いになり skills が配られない）
 ```
 
 ## ライセンス

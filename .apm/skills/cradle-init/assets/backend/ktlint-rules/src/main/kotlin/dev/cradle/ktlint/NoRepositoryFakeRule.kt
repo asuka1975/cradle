@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 
 /**
- * Repository を実装するクラスの置き場の限定(.claude/rules/backend-kotlin.md の機械化)。
+ * Repository を実装するクラスの置き場の限定(backend-kotlin 規則の機械化)。
  *
  * 契約テストは本番の実装を実 DB 相手にそのまま使う。テスト専用の `InMemorySomeRepository` の
  * ようなフェイクを挟むと、そのテストは本番のコードを一切通らなくなり、リポジトリの実装に
@@ -64,7 +64,7 @@ class NoRepositoryFakeRule :
 		emit(
 			declaration.nameIdentifier?.textOffset ?: declaration.textOffset,
 			"'$name' が $supertype を実装している。$where。" +
-				"テストダミー(InMemory 実装)は本番コードを一切通らないテストを作る — 本番実装を実 DB 相手にそのまま使う(.claude/rules/backend-kotlin.md)",
+				"テストダミー(InMemory 実装)は本番コードを一切通らないテストを作る — 本番実装を実 DB 相手にそのまま使う(backend-kotlin 規則)",
 			false,
 		)
 	}

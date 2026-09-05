@@ -3,7 +3,8 @@
 //   init --project <Root> [--dir <path>] [--backend <package>] [--dry-run] [--force]
 //   --backend <package> を付けると backend/ の骨格（ktlint 独自ルール・.editorconfig・gradle.properties）も敷く（例: com.example.notes）
 //   <Root> は Lean のルート名前空間（例: MonoWa）。lake の exe 名は小文字にしたもの。
-// 敷くもの: cradle.json / CLAUDE.md / .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
+// 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm compile が rules / AGENTS.md に写す）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
+// .claude/ と .codex/ の設定例は、その置き場が既にあるもの（apm install 済みのターゲット）だけ敷く。どちらも無ければ両方。
 // 既にあるファイルは上書きしない（--force で上書き）。
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, appendFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
@@ -39,14 +40,17 @@ function walk(dir) {
 
 // documents
 for (const f of walk(join(assets, "documents"))) put(relative(assets, f), rename(readFileSync(f, "utf8")));
-// project root（.github/workflows も含む）
+// project root（.github/workflows・.apm/instructions も含む）
+const hasClaude = existsSync(join(target, ".claude")), hasCodex = existsSync(join(target, ".agents")) || existsSync(join(target, ".codex"));
 for (const f of walk(join(assets, "project"))) {
   const relPath = relative(join(assets, "project"), f);
-  if ([".gitignore", "cradle.json", "CLAUDE.md"].includes(relPath)) continue;
-  put(relPath, rename(readFileSync(f, "utf8")));
+  if ([".gitignore", "cradle.json"].includes(relPath)) continue;
+  if (relPath.startsWith(".claude/") && !hasClaude && hasCodex) continue;
+  if (relPath.startsWith(".codex/") && !hasCodex && hasClaude) continue;
+  // *.tmpl は APM に primitive として拾われないための拡張子。敷くときに外す。
+  put(relPath.replace(/\.tmpl$/, ""), rename(readFileSync(f, "utf8")));
 }
 put("cradle.json", rename(readFileSync(join(assets, "project", "cradle.json"), "utf8")));
-put("CLAUDE.md", rename(readFileSync(join(assets, "project", "CLAUDE.md"), "utf8")));
 {
   const gi = join(target, ".gitignore");
   const add = readFileSync(join(assets, "project", ".gitignore"), "utf8");
@@ -71,4 +75,4 @@ if (backendPkg && backendPkg !== true) {
 console.log(`Cradle init — ${project} (${target})${dryRun ? " [dry-run]" : ""}`);
 for (const w of written) console.log(`  + ${w}`);
 for (const s of skipped) console.log(`  = ${s}（既存のため据え置き）`);
-console.log(`\n次: cd lean && lake build  →  cradle status  →  /ddd で探索を始める`);
+console.log(`\n次: apm compile（固有の事実を rules / AGENTS.md に写す。Codex は --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める`);

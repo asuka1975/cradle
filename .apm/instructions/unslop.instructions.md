@@ -10,14 +10,14 @@ description: unslop — それらしいが価値のない痕跡、腐る写し�
 |---|---|
 | comment-status / comment-domain-id / comment-history | コードコメントのステータス語・documents の ID・日付や経緯（comments.md） |
 | lean-ref-missing / lean-ref-retracted | Lean が引く出典 ID が documents に無い・撤回済み |
-| stale-path | コメント・README・CLAUDE.md が指すリポジトリ内パスが存在しない |
+| stale-path | コメント・README・CLAUDE.md / AGENTS.md が指すリポジトリ内パスが存在しない |
 | todo-bare / hedge | 理由の無い TODO、逃げ言葉 |
 | empty-catch / suppress-no-why / console-log | 握りつぶし、理由の無い抑止、本番コードの console.log |
 | restate / emoji | 宣言名をなぞるだけのコメント、装飾絵文字 |
 
 機械で拾えない規則:
 
-- **同じ規則・同じ事実を 2 か所に書かない。** README / CLAUDE.md / SKILL / コメントに規約を写さない。規約は `.claude/rules/`、事実は documents、手順はスクリプト。
+- **同じ規則・同じ事実を 2 か所に書かない。** README / CLAUDE.md / SKILL / コメントに規約を写さない。規約は Cradle が配る rules、事実は documents、手順はスクリプト。
   写す代わりに参照する。手計算の数量（「現在 0」「15 本」）を散文に書かない — 数えるならスクリプトが数える。
 - **別のプロダクトの語彙を持ち込まない。** 前のプロジェクトの例・パス・画面名が残っていたら消す。テンプレートの例は最小の汎用ドメインだけ。
 - **規則本文に日付・経緯・事故談を混ぜない。** 根拠は 1 行以内。経緯は ai-notes。

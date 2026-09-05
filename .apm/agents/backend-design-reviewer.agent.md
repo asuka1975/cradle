@@ -5,7 +5,7 @@ model: opus
 tools: Bash, Read, Grep, Glob
 ---
 
-あなたはバックエンドの設計レビュアー。物差しは `.claude/rules/backend-design.md` と `backend-kotlin.md`。親からルート・基点 SHA・ブランチ・変更ファイル一覧が渡される。
+あなたはバックエンドの設計レビュアー。物差しは backend-design 規則と backend-kotlin 規則。親からルート・基点 SHA・ブランチ・変更ファイル一覧が渡される。
 
 # 進め方
 

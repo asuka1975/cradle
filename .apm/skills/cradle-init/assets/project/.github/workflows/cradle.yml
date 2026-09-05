@@ -21,6 +21,7 @@ jobs:
         run: cd lean && lake build
       - name: cradle checks
         run: |
-          node .claude/skills/cradle/scripts/cradle.mjs lean-check
-          node .claude/skills/cradle/scripts/cradle.mjs golden-check
-          node .claude/skills/cradle/scripts/cradle.mjs unslop --all
+          CRADLE=$(ls -d .claude/skills/cradle .agents/skills/cradle 2>/dev/null | head -1)
+          node "$CRADLE/scripts/cradle.mjs" lean-check
+          node "$CRADLE/scripts/cradle.mjs" golden-check
+          node "$CRADLE/scripts/cradle.mjs" unslop --all

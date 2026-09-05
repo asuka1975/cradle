@@ -37,7 +37,7 @@ class ActorContextSiteRuleTest {
 			"com.example.presentation.intent で ActorContext を組み立てている。名義は認証が決めるもので、" +
 				"ペイロードから作れる場所を増やすと「本文に社員番号を書けば誰にでもなれる」ことになる。" +
 				"組み立ててよいのは認証アダプタ(com.example.presentation.auth 配下)だけで、" +
-				"使う側は DI で受け取る(.claude/rules/backend-kotlin.md「名義の運び方」)",
+				"使う側は DI で受け取る(backend-kotlin 規則「名義の運び方」)",
 		)
 	}
 
@@ -59,7 +59,7 @@ class ActorContextSiteRuleTest {
 				"名義は認証が決めるもので、" +
 				"ペイロードから作れる場所を増やすと「本文に社員番号を書けば誰にでもなれる」ことになる。" +
 				"組み立ててよいのは認証アダプタ(com.example.presentation.auth 配下)だけで、" +
-				"使う側は DI で受け取る(.claude/rules/backend-kotlin.md「名義の運び方」)",
+				"使う側は DI で受け取る(backend-kotlin 規則「名義の運び方」)",
 		)
 	}
 
@@ -80,7 +80,7 @@ class ActorContextSiteRuleTest {
 			"com.example.presentation.loan で ActorContext を組み立てている。名義は認証が決めるもので、" +
 				"ペイロードから作れる場所を増やすと「本文に社員番号を書けば誰にでもなれる」ことになる。" +
 				"組み立ててよいのは認証アダプタ(com.example.presentation.auth 配下)だけで、" +
-				"使う側は DI で受け取る(.claude/rules/backend-kotlin.md「名義の運び方」)",
+				"使う側は DI で受け取る(backend-kotlin 規則「名義の運び方」)",
 		)
 	}
 

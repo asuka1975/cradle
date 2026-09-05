@@ -19,7 +19,7 @@ description: Use to create, update or run the spec-animation mockup under lean/m
 
 ## 構成
 
-`/cradle-init` が敷く汎用の UI（`public/index.html`）は views を表と木で描き、コマンドは構成子名の一覧（`/api/meta`）と JSON 欄で送る。
+cradle-init スキルが敷く汎用の UI（`public/index.html`）は views を表と木で描き、コマンドは構成子名の一覧（`/api/meta`）と JSON 欄で送る。
 ドメインの語彙で作り込む必要が出たら: Views に足す（Lean）→ `lake build` → 描画だけ足す。
 
 ## 起動

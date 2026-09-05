@@ -18,7 +18,7 @@ const phase = (name, state, facts, next) => s.phases.push({ name, state, facts, 
 const dddDir = cfg.documents.ddd;
 const files = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"];
 const present = files.filter(f => existsSync(R(`${dddDir}/${f}`)));
-if (present.length === 0) phase("探索 (DDD)", "未着手", [`${dddDir}/ が無い`], "/cradle-init で骨格を作り、/ddd で探索を始める");
+if (present.length === 0) phase("探索 (DDD)", "未着手", [`${dddDir}/ が無い`], "cradle-init スキルで骨格を作り、ddd スキルで探索を始める");
 else {
   const tl = read(`${dddDir}/event-timeline.md`) ?? "";
   const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
@@ -27,12 +27,12 @@ else {
   const mqOpen = countRows(read(`${dddDir}/model-review.md`), "open");
   const openQ = existsSync(R(`${dddDir}/questions.md`));
   phase("探索 (DDD)", events ? "進行中" : "着手済", [`出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${files.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
-    mqOpen ? `/ddd で open の MQ ${mqOpen} 件を先に検証する（形式化を止めている問い）` : hsOpen ? `/ddd で open の HS ${hsOpen} 件を掘る` : "次の探索テーマを決める、または次フェーズへ");
+    mqOpen ? `ddd スキルで open の MQ ${mqOpen} 件を先に検証する（形式化を止めている問い）` : hsOpen ? `ddd スキルで open の HS ${hsOpen} 件を掘る` : "次の探索テーマを決める、または次フェーズへ");
 }
 
 // 2. インフラ設計
 const infraDesign = cfg.documents.infraDesign;
-if (!existsSync(R(infraDesign))) phase("インフラ設計", "未着手", [`${infraDesign}/ が無い`], "/infra-design でモデルから非機能要件と決定（INFRA-D）を導く");
+if (!existsSync(R(infraDesign))) phase("インフラ設計", "未着手", [`${infraDesign}/ が無い`], "infra-design スキルでモデルから非機能要件と決定（INFRA-D）を導く");
 else {
   const md = walk(R(infraDesign), { ext: [".md"] }).map(f => readFileSync(f, "utf8")).join("\n");
   const d = (md.match(/INFRA-D-\d+/g) ?? []).length, q = (md.match(/\|\s*INFRA-Q-\d+\s*\|/g) ?? []).length;
@@ -40,7 +40,7 @@ else {
 }
 
 // 3. Lean モデル
-if (!existsSync(cfg.lean.modelDir)) phase("Lean 実行可能仕様", "未着手", [`${cfg.lean.dir}/${cfg.lean.root}/ が無い`], "/lean-domain-model で初回生成");
+if (!existsSync(cfg.lean.modelDir)) phase("Lean 実行可能仕様", "未着手", [`${cfg.lean.dir}/${cfg.lean.root}/ が無い`], "lean-domain-model スキルで初回生成");
 else {
   const leanFiles = walk(cfg.lean.modelDir, { ext: [".lean"] });
   const sorry = leanFiles.reduce((n, f) => n + (readFileSync(f, "utf8").replace(/--.*$/gm, "").match(/\bsorry\b/g) ?? []).length, 0);
@@ -50,12 +50,12 @@ else {
   const bin = existsSync(cfg.lean.bin);
   const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
   phase("Lean 実行可能仕様", "進行中", [`${leanFiles.length} ファイル / UseCase ${useCases} 件`, `sorry ${sorry}`, `golden ${goldens} 組`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`, `モックアップ ${mockup ? "あり" : "なし"}`],
-    !bin ? "cd lean && lake build" : !mockup ? "/domain-mockup で仕様アニメーションを作る" : goldens === 0 ? "モックアップで流れを確かめ golden を採る" : "cradle golden-check で回帰を確かめ、次フェーズへ");
+    !bin ? "cd lean && lake build" : !mockup ? "domain-mockup スキルで仕様アニメーションを作る" : goldens === 0 ? "モックアップで流れを確かめ golden を採る" : "cradle golden-check で回帰を確かめ、次フェーズへ");
 }
 
 // 4. API 契約
 const openapi = cfg.documents.openapi;
-if (!existsSync(R(openapi))) phase("API 契約 (OpenAPI)", "未着手", [`${openapi} が無い`], "/api-contract で Lean の Command/View から契約を起こす");
+if (!existsSync(R(openapi))) phase("API 契約 (OpenAPI)", "未着手", [`${openapi} が無い`], "api-contract スキルで Lean の Command/View から契約を起こす");
 else {
   const y = read(openapi);
   const ops = (y.match(/^\s{4}(get|post|put|patch|delete):/gm) ?? []).length;
@@ -85,7 +85,7 @@ else {
 }
 
 // 7. E2E
-if (!existsSync(R(cfg.e2e.dir))) phase("E2E（Lean × REST の一致）", "未着手", [], "バックエンド追随後に /e2e-parity で締める");
+if (!existsSync(R(cfg.e2e.dir))) phase("E2E（Lean × REST の一致）", "未着手", [], "バックエンド追随後に e2e-parity スキルで締める");
 else {
   const fromGolden = existsSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`)) ? (JSON.parse(readFileSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`), "utf8")).flows ?? []).length : 0;
   const scenDir = R(`${cfg.e2e.dir}/scenarios`);

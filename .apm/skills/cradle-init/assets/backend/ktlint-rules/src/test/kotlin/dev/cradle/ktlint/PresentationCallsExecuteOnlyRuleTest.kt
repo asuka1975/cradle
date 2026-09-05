@@ -88,7 +88,7 @@ class PresentationCallsExecuteOnlyRuleTest {
 	private companion object {
 		const val MESSAGE =
 			"presentation は UseCase の execute だけを呼ぶ — validate は公開のテストシームで、" +
-				"単独で呼ぶのは生成された契約テストだけ(.claude/rules/backend-kotlin.md)。" +
-				"検査は execute が validate を呼ぶ形で境界の中で走る(.claude/rules/backend-kotlin.md)"
+				"単独で呼ぶのは生成された契約テストだけ(backend-kotlin 規則)。" +
+				"検査は execute が validate を呼ぶ形で境界の中で走る(backend-kotlin 規則)"
 	}
 }

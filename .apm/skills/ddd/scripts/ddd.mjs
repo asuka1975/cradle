@@ -25,7 +25,7 @@ function countRows(text, idRe, statusRe) {
 switch (cmd) {
   case "start": {
     const missing = FILES.filter(f => !existsSync(join(ddd, f)));
-    if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（/cradle-init で骨格を作る）`);
+    if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（cradle-init スキルで骨格を作る）`);
     writeFileSync(marker, JSON.stringify({ theme: opts.theme ?? null }) + "\n");
     console.log(`セッション開始（${cfg.documents.ddd}/.session）。終わりに ddd.mjs end を必ず実行する。`);
     break;
@@ -33,7 +33,7 @@ switch (cmd) {
   case "questions": {
     const j = jsonArg(arg ?? "-");
     if (!j || !Array.isArray(j.questions) || !j.questions.length) fail("JSON は {questions:[{question, header, multiSelect, options:[{label, description}]}]} の形");
-    const lines = ["# 探索セッションの問い", "", "> これは一時ファイルです。/ddd が作り、回答が済んだら削除します。コミットしないでください。", ""];
+    const lines = ["# 探索セッションの問い", "", "> これは一時ファイルです。ddd スキルが作り、回答が済んだら削除します。コミットしないでください。", ""];
     if (j.theme) lines.push(`テーマ: ${j.theme}`, "");
     if (j.preface) lines.push(j.preface, "");
     lines.push("## 確かめ方", "", "選択肢ごとに「選ぶとどうなるか」をモデルで動かせます。", "", "```bash",

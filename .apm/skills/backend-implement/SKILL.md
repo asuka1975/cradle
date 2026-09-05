@@ -9,10 +9,10 @@ description: Use when it is time to make the backend follow the Lean model — r
 
 ## 手順
 
-0. **初回だけ**: `node .claude/skills/cradle-init/scripts/init.mjs --project <Root> --backend <package>` で ktlint 独自ルール・`.editorconfig`・`gradle.properties` を敷き、`references/gradle-wiring.md` の断片で lean2kotlin・OpenAPI・jOOQ・ktlint を配線する。
+0. **初回だけ**: cradle-init スキルの `scripts/init.mjs --project <Root> --backend <package>` で ktlint 独自ルール・`.editorconfig`・`gradle.properties` を敷き、`references/gradle-wiring.md` の断片で lean2kotlin・OpenAPI・jOOQ・ktlint を配線する。
 1. **影響範囲**: `cradle regen-impact`。変わった生成シンボル・参照する手書き実装・未配線の契約テスト・golden 回帰を読む。想定外の広がりは設計の見直しのサイン（ユーザーに示す）。
 2. **コンパイルエラーが TODO リスト**: `./gradlew compileKotlin compileTestKotlin`。消えた interface・変わった署名を追随する。
-3. **実装**（規約は `.claude/rules/backend-kotlin.md` / `backend-design.md`）:
+3. **実装**（規約は backend-kotlin / backend-design）:
    - UseCase: 固定形（validate が解決、execute が validate を呼んで作用、境界は execute）。
    - QueryService: jOOQ 直叩き、並び・絞り込みは DB。共有ヘルパを作らない。
    - Repository: 契約の写し。横断不変条件の直列化点（一意制約 / `FOR UPDATE` / version）を DB に置く。

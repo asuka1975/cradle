@@ -4,11 +4,12 @@ description: Lean 仕様駆動開発のハーネス — 仕様は決定論的な
 author: asuka1975
 license: GPL-3.0-only
 repository: https://github.com/asuka1975/cradle
-keywords: [lean, spec-driven, ddd, harness, claude-code]
+keywords: [lean, spec-driven, ddd, harness, claude-code, codex]
 
-# Claude Code を主ターゲットにする（hooks / agents / commands は Claude Code 固有の形）。
+# Claude Code と Codex に配る。hooks は両者で同じ形、agents は APM が Codex の toml に写す、rules は Codex では AGENTS.md に compile される。
 targets:
   - claude
+  - codex
 
 includes: auto
 

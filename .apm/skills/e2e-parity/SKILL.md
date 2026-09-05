@@ -9,7 +9,7 @@ description: Use after the backend follows the model — derive E2E flow scripts
 
 ## 手順
 
-1. **台本を起こす**: `node .claude/skills/e2e-parity/scripts/flows-from-golden.mjs --out e2e/scenarios/from-golden.json`。
+1. **台本を起こす**: このスキルの `scripts/flows-from-golden.mjs --out e2e/scenarios/from-golden.json`。
    golden の trace から人物・手・通った / 断られた・そのとき見えた口を機械で列挙する。手で台本を書かない。
 2. **画面への写し**: 各手を「どの画面で・どの要素を・どう操作するか」に写す（ここだけが手書き）。ID に頼らず、ラベル + 当事者で紙面を特定する。日付は相対指定。
 3. **前提**: local スタック（DB・backend・frontend・モック発行者）と Lean CLI サーバ、dev の画面。1 コマンドで立つようにし、コンテナの鮮度（Created と HEAD）を先に確かめる。テスト用 DB は開発ループと分ける。

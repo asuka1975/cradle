@@ -13,11 +13,11 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 
 /**
- * presentation は UseCase の execute だけを呼ぶ(.claude/rules/backend-kotlin.md)。
+ * presentation は UseCase の execute だけを呼ぶ(backend-kotlin 規則)。
  *
  * validate は公開のテストシームで、単独で呼ぶのは生成された契約テストだけ。
  * Controller が validate を呼ぶと、検査が execute の境界(`@Transactional`)の外で走り、
- * 「execute は必ず validate を呼ぶ」(.claude/rules/backend-kotlin.md)という入り口の一致が壊れる。
+ * 「execute は必ず validate を呼ぶ」(backend-kotlin 規則)という入り口の一致が壊れる。
  * validate 用のエンドポイントも作らない。
  *
  * 検出は「`validate(...)` という名前の呼び出し」の字面で行う(レシーバの型は見ない)。
@@ -56,8 +56,8 @@ class PresentationCallsExecuteOnlyRule :
 		emit(
 			callee.textOffset,
 			"presentation は UseCase の execute だけを呼ぶ — validate は公開のテストシームで、" +
-				"単独で呼ぶのは生成された契約テストだけ(.claude/rules/backend-kotlin.md)。" +
-				"検査は execute が validate を呼ぶ形で境界の中で走る(.claude/rules/backend-kotlin.md)",
+				"単独で呼ぶのは生成された契約テストだけ(backend-kotlin 規則)。" +
+				"検査は execute が validate を呼ぶ形で境界の中で走る(backend-kotlin 規則)",
 			false,
 		)
 	}
