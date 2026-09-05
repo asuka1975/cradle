@@ -74,4 +74,9 @@ apm pack                          # Claude Code plugin 形式のバンドル
 
 ## ライセンス
 
-GNU General Public License v3.0（[LICENSE](LICENSE)）。
+Copyright (c) 2026 asuka1975
+
+Cradle は GNU General Public License v3.0 の下で配布する。全文は [LICENSE](LICENSE)。
+
+このプログラムはフリーソフトウェアであり、Free Software Foundation が公開した GNU General Public License の第 3 版の条件の下で再配布・改変できる。
+このプログラムは有用であることを願って配布されるが、商品性や特定目的への適合性の暗黙の保証を含め、いかなる保証も無い。
