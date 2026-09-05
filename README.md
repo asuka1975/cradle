@@ -23,7 +23,7 @@ Claude Code 向けの配布可能なハーネス（[Microsoft APM](https://githu
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml
-apm install asuka1975/cradle                     # .claude/ に rules / skills / agents / hooks が入る
+apm install asuka1975/cradle#v0.1.0-alpha.1      # .claude/ に rules / skills / agents / hooks が入る（タグで固定する）
 ```
 
 Claude Code で:
