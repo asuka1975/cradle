@@ -58,9 +58,12 @@ const openapi = cfg.documents.openapi;
 if (!existsSync(R(openapi))) phase("API 契約 (OpenAPI)", "未着手", [`${openapi} が無い`], "api-contract スキルで Lean の Command/View から契約を起こす");
 else {
   const y = read(openapi);
-  const ops = (y.match(/^\s{4}(get|post|put|patch|delete):/gm) ?? []).length;
+  // 骨格が置く /api/healthcheck は数えない — それしか無い契約は未着手（api-contract スキルが Lean から起こす）
+  const ops = y.split(/^(?=  \/)/m).filter(b => b.startsWith("  /") && !b.startsWith("  /api/healthcheck:"))
+    .reduce((n, b) => n + (b.match(/^\s{4}(get|post|put|patch|delete):/gm) ?? []).length, 0);
   const feGen = cfg.frontend.generated.some(g => existsSync(R(g)));
-  phase("API 契約 (OpenAPI)", "着手済", [`操作 ${ops} 件`, `frontend 生成クライアント ${feGen ? "あり" : "なし"}`], feGen ? "—" : `frontend で ${cfg.frontend.genApi}`);
+  if (!ops) phase("API 契約 (OpenAPI)", "未着手", ["骨格の healthcheck だけ"], "api-contract スキルで Lean の Command/View から契約を起こす");
+  else phase("API 契約 (OpenAPI)", "着手済", [`操作 ${ops} 件`, `frontend 生成クライアント ${feGen ? "あり" : "なし"}`], feGen ? "—" : `frontend で ${cfg.frontend.genApi}`);
 }
 
 // 5. フロントエンド

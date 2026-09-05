@@ -19,7 +19,7 @@ if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに
 
 let regenOut = null;
 if (!opts["no-regen"]) {
-  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
   if (r.status !== 0) fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}`, 2);
 }
@@ -91,7 +91,7 @@ let golden = null;
 if (!opts["no-golden"]) {
   const args = [join(import.meta.dirname, "golden-check.mjs"), "--json"];
   if (opts.manifest) args.push("--manifest", opts.manifest);
-  const r = spawnSync(process.execPath, args, { cwd: cfg.root, encoding: "utf8" });
+  const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
   try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
 }
 

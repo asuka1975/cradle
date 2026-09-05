@@ -17,7 +17,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 | `regen-impact [--dry-run]` | 再生成 → 生成物の差分 → 参照する手書き実装と契約テスト → golden 回帰 | Lean を変えて backend に追随するとき |
 | `unslop [--diff\|--all]` | コメント規約・腐ったパス・逃げ言葉・握りつぶし | 止まる前（Stop hook が error を差し戻す） |
 | `ddd-clean-check [--build]` | 探索の残骸（questions.md・probe-・lean の差分）が無いこと | ddd スキルの終わり |
-| `doctor` | ハーネスの置き場と hooks の配線、AGENTS.md の大きさ（Codex の上限）、道具の有無と版（node / lake / elan / java / pnpm / apm / claude / codex …） | 導入時、道具が見つからないと言われたとき |
+| `doctor` | ハーネスの置き場と hooks の配線、Codex の hooks の信頼、AGENTS.md の大きさ（Codex の上限）、道具の有無と版（node / lake / elan / java / pnpm / apm / claude / codex …） | 導入時、道具が見つからないと言われたとき |
 
 ## 使い方の決めごと
 

@@ -9,6 +9,16 @@
           "timeout": 10
         }
       ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "d=${CLAUDE_PROJECT_DIR:-$PWD}; while :; do for s in .claude .agents; do h=$d/$s/skills/cradle/scripts/hook.mjs; [ -f \"$h\" ] && exec node \"$h\" pre-guard; done; [ \"$d\" = / ] && exit 0; d=$(dirname \"$d\"); done",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "PostToolUse": [

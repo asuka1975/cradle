@@ -12,7 +12,7 @@ const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
 const spec = join(cfg.root, cfg.documents.openapi);
 if (!existsSync(spec)) fail(`契約がありません: ${cfg.documents.openapi}`);
-const meta = JSON.parse(spawnSync(process.execPath, [join(import.meta.dirname, "..", "..", "cradle", "scripts", "spec-query.mjs"), "meta"], { cwd: cfg.root, encoding: "utf8" }).stdout);
+const meta = JSON.parse(spawnSync(process.execPath, [join(import.meta.dirname, "..", "..", "cradle", "scripts", "spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" }).stdout);
 const yaml = readFileSync(spec, "utf8");
 
 // 素朴な走査: paths 配下の "  /path:" と "    get:|post:|…" と "      operationId: x"

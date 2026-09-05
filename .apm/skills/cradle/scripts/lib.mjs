@@ -1,7 +1,7 @@
 // Cradle 共通ライブラリ — 設定の読み込み・Lean CLI 呼び出し・小道具。
 // 依存は Node 標準ライブラリだけ（配布先に何も入れさせない）。
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { join, resolve, relative, sep } from "node:path";
 
 /** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd */
@@ -91,15 +91,25 @@ function guessProject(root) {
 }
 
 /** Lean CLI を 1 リクエスト 1 プロセスで呼ぶ。stdin に JSON、stdout に JSON。 */
+/** Lean CLI を 1 回呼ぶ（Promise）。stdin は非同期に流す — Codex のサンドボックスでは spawnSync に input を渡すと EOF が届かず固まる。 */
 export function callLean(cfg, request, { build = "auto" } = {}) {
   ensureLeanBinary(cfg, build);
   const input = typeof request === "string" ? request : JSON.stringify(request);
-  const r = spawnSync(cfg.lean.bin, [], { input, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-  if (r.error) throw r.error;
-  const out = (r.stdout ?? "").trim();
-  if (!out) throw new Error(`Lean CLI が何も返しませんでした (exit ${r.status}): ${r.stderr}`);
-  try { return JSON.parse(out); }
-  catch { throw new Error(`Lean CLI の応答が JSON ではありません: ${out.slice(0, 400)}`); }
+  return new Promise((resolve, reject) => {
+    const p = spawn(cfg.lean.bin, [], { stdio: ["pipe", "pipe", "pipe"] });
+    let out = "", err = "";
+    p.stdout.setEncoding("utf8"); p.stderr.setEncoding("utf8");
+    p.stdout.on("data", d => { out += d; }); p.stderr.on("data", d => { err += d; });
+    p.on("error", reject);
+    p.on("close", (status) => {
+      const text = out.trim();
+      if (!text) return reject(new Error(`Lean CLI が何も返しませんでした (exit ${status}): ${err}`));
+      try { resolve(JSON.parse(text)); }
+      catch { reject(new Error(`Lean CLI の応答が JSON ではありません: ${text.slice(0, 400)}`)); }
+    });
+    p.stdin.on("error", () => {});
+    p.stdin.end(input);
+  });
 }
 
 export function ensureLeanBinary(cfg, build = "auto") {
@@ -125,7 +135,7 @@ export function leanEval(cfg, source, { timeoutMs = 120000 } = {}) {
   const tmp = join(process.env.TMPDIR ?? "/tmp", `cradle-query-${process.pid}-${Date.now()}.lean`);
   writeFileSync(tmp, source);
   try {
-    const r = spawnSync("lake", ["env", "lean", tmp], { cwd: cfg.lean.rootDir, encoding: "utf8", timeout: timeoutMs });
+    const r = spawnSync("lake", ["env", "lean", tmp], { cwd: cfg.lean.rootDir, encoding: "utf8", timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"] });
     return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
   } finally { try { unlinkSync(tmp); } catch {} }
 }

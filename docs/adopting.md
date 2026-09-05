@@ -20,7 +20,8 @@
 - 規約は `.claude/rules/` の代わりに AGENTS.md（`apm compile --single-agents`）。Codex は起動時にルートから cwd までの AGENTS.md しか読まないので、ディレクトリ別に分けない。
   読込上限（`project_doc_max_bytes`、既定 32 KiB）を骨格の `.codex/config.toml` が上げる。超過は `cradle doctor` が出す。
 - hooks は `.codex/hooks.json`。Claude Code と同じ stdin / stdout なので中身は共通。`.codex/` はプロジェクトを信頼したときだけ読まれ、hooks はさらに起動時のレビューで信頼したものだけが動く（`/hooks` で確かめる）。
-  非対話の `codex exec` では信頼が残っていない hooks は黙って飛ばされるので、自動化では `--dangerously-bypass-hook-trust` を付ける。
+  非対話の `codex exec` では信頼が残っていない hooks は黙って飛ばされるので、自動化では `--dangerously-bypass-hook-trust` を付ける。信頼の有無は `cradle doctor` が出す。
+- サブエージェントは非同期（`spawn_agent` → `wait_agent`）。ddd スキルの探索役は `wait_agent` を最終状態まで待ち直す。急かすと問いが捨てられるので、`ddd.mjs end` は回答を中継した後でだけ通る。
 - エージェントは `.codex/agents/*.toml`。Claude Code 用の `tools` 制限は落ちる（APM が警告する）。レビュアーが書き換えないことは本文の指示で担保する。
 - Claude Code の `ask`（止めて人間に聞く）は無い。Lean の未コミット差分があるまま backend を触る場面は、止めずに文脈で促す。
 - `cradle-status` は skill として配る（APM は prompts を Codex に配らない）。

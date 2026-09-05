@@ -56,7 +56,7 @@ for (const name of wanted) {
     if (!existsSync(file) || !reqs[kind]) continue;
     const expected = JSON.parse(readFileSync(file, "utf8"));
     let actual;
-    try { actual = callLean(cfg, reqs[kind], { build }); }
+    try { actual = await callLean(cfg, reqs[kind], { build }); }
     catch (e) { report.push({ name, kind, status: "error", reason: e.message }); failed++; continue; }
     const diffs = diffJson(expected, actual);
     if (!diffs.length) { report.push({ name, kind, status: "ok" }); continue; }

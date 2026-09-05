@@ -20,14 +20,17 @@ if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project
 const lower = project.toLowerCase();
 const assets = join(import.meta.dirname, "..", "assets");
 
-const written = [], skipped = [];
+const written = [], skipped = [], failed = [];
+// 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する
 function put(rel, content, { exec = false } = {}) {
   const dest = join(target, rel);
   if (existsSync(dest) && !force) { skipped.push(rel); return; }
-  written.push(rel);
-  if (dryRun) return;
-  mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, content, { mode: exec ? 0o755 : 0o644 });
+  if (dryRun) { written.push(rel); return; }
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, content, { mode: exec ? 0o755 : 0o644 });
+    written.push(rel);
+  } catch (e) { failed.push(`${rel}（${e.code ?? e.message}）`); }
 }
 function rename(text) {
   return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower);
@@ -55,7 +58,7 @@ put("cradle.json", rename(readFileSync(join(assets, "project", "cradle.json"), "
   const gi = join(target, ".gitignore");
   const add = readFileSync(join(assets, "project", ".gitignore"), "utf8");
   if (!existsSync(gi)) put(".gitignore", add);
-  else if (!readFileSync(gi, "utf8").includes("# Cradle")) { written.push(".gitignore (追記)"); if (!dryRun) appendFileSync(gi, "\n" + add); }
+  else if (!readFileSync(gi, "utf8").includes("# Cradle")) { try { if (!dryRun) appendFileSync(gi, "\n" + add); written.push(".gitignore (追記)"); } catch (e) { failed.push(`.gitignore（${e.code ?? e.message}）`); } }
   else skipped.push(".gitignore");
 }
 // lean scaffold（Sprout → <Root> に改名しながら写す）
@@ -75,4 +78,7 @@ if (backendPkg && backendPkg !== true) {
 console.log(`Cradle init — ${project} (${target})${dryRun ? " [dry-run]" : ""}`);
 for (const w of written) console.log(`  + ${w}`);
 for (const s of skipped) console.log(`  = ${s}（既存のため据え置き）`);
+for (const f of failed) console.log(`  ! ${f}`);
+if (failed.length) console.log(`\n${failed.length} 件を書けなかった。書ける権限で同じコマンドをもう一度実行すると、敷いた分は据え置いて残りだけ敷く。`);
 console.log(`\n次: apm compile（固有の事実を rules / AGENTS.md に写す。Codex は --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める`);
+process.exit(failed.length ? 1 : 0);

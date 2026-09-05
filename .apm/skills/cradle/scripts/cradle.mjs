@@ -8,7 +8,7 @@ if (cmd === "refs") {
   // refs <ID>: 撤回・訂正の伝播 — その ID を引いている場所を全部出す（documents / lean / 契約 / 設計 / README）
   const id = args[0];
   if (!id) { console.error("usage: cradle refs <HS-001|MQ-003|UX-002|INFRA-D-004|イベント#5>"); process.exit(1); }
-  const r = spawnSync("git", ["grep", "-n", "-I", "--", id], { encoding: "utf8" });
+  const r = spawnSync("git", ["grep", "-n", "-I", "--", id], { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
   const lines = (r.stdout || "").split("\n").filter(Boolean);
   console.log(`${id}: ${lines.length} 箇所`);
   for (const l of lines) console.log("  " + l);
@@ -40,9 +40,9 @@ if (cmd === "doctor") {
     const cfg = loadConfig();
     const names = cfg.infra.containers ?? [];
     if (!names.length) { console.log("cradle.json の infra.containers が空（例: [\"myapp-local-backend\", \"myapp-local-frontend\"]）"); process.exit(0); }
-    const head = spawnSync("git", ["log", "-1", "--format=%cI"], { cwd: cfg.root, encoding: "utf8" }).stdout.trim();
+    const head = spawnSync("git", ["log", "-1", "--format=%cI"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" }).stdout.trim();
     for (const n of names) {
-      const r = spawnSync("docker", ["inspect", "--format", "{{.Created}}", n], { encoding: "utf8" });
+      const r = spawnSync("docker", ["inspect", "--format", "{{.Created}}", n], { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
       const created = (r.stdout || "").trim();
       const stale = created && head && new Date(created) < new Date(head);
       console.log(`${r.status === 0 ? (stale ? "STALE  " : "fresh  ") : "missing"} ${n.padEnd(28)} created=${created || "-"} head=${head}`);
@@ -57,6 +57,16 @@ if (cmd === "doctor") {
   console.log(`${homes.length ? "ok     " : "missing"} harness    ${homes.join(", ") || "（apm install で配る）"}`);
   const wired = (f) => existsSync(join(root, f)) && readFileSync(join(root, f), "utf8").includes("hook.mjs");
   console.log(`${wired(".claude/settings.json") || wired(".codex/hooks.json") ? "ok     " : "missing"} hooks      claude=${wired(".claude/settings.json") ? "ok" : "-"} codex=${wired(".codex/hooks.json") ? "ok" : "-"}`);
+  if (existsSync(join(root, ".codex/hooks.json"))) {
+    // Codex は起動時のレビューで信頼した hook だけを動かし、その記録を ~/.codex/config.toml に [hooks.state."<hooks.json の絶対パス>:<event>:<group>:<hook>"] で持つ
+    const home = process.env.CODEX_HOME ?? join(process.env.HOME ?? "", ".codex");
+    const toml = existsSync(join(home, "config.toml")) ? readFileSync(join(home, "config.toml"), "utf8") : "";
+    const key = join(root, ".codex/hooks.json") + ":";
+    const trusted = toml.split("\n").filter(l => l.startsWith(`[hooks.state."${key}`)).length;
+    let expected = 0;
+    try { const h = JSON.parse(readFileSync(join(root, ".codex/hooks.json"), "utf8")).hooks ?? {}; for (const groups of Object.values(h)) for (const g of groups) expected += (g.hooks ?? []).length; } catch {}
+    console.log(`${trusted ? "ok     " : "STALE  "} hooks-trust codex: ${trusted}/${expected} 件を信頼済み${trusted ? "" : "（Codex の起動時レビューで信頼するまで hook は動かない。codex exec なら --dangerously-bypass-hook-trust）"}`);
+  }
   if (existsSync(join(root, "AGENTS.md"))) {
     const size = statSync(join(root, "AGENTS.md")).size;
     const toml = existsSync(join(root, ".codex/config.toml")) ? readFileSync(join(root, ".codex/config.toml"), "utf8") : "";
@@ -65,7 +75,7 @@ if (cmd === "doctor") {
   }
   const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["apm", ["--version"]], ["claude", ["--version"]], ["codex", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
   for (const [bin, args] of tools) {
-    const r = spawnSync(bin, args, { encoding: "utf8" });
+    const r = spawnSync(bin, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
     const v = ((r.stdout || "") + (r.stderr || "")).split("\n")[0].trim();
     console.log(`${r.error ? "missing" : "ok     "} ${bin.padEnd(10)} ${r.error ? "" : v}`);
   }

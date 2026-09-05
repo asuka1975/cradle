@@ -22,3 +22,6 @@
 | 18 | `cradle-status` は prompt ではなく skill として配る | APM は prompts を Codex に配らない。skill は両方に配られ、`/cradle-status` と `$cradle-status` が同じ振る舞いになる |
 | 19 | Codex 向けの agent は `tools` を落として配られる（APM の警告どおり）。書き換えないことは本文の指示で担保する | Codex の agent 定義に tools は無い。Claude Code では tools 制限を残す |
 | 20 | Claude Code の `ask`（止めて人間に聞く）は Codex に無いので、そこでは additionalContext で促して続けさせる | Codex は未知の permissionDecision を無視して通す。促しは失われず、止める判断は「編集してはいけない場所」だけに限る（#9） |
+| 21 | Lean CLI は非同期の `spawn` で呼び、stdin を流してから閉じる | Codex のサンドボックスでは `spawnSync` に `input` を渡すと EOF が届かず、`cat` でも固まる。golden-check・spec-query・smoke が全部この 1 本を通る |
+| 22 | `ddd.mjs end` は同じ版の questions.md に `answers` を中継した後でだけ通る（`.session` に問いの版と中継の記録を持つ）。問いを捨てるのは `--abandon` だけ | 探索役が回答を受け取らないまま片付けた事故を機械で止める。hook も Codex の探索役（agent_type）が ddd.mjs・questions.md・.session に触るのを止める |
+| 23 | 骨格を敷く道具は書けない場所があっても止まらず、残りを敷いてから書けなかった一覧を出す | Codex のサンドボックスでは `.codex/` が書けない。途中で落ちると据え置きの判定が効かず、再実行の手間が増える |

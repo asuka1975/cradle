@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // hook — Claude Code / Codex のライフサイクル hook。stdin の JSON を読み、判定を JSON で返す（stdin / stdout の形は両者で同じ）。
-//   hook pre-guard   PreToolUse(Edit|Write|MultiEdit|NotebookEdit|Agent。Codex では apply_patch / spawn_agent が同じ matcher に掛かる):
-//                    生成物・保護領域・golden・探索ドキュメントへの直接編集を止める
+//   hook pre-guard   PreToolUse(Edit|Write|MultiEdit|NotebookEdit|Agent|Bash。Codex では apply_patch / spawn_agent が同じ matcher に掛かる):
+//                    生成物・保護領域・golden・探索ドキュメントへの直接編集を止める。Bash は探索役（Codex の agent_type）が中継の道具を触るのを止めるだけ
 //   hook post-edit   PostToolUse(Edit|Write|MultiEdit): 契約・Lean・ai-notes を編集したあとの促し
 //   hook post-bash   PostToolUse(Bash): ビルド成功のあとにレビューを促す（gradle build → SQL 性能 + backend 設計、lake build → golden 回帰）
 //   hook stop        Stop: 作業ツリーの差分に unslop 違反があれば一度だけ差し戻す
@@ -43,6 +43,13 @@ if (mode === "pre-guard") {
     const t = payload.tool_input ?? {};
     // Codex の spawn_agent（agent_type）には背景実行の指定が無い。検査するのは Claude Code の run_in_background だけ。
     if (t.subagent_type === "ddd-domain-explorer" && t.run_in_background) deny("ddd-domain-explorer は質問中継ループのため必ずフォアグラウンド（run_in_background: false）で起動する。");
+    allow();
+  }
+  if (payload.tool_name === "Bash") {
+    // Codex はサブエージェントの役割名（agent_type）を hook に渡す。探索役は中継と片付けの道具を触らない — それは親（ddd スキル）の仕事。
+    if (payload.agent_type === "ddd-domain-explorer" && /ddd\.mjs\s+(start|questions|answers|end)\b|ddd-clean-check|questions\.md|\/\.session\b/.test(String(payload.tool_input?.command ?? ""))) {
+      deny("探索役（ddd-domain-explorer）は ddd.mjs・questions.md・.session に触りません。問いは [QUESTIONS] で親に返し、回答の中継と片付けは親（ddd スキル）が行います。");
+    }
     allow();
   }
   const paths = targetPaths().map(toRel).filter(p => !p.startsWith("../"));
@@ -116,7 +123,7 @@ if (mode === "post-edit") {
 
 if (mode === "stop") {
   if (payload.stop_hook_active) allow();
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let result = null;
   try { result = JSON.parse(r.stdout || "null"); } catch { allow(); }
   if (!result || !result.findings?.length) allow();

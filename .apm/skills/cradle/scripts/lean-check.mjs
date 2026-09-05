@@ -174,7 +174,7 @@ let smokeResult = null;
 if (opts.smoke) {
   try {
     const scen = [...walk(cfg.lean.rootDir, { ext: [".lean"] })].flatMap(f => [...readFileSync(f, "utf8").matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)].map(m => m[1]))[0];
-    const res = callLean(cfg, { cmd: "init", scenario: scen ?? "basic" }, { build: "never" });
+    const res = await callLean(cfg, { cmd: "init", scenario: scen ?? "basic" }, { build: "never" });
     smokeResult = res.ok ? "ok" : `init が ok を返さない: ${JSON.stringify(res).slice(0, 300)}`;
   } catch (e) { smokeResult = e.message; }
 }

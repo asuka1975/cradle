@@ -51,10 +51,10 @@ function constructorsOf(fullName) {
 function commands() { return constructorsOf(`${cfg.lean.root}.Runtime.Command`); }
 function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
 
-function outlets() {
+async function outlets() {
   const s = scenarios();
   if (!s.length) return { error: "シナリオが見つかりません（scenarioByName）", outlets: [] };
-  const res = callLean(cfg, { cmd: "init", scenario: s[0] }, { build });
+  const res = await callLean(cfg, { cmd: "init", scenario: s[0] }, { build });
   if (!res.ok) return { error: res, outlets: [] };
   return { scenario: s[0], outlets: Object.keys(res.ok.views ?? {}), stateKeys: Object.keys(res.ok.state ?? {}) };
 }
@@ -82,9 +82,9 @@ try {
     case "scenarios": printJson(scenarios()); break;
     case "commands": printJson(commands()); break;
     case "errors": printJson(errors()); break;
-    case "outlets": printJson(outlets()); break;
+    case "outlets": printJson(await outlets()); break;
     case "meta": printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, exe: cfg.lean.exe, bin: cfg.lean.bin },
-      scenarios: scenarios(), commands: commands().constructors.map(c => c.name), errors: errors().constructors.map(c => c.name), views: outlets() }); break;
+      scenarios: scenarios(), commands: commands().constructors.map(c => c.name), errors: errors().constructors.map(c => c.name), views: await outlets() }); break;
     case "print": {
       if (!rest.length) fail("print には名前が要ります（例: MonoWa.Runtime.Command）");
       const src = `import ${cfg.lean.root}\n` + rest.map(n => `#print ${n}`).join("\n") + "\n";
@@ -95,13 +95,13 @@ try {
     }
     case "init": {
       if (!opts.scenario) fail("--scenario が要ります");
-      printJson(callLean(cfg, { cmd: "init", scenario: opts.scenario, ...commonFields() }, { build })); break;
+      printJson(await callLean(cfg, { cmd: "init", scenario: opts.scenario, ...commonFields() }, { build })); break;
     }
     case "run": {
       if (!opts.scenario) fail("--scenario が要ります");
       const commandsArg = jsonArg(opts.commands);
       if (!Array.isArray(commandsArg)) fail("--commands は配列（JSON か @file）");
-      const res = callLean(cfg, { cmd: "flow", scenario: opts.scenario, commands: commandsArg, ...commonFields() }, { build });
+      const res = await callLean(cfg, { cmd: "flow", scenario: opts.scenario, commands: commandsArg, ...commonFields() }, { build });
       if (!res.ok) { printJson(res); process.exit(1); }
       const trace = res.ok.trace;
       if (opts.full || opts.json) { printJson(res); break; }
@@ -113,16 +113,16 @@ try {
     case "step": {
       const state = jsonArg(opts.state); const command = jsonArg(opts.command);
       if (!state || !command) fail("--state @file と --command が要ります");
-      printJson(callLean(cfg, { cmd: "step", state, command, ...commonFields() }, { build })); break;
+      printJson(await callLean(cfg, { cmd: "step", state, command, ...commonFields() }, { build })); break;
     }
     case "views": {
       const state = jsonArg(opts.state);
       if (!state) fail("--state @file が要ります");
-      printJson(callLean(cfg, { cmd: "views", state, ...commonFields() }, { build })); break;
+      printJson(await callLean(cfg, { cmd: "views", state, ...commonFields() }, { build })); break;
     }
     case "raw": {
       const req = jsonArg(rest[0] ?? "-");
-      printJson(callLean(cfg, req, { build })); break;
+      printJson(await callLean(cfg, req, { build })); break;
     }
     default:
       console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter(l => l.startsWith("//")).map(l => l.slice(3)).join("\n"));
