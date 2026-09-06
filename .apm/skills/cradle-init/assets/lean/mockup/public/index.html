@@ -8,8 +8,12 @@
     - シナリオは必ず {"cmd":"init"} で Lean から取る。ベタ書きしない。
     - ボタンを段階で隠さない。拒否は domainError としてその場に出す（モデルの帰結を見せる）。
 
-  この画面は views の JSON を汎用に描く（表と木）。ドメインの語彙で作り込みたくなったら、
-  それは「表示に足りない事実を Views に足す（Lean）→ ここに描画を足す」の順で行う。
+  この画面が自分で持つのは表示の都合だけ:
+    - views の口ごとの表。列名は /api/meta の glossary（ユビキタス言語の英語候補 → 用語）で引く。
+    - コマンドの入力欄。/api/meta の schemas（Lean の Command 構造体の型）から生成する。
+      wire の規約: id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクト、Option の未指定は null。
+      生成した JSON は下の欄に見え、手で直せる（型から決められない形はそこで直す）。
+  domain-mockup スキルはこれを土台に、ドメインの語彙の画面（口ごとの画面・対象の横のフォーム・登場人物の切り替え）を作り込む。
   「誰として」の切り替えはセッションの切り替えであって名義の選択ではない — viewer と actor は必ず同時に動く。
 -->
 <html lang="ja">
@@ -22,20 +26,28 @@
   header { padding: .6rem 1rem; border-bottom: 1px solid #ccc; background: #f2f0ea; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
   header label { font-size: 12px; color: #555; display: flex; gap: .3rem; align-items: center; }
   header input, header select { font: inherit; }
-  main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; }
+  main { display: grid; grid-template-columns: 3fr 2fr; gap: 1rem; padding: 1rem; }
   section { border: 1px solid #ddd; background: #fff; padding: .6rem .8rem; border-radius: 6px; min-height: 8rem; }
   h2 { font-size: 13px; margin: 0 0 .4rem; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+  h3 { font-size: 14px; margin: .6rem 0 .2rem; }
+  h3 small { color: #888; font-weight: normal; font-size: 11px; margin-left: .4rem; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; margin-bottom: .6rem; }
   th, td { border: 1px solid #e5e5e5; padding: .2rem .4rem; text-align: left; vertical-align: top; }
   th { background: #f6f6f6; font-weight: 600; }
+  th small { color: #888; font-weight: normal; }
   .absent { color: #999; font-style: italic; }
   .error { background: #fdd; border: 1px solid #c00; padding: .5rem 1rem; margin: 0 1rem; }
   .ok { background: #e6f5e6; border: 1px solid #6a6; padding: .3rem 1rem; margin: 0 1rem; }
+  .hint { background: #fff8dc; border: 1px solid #e0c060; padding: .4rem .6rem; font-size: 12px; margin: .3rem 0; }
   textarea { width: 100%; height: 5rem; font-family: monospace; font-size: 12px; }
-  button { font: inherit; }
+  button, select, input { font: inherit; }
   .trace { font-family: monospace; font-size: 12px; white-space: pre-wrap; }
-  .chips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .3rem 0; }
-  .chips button { font-size: 12px; padding: .1rem .4rem; }
+  form.cmd { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .6rem; align-items: center; margin: .4rem 0; }
+  form.cmd label { font-size: 12px; color: #444; }
+  form.cmd label small { color: #888; }
+  form.cmd fieldset { grid-column: 1 / -1; border: 1px dashed #ccc; padding: .3rem .6rem; display: grid; grid-template-columns: max-content 1fr; gap: .3rem .6rem; }
+  form.cmd legend { font-size: 12px; color: #666; }
+  .opt { display: flex; gap: .4rem; align-items: center; }
   details { margin-top: .4rem; }
 </style>
 </head>
@@ -49,25 +61,28 @@
 </header>
 <div id="notice" hidden></div>
 <main>
-  <section id="viewsBox"><h2>views（Lean が返した見え方をそのまま）</h2><div id="views">読み込み中…</div></section>
+  <section id="viewsBox"><h2>見え方（views — Lean が返した束をそのまま）</h2><div id="views">読み込み中…</div></section>
   <section>
     <h2>操作（step）</h2>
-    <div class="chips" id="cmdChips"></div>
-    <p style="font-size:12px;color:#666;margin:.2rem 0">command JSON は <code>{"&lt;構成子&gt;": &lt;ペイロード&gt;}</code>。actor は上の「誰として」から作られる。</p>
-    <textarea id="rawcmd">{}</textarea>
+    <label style="font-size:12px">操作 <select id="cmd"></select></label>
+    <div id="form"></div>
+    <details open><summary style="font-size:12px;color:#666">送る JSON（<code>{"&lt;構成子&gt;": &lt;ペイロード&gt;}</code>。手で直せる）</summary>
+      <textarea id="rawcmd">{}</textarea></details>
     <button id="send">送る</button>
     <details><summary>state（Lean が返したまま。読むだけ）</summary><pre id="state" class="trace"></pre></details>
     <h2 style="margin-top:.8rem">操作ログ <span id="logcount">0</span> 件 <button id="savegolden">golden として保存</button> <button id="clearlog">消す</button></h2>
     <div id="log" class="trace"></div>
   </section>
 </main>
+<datalist id="ids"></datalist>
 <script>
 // ---- 状態: Lean の返答をそのまま保持。UI では変形しない ----
 let state = null, views = null;
 const commandLog = [];   // {actor, command}
-let meta = { scenarios: [], commands: [], errors: [] };
+let meta = { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {} };
 
 const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, props); e.append(...kids); return e; };
 async function lean(req) {
   const res = await fetch("/api/lean", { method: "POST", body: JSON.stringify(req) });
   return res.json();
@@ -92,8 +107,13 @@ function common() {
   return o;
 }
 function notice(kind, msg) {
-  const el = $("notice");
-  el.className = kind; el.textContent = msg; el.hidden = !msg;
+  const n = $("notice");
+  n.className = kind; n.textContent = msg; n.hidden = !msg;
+}
+/** 表示名: 用語集（英語候補 → 用語）にあれば「用語（識別子）」、無ければ識別子のまま。 */
+function label(name) {
+  const t = meta.glossary?.[String(name).replace(/\s+/g, "").toLowerCase()];
+  return t ? `${t}（${name}）` : String(name);
 }
 
 async function init() {
@@ -114,7 +134,7 @@ async function send(command) {
     state = r.ok.state; views = r.ok.views;
     commandLog.push({ actor, command });
     log(`ok        ${JSON.stringify(command)}  by ${JSON.stringify(actor)}`);
-    renderAll(); notice("ok", "通りました: " + Object.keys(command)[0]);
+    renderAll(); notice("ok", "通りました: " + label(Object.keys(command)[0]));
   } else if (r.domainError !== undefined) {
     log(`refused   ${JSON.stringify(command)}  → ${JSON.stringify(r.domainError)}`);
     notice("error", "業務として断られました: " + JSON.stringify(r.domainError) + "（state は変わっていません）");
@@ -129,41 +149,94 @@ function renderAll() {
   $("state").textContent = JSON.stringify(state, null, 1);
   const box = $("views"); box.replaceChildren();
   if (!views || typeof views !== "object") { box.textContent = JSON.stringify(views); return; }
-  for (const [name, v] of Object.entries(views)) {
-    const h = document.createElement("h3"); h.textContent = name; h.style.margin = ".4rem 0 .2rem"; h.style.fontSize = "13px";
-    box.append(h);
-    if (v === null) { const p = document.createElement("div"); p.className = "absent"; p.textContent = "null（そこに無い / 見られない）"; box.append(p); continue; }
+  const outlets = Object.entries(views);
+  if (!outlets.length) {
+    box.append(el("div", { className: "hint", textContent: "この Lean モデルには画面の口（Runtime/Views.lean の Views）が無い。描くものが無いので、lean-domain-model スキルで集約ごとの一覧の口を足す。state は右の「state」で読める。" }));
+  }
+  for (const [name, v] of outlets) {
+    box.append(el("h3", {}, document.createTextNode(label(name)), el("small", { textContent: name })));
+    if (v === null) { box.append(el("div", { className: "absent", textContent: "null（そこに無い / 見られない）" })); continue; }
     if (Array.isArray(v)) {
-      if (!v.length) { const p = document.createElement("div"); p.className = "absent"; p.textContent = "[]（見えたうえで空）"; box.append(p); continue; }
+      if (!v.length) { box.append(el("div", { className: "absent", textContent: "[]（見えたうえで空）" })); continue; }
       box.append(table(v)); continue;
     }
-    const pre = document.createElement("pre"); pre.className = "trace"; pre.textContent = JSON.stringify(v, null, 1); box.append(pre);
+    box.append(el("pre", { className: "trace", textContent: JSON.stringify(v, null, 1) }));
   }
+  refreshIds();
 }
 function table(rows) {
   const cols = [...new Set(rows.flatMap(r => (r && typeof r === "object" && !Array.isArray(r)) ? Object.keys(r) : ["value"]))];
-  const t = document.createElement("table");
-  const tr = document.createElement("tr"); for (const c of cols) { const th = document.createElement("th"); th.textContent = c; tr.append(th); } t.append(tr);
+  const t = el("table");
+  t.append(el("tr", {}, ...cols.map(c => { const th = el("th", {}); const g = meta.glossary?.[c.toLowerCase()]; th.append(document.createTextNode(g ?? c)); if (g) th.append(el("small", { textContent: " " + c })); return th; })));
   for (const r of rows) {
-    const row = document.createElement("tr");
-    for (const c of cols) { const td = document.createElement("td"); const val = (r && typeof r === "object" && !Array.isArray(r)) ? r[c] : r; td.textContent = val === undefined ? "" : (typeof val === "object" ? JSON.stringify(val) : String(val)); row.append(td); }
-    t.append(row);
+    t.append(el("tr", {}, ...cols.map(c => { const val = (r && typeof r === "object" && !Array.isArray(r)) ? r[c] : r; return el("td", { textContent: val === undefined ? "" : (typeof val === "object" ? JSON.stringify(val) : String(val)) }); })));
   }
   return t;
+}
+/** views に現れる {"id": n} の n を集めて、id 欄の候補にする（並びは出現順。判断ではない）。 */
+function refreshIds() {
+  const found = [];
+  (function walk(v) {
+    if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === "object") { if (typeof v.id === "number" && Object.keys(v).length === 1) found.push(v.id); Object.values(v).forEach(walk); }
+  })(views);
+  $("ids").replaceChildren(...[...new Set(found)].map(n => el("option", { value: String(n) })));
+}
+
+// ---- 入力欄: schemas（Lean の Command 構造体の型）から生成。値の作り方は wire の規約だけ ----
+function inputFor(f, onChange) {
+  let inp, get;
+  switch (f.kind) {
+    case "bool": inp = el("input", { type: "checkbox" }); get = () => inp.checked; break;
+    case "number": inp = el("input", { type: "number", step: "any" }); get = () => inp.value === "" ? null : Number(inp.value); break;
+    case "date": inp = el("input", { type: "date", value: $("today").value }); get = () => inp.value || null; break;
+    case "id": inp = el("input", { type: "number", min: "0" }); inp.setAttribute("list", "ids"); get = () => inp.value === "" ? null : { id: Number(inp.value) }; break;
+    case "enum": inp = el("select", {}, ...(f.options ?? []).map(o => el("option", { value: o, textContent: o }))); get = () => inp.value; break;
+    case "object": {
+      const subs = (f.fields ?? []).map(g => ({ g, ...inputFor(g, onChange) }));
+      inp = el("fieldset", {}, el("legend", { textContent: f.type }), ...subs.flatMap(s => [labelFor(s.g), s.inp]));
+      get = () => Object.fromEntries(subs.map(s => [s.g.name, s.get()]));
+      break;
+    }
+    case "json": inp = el("textarea", { value: "", placeholder: f.type }); inp.style.height = "3rem"; get = () => { try { return inp.value === "" ? null : JSON.parse(inp.value); } catch { return inp.value; } }; break;
+    default: inp = el("input", { type: "text" }); get = () => inp.value;
+  }
+  inp.oninput = inp.onchange = onChange;
+  if (!f.optional) return { inp, get };
+  // Option: 「指定する」を入れない限り null で送る
+  const on = el("input", { type: "checkbox" }); on.onchange = () => { inp.disabled = !on.checked; onChange(); }; inp.disabled = true;
+  return { inp: el("div", { className: "opt" }, on, inp), get: () => on.checked ? get() : null };
+}
+function labelFor(f) { return el("label", {}, document.createTextNode(label(f.name)), el("small", { textContent: ` ${f.optional ? "任意 " : ""}${f.type}` })); }
+function buildForm(ctor) {
+  const box = $("form"); box.replaceChildren();
+  const schema = meta.schemas?.[ctor];
+  if (!schema || schema.fields === null) {
+    box.append(el("div", { className: "hint", textContent: "この操作のペイロードの形は型から読めなかった。下の JSON を直接書く。" }));
+    $("rawcmd").value = JSON.stringify({ [ctor]: {} }, null, 1); return;
+  }
+  const form = el("form", { className: "cmd" });
+  const fields = schema.fields.map(f => ({ f, ...inputFor(f, update) }));
+  for (const x of fields) form.append(labelFor(x.f), x.inp);
+  form.onsubmit = (e) => { e.preventDefault(); $("send").click(); };
+  box.append(form);
+  function update() { $("rawcmd").value = JSON.stringify({ [ctor]: Object.fromEntries(fields.map(x => [x.f.name, x.get()])) }, null, 1); }
+  update();
 }
 
 // ---- 配線 ----
 async function loadMeta() {
-  try { meta = await (await fetch("/api/meta")).json(); } catch { meta = { scenarios: [], commands: [], errors: [] }; }
-  const sel = $("scenario"); sel.replaceChildren();
-  for (const s of meta.scenarios ?? []) { const o = document.createElement("option"); o.value = s; o.textContent = s; sel.append(o); }
-  if (!sel.options.length) { const o = document.createElement("option"); o.value = "basic"; o.textContent = "basic"; sel.append(o); }
-  const chips = $("cmdChips"); chips.replaceChildren();
-  for (const c of meta.commands ?? []) { const b = document.createElement("button"); b.textContent = c; b.onclick = () => { $("rawcmd").value = JSON.stringify({ [c]: {} }, null, 1); }; chips.append(b); }
+  try { meta = await (await fetch("/api/meta")).json(); } catch { meta = { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {} }; }
+  const sel = $("scenario"); sel.replaceChildren(...(meta.scenarios ?? []).map(s => el("option", { value: s, textContent: s })));
+  if (!sel.options.length) sel.append(el("option", { value: "basic", textContent: "basic" }));
+  const cmd = $("cmd"); cmd.replaceChildren(...(meta.commands ?? []).map(c => el("option", { value: c, textContent: label(c) })));
+  if (cmd.options.length) buildForm(cmd.value);
   $("binfo").textContent = meta.lean?.exe ? `CLI: ${meta.lean.exe}` : (meta.error ?? "");
+  if (meta.error) notice("error", meta.error);
 }
 $("reload").onclick = () => reproject();
 $("scenario").onchange = () => init();
+$("cmd").onchange = () => buildForm($("cmd").value);
 $("send").onclick = () => { try { send(JSON.parse($("rawcmd").value)); } catch (e) { notice("error", "JSON が不正: " + e.message); } };
 $("clearlog").onclick = () => { commandLog.length = 0; $("log").textContent = ""; $("logcount").textContent = "0"; };
 $("savegolden").onclick = async () => {

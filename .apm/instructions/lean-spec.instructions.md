@@ -47,3 +47,4 @@ applyTo: "lean/**/*.lean"
 - golden は CLI の応答そのもの。手で書かない。モデルを変えたら `cradle golden-check`。
 - 表現・性能に関わる決定（ID の具体表現など）は `documents/infra-design/` の決定（INFRA-D）の裏付けなしに変えない。
 - 層構成・CLI プロトコル・golden の一覧を変えたら `lean/README.md` を同じ変更で直す（`cradle unslop` の stale-path が腐りを拾う）。
+- 集約ごとに一覧の口（そのままの射影）を `Views` に必ず持つ。閲覧の可否や並びが未決でも口は作り、未決の部分は viewer に依らず全件にして MQ を起票する。口が無いと仕様アニメーションも golden も何も観測できない。

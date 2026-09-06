@@ -16,7 +16,7 @@ node <skills>/cradle-init/scripts/init.mjs --project <Root> [--dir <path>] [--ba
 `lean/`（動く最小ドメイン「メモ」付き。`lake build` → CLI → モックアップ → golden がその場で通る）。既存ファイルは据え置く。
 ターゲット別の設定例は置き場があるものだけ: Claude Code の許可リストの例（`settings.local.json.example`。`.claude/` に置く）、`.codex/config.toml`（AGENTS.md の上限を上げる）。
 `--backend com.example.notes` を付けると `backend/ktlint-rules/`（設計上の作法を検査する独自ルール 8 本）・`.editorconfig`・`gradle.properties` も敷く（backend フェーズの入口で）。
-`--only <prefix> --force` は、そのパスで始まる骨格由来のファイルだけを敷き直す（例: `--only lean/mockup --force` で Cradle を更新したあとのモックアップを最新にする。ドメインのファイルには触れない）。
+`--only <prefix> --force` は、そのパスで始まる骨格由来のファイルだけを敷き直す（例: Cradle を更新したあと `--only lean/mockup/server.mjs --force`。作り込んだ `index.html` は上書きしない。まだ汎用のままなら `--only lean/mockup --force` で UI ごと）。
 
 ## 敷いたあと
 

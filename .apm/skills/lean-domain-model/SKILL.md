@@ -24,6 +24,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 
 1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ cradle-init スキル。
 2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格のサンプル（メモ: `Entity/Note`・PostNote / CloseNote / Notes の UseCase・`basic` シナリオ・golden の `basic`）を丸ごと置き換える。サンプルの型や語彙を実ドメインに混ぜない。置き換わると `cradle lean-check` の scaffold 警告と `cradle status` の「骨格のサンプル」が消える。
+   `Views` は集約ごとに一覧の口を必ず持つ（lean-spec 規則）。口が無いモデルは画面でも golden でも観測できない。
 3. `lake build` が通るまで直す。証明が難航するものは `sorry` + `-- TODO(proof):` で先に進み、全体を成立させてから戻る。
 4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。
 5. `cradle lean-check`、`lake exe <exe> <<< '{"cmd":"init","scenario":"basic","viewer":…}'` で疎通。

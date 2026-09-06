@@ -67,6 +67,17 @@ if (cmd === "doctor") {
     try { const h = JSON.parse(readFileSync(join(root, ".codex/hooks.json"), "utf8")).hooks ?? {}; for (const groups of Object.values(h)) for (const g of groups) expected += (g.hooks ?? []).length; } catch {}
     console.log(`${trusted ? "ok     " : "STALE  "} hooks-trust codex: ${trusted}/${expected} 件を信頼済み${trusted ? "" : "（Codex の起動時レビューで信頼するまで hook は動かない。codex exec なら --dangerously-bypass-hook-trust）"}`);
   }
+  {
+    // モックアップのサーバーは骨格の持ち物。Cradle を更新したら --only lean/mockup/server.mjs --force で敷き直す（index.html は作り込みの正本なので触らない）
+    const { loadConfig: lc } = await import("./lib.mjs");
+    let cfg = null; try { cfg = lc(root); } catch {}
+    const cur = cfg && join(root, cfg.lean.mockup, "server.mjs");
+    const shipped = join(import.meta.dirname, "..", "..", "cradle-init", "assets", "lean", "mockup", "server.mjs");
+    if (cur && existsSync(cur) && existsSync(shipped)) {
+      const same = readFileSync(cur, "utf8") === readFileSync(shipped, "utf8").replace(/Sprout/g, cfg.project).replace(/sprout/g, cfg.project.toLowerCase());
+      console.log(`${same ? "ok     " : "STALE  "} mockup     ${cfg.lean.mockup}/server.mjs${same ? "" : ` が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project ${cfg.project} --only ${cfg.lean.mockup}/server.mjs --force）`}`);
+    }
+  }
   if (existsSync(join(root, "AGENTS.md"))) {
     const size = statSync(join(root, "AGENTS.md")).size;
     const toml = existsSync(join(root, ".codex/config.toml")) ? readFileSync(join(root, ".codex/config.toml"), "utf8") : "";

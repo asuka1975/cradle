@@ -5,7 +5,7 @@
 | 1 | 探索 | `ddd` | `documents/ddd/`（出来事・ホットスポット・用語） | open の MQ が無い、または残りが業務上「どちらでも」と確認された |
 | 2 | インフラ設計 | `infra-design` | `documents/infra-design/`（INFRA-D/A/Q・作らないもの） | 表現に関わる決定（ID など）が INFRA-D になっている |
 | 3 | Lean 化 | `lean-domain-model` | `lean/`（型・UseCase・定理・シナリオ・CLI） | `lake build`・`cradle lean-check`・`golden-check` が通る |
-| 4 | 仕様アニメーション | `domain-mockup` | `lean/mockup/`・`lean/golden/` | 主要な流れを一巡して golden を採った |
+| 4 | 仕様アニメーション | `domain-mockup` | `lean/mockup/`（ドメインの語彙の画面）・`lean/golden/` | エキスパートが JSON を読まずに主要な流れを一巡でき、golden を採った |
 | 5 | API 契約 | `api-contract` | `documents/codebase/openapi.yaml`・生成クライアント | コマンド 1 対 1・画面 1 対 1・422 の語彙が揃っている |
 | 6 | フロントエンド | （規約 + `frontend-ux-review`） | `frontend/`（相手は Lean CLI） | **人間が画面で確かめた** |
 | 7 | バックエンド | `backend-implement` | `backend/`（生成 interface の実装・契約テスト全配線） | build 緑・契約テスト m/m・設計 / SQL レビュー済 |

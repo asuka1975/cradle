@@ -6,14 +6,14 @@
 //   3. POST /api/golden : {"name", "init": <init リクエスト>, "flow": <flow リクエスト>} を Lean に流し、
 //                         応答をそのまま golden/<name>-init.json / <name>-flow.json に保存する。
 //                         再生用にリクエストも <name>.request.json に残す（golden-check が読む）
-//   4. GET  /api/meta   : シナリオ名・コマンド構成子・失敗語彙（cradle spec-query meta の結果）
+//   4. GET  /api/meta   : シナリオ名・コマンド構成子・失敗語彙・コマンドの入力の形（cradle spec-query meta の結果）+ 用語集（英語候補 → 用語。表示名の解決だけに使う）
 //
 // 起動: node server.mjs   （事前に cd lean && lake build）
 // CLI パス: 環境変数 CRADLE_LEAN_BIN、なければ ../.lake/build/bin/<lakefile の lean_exe 名>
 import { createServer } from "node:http";
 import { execFile, execFileSync } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,20 +46,43 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-/** cradle の spec-query で meta を取る。置き場は CRADLE_SPEC_QUERY > .claude/skills（Claude Code）> .agents/skills（Codex）。 */
+/** cradle の spec-query で meta を取る。置き場は CRADLE_SPEC_QUERY > .claude/skills（Claude Code）> .agents/skills（Codex）。CLI が変わるまで結果を持つ。 */
+let metaCache = null;
 function meta() {
   const root = join(LEAN_DIR, "..");
+  let key = "";
+  try { key = String(statSync(BIN).mtimeMs); } catch {}
+  if (metaCache && metaCache.key === key) return metaCache.value;
   const candidates = [
     process.env.CRADLE_SPEC_QUERY,
     ...[".claude", ".agents"].map(d => join(root, d, "skills", "cradle", "scripts", "spec-query.mjs")),
   ].filter(Boolean);
+  let value = null;
   for (const c of candidates) {
     if (!existsSync(c)) continue;
-    try {
-      return JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CRADLE_PROJECT_DIR: root } }));
-    } catch (e) { return { error: String(e.message ?? e) }; }
+    try { value = JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CRADLE_PROJECT_DIR: root } })); }
+    catch (e) { value = { error: String(e.message ?? e) }; }
+    break;
   }
-  return { error: `spec-query が見つかりません（${candidates.join(" / ")} のどれにも無い。cradle を apm install するか CRADLE_SPEC_QUERY で場所を指定する）` };
+  if (!value) value = { error: `spec-query が見つかりません（${candidates.join(" / ")} のどれにも無い。cradle を apm install するか CRADLE_SPEC_QUERY で場所を指定する）` };
+  value.glossary = glossary(root);
+  metaCache = { key, value };
+  return value;
+}
+
+/** ユビキタス言語の用語集（documents/ddd/ubiquitous-language.md）から 英語候補 → 用語 の対応を取る。画面の表示名に使うだけで、判断には使わない。 */
+function glossary(root) {
+  let ddd = "documents/ddd";
+  try { ddd = JSON.parse(readFileSync(join(root, "cradle.json"), "utf8")).documents?.ddd ?? ddd; } catch {}
+  const labels = {};
+  try {
+    for (const line of readFileSync(join(root, ddd, "ubiquitous-language.md"), "utf8").split("\n")) {
+      const cells = line.split("|").map(c => c.trim());
+      if (cells.length < 4 || !cells[1] || cells[1] === "用語" || /^-+$/.test(cells[1])) continue;
+      for (const e of cells[2].split(/[\/、,]/).map(x => x.trim()).filter(Boolean)) labels[e.replace(/\s+/g, "").toLowerCase()] = cells[1];
+    }
+  } catch {}
+  return labels;
 }
 
 const server = createServer(async (req, res) => {
@@ -93,6 +116,7 @@ const server = createServer(async (req, res) => {
     }
     const path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
     const file = join(here, "public", path.replace(/\.\./g, ""));
+    if (!existsSync(file)) { res.writeHead(404).end(); return; }
     const body = await readFile(file);
     res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" }).end(body);
   } catch (e) {

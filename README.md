@@ -15,7 +15,7 @@ Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](htt
 | skills | `cradle`（status / golden-check / lean-check / regen-impact / unslop）、`spec-query`（Lean を動かして仕様に答える）、`cradle-init`、`ddd`、`lean-domain-model`、`domain-mockup`、`infra-design`、`api-contract`、`backend-implement`、`regen-impact`、`e2e-parity`、`frontend-ux-review`、`sql-perf-review`、`backend-design-review`、`unslop` |
 | agents | `ddd-domain-explorer`、`ddd-ux-reviewer`、`lean-domain-modeler`、`frontend-ux-reviewer`、`sql-performance-reviewer`、`backend-design-reviewer`、`unslop-reviewer` |
 | hooks | 生成物・人間専用領域・golden・探索ドキュメントへの直接編集を止める / ビルド成功後にレビューを促す / 止まる前に unslop の error を差し戻す |
-| 骨格 | `cradle.json`、documents のテンプレート、動く最小ドメイン付きの Lean 実行可能仕様（CLI・モックアップ・golden がその場で通る）、CI ワークフロー、backend の ktlint 独自ルール（設計上の作法を検査する 8 本） |
+| 骨格 | `cradle.json`、documents のテンプレート、動く最小ドメイン付きの Lean 実行可能仕様（CLI・モックアップ・golden がその場で通る。モックアップは型から入力欄を、用語集から表示名を作る）、CI ワークフロー、backend の ktlint 独自ルール（設計上の作法を検査する 8 本） |
 
 ## 導入
 
