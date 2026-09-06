@@ -93,7 +93,8 @@ const STATUS = /\b(open|resolved|unresolved)\b|反映済|却下|未決|検証済
 const DOMAIN_ID = /\b(HS|UX|MQ|ADR|INFRA-[DAQ]|L2K-Q|FE-Q)-\d{3}\b|イベント#\d+/;
 const HISTORY = /(?:20\d{2}-\d{2}-\d{2}|20\d{6}(?:-\d{2})?)\s*(?:に|の|時点|版|裁定|改訂|移行|決定|撤回)|に撤回|に改訂|に廃止|に確定|の経緯|議論の結果|裁定/;
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{274C}]/u;
-const PATH_IN_TEXT = /(?<![\w@/.$-])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.(?:kt|kts|ts|tsx|js|mjs|lean|md|ya?ml|sql|json|tf|html|css|toml|sh))(?![\w/-])/g;
+// 拡張子の後ろにさらに拡張子が続くもの（foo.md.tmpl）は別のファイルなので、途中の .md で切って拾わない
+const PATH_IN_TEXT = /(?<![\w@/.$-])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.(?:kt|kts|ts|tsx|js|mjs|lean|md|ya?ml|sql|json|tf|html|css|toml|sh))(?![\w/-]|\.\w)/g;
 
 /** ルート相対・ファイルの祖先相対・プロジェクト内ファイルのサフィックス一致のいずれかで実在すれば腐っていない。 */
 let allProjectFiles = null;
@@ -133,7 +134,8 @@ const IGNORED_PATHS = [/^(build|dist|node_modules|\.lake|target|out)\//, /\/(bui
 const findings = [];
 const add = (rule, severity, file, line, message) => { if (!disabled.has(rule)) findings.push({ rule, severity, file: rel(cfg.root, file), line, message }); };
 
-const SKIP_FILES = (cfg.unslop.skipFiles ?? []).map(globToRegExp);
+// APM が生成する lockfile は配布物のパス一覧で、散文ではない
+const SKIP_FILES = ["apm.lock.yaml", ...(cfg.unslop.skipFiles ?? [])].map(globToRegExp);
 for (const file of candidateFiles()) {
   const relPath = rel(cfg.root, file);
   if (SKIP_FILES.some(re => re.test(relPath))) continue;

@@ -47,6 +47,6 @@
 | `backend.generated` | 生成物のディレクトリ。hook が直接編集を止め、`regen-impact` が差分を読む |
 | `backend.regenerate` | 再生成コマンド（`backend.dir` で実行） |
 | `protected` | AI が書き込まない領域（glob） |
-| `unslop.*` | `cradle unslop` の調整。`disable` に規則 id、`ignorePaths` に実在しなくてよいパスの glob、`skipFiles` に検査しないファイルの glob（他リポジトリを引用する文書など） |
+| `unslop.*` | `cradle unslop` の調整。`disable` に規則 id、`ignorePaths` に実在しなくてよいパスの glob、`skipFiles` に検査しないファイルの glob（他リポジトリを引用する文書など。`apm.lock.yaml` は既定で除外） |
 
 環境変数 `CRADLE_PROJECT_DIR`（または Claude Code の `CLAUDE_PROJECT_DIR`）でルートを、`CRADLE_CONFIG` で設定ファイルを上書きできる。
