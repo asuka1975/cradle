@@ -127,8 +127,9 @@ function lookupId(id) {
   return ledger.get(id) ?? null;
 }
 
-/** 実在しなくて当然のパス: ビルド成果物・一時ファイル・cradle.json の unslop.ignorePaths（glob）。 */
+/** 実在しなくて当然のパス: ビルド成果物・一時ファイル・配布先設定例・cradle.json の unslop.ignorePaths（glob）。 */
 const IGNORED_PATHS = [/^(build|dist|node_modules|\.lake|target|out)\//, /\/(build|dist|node_modules|\.lake|target)\//, /questions\.md$/, /\.session$/, /(^|\/)lake-manifest\.json$/,
+  /^\.claude\//, /^\.codex\//, /^\.apm\//,
   ...((cfg.unslop.ignorePaths ?? []).map(globToRegExp))];
 
 const findings = [];

@@ -2,3 +2,5 @@ apm_modules/
 .claude/
 .claude-plugin/
 build/
+node_modules/
+integrations/opencode/node_modules/

@@ -1,0 +1,32 @@
+{
+  "name": "cradle",
+  "version": "0.1.0-alpha.7",
+  "private": true,
+  "description": "Lean 仕様駆動開発のハーネス — Claude Code / Codex / Pi / OpenCode V2",
+  "type": "module",
+  "keywords": ["lean", "spec-driven", "ddd", "harness", "claude-code", "codex", "pi", "opencode"],
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asuka1975/cradle.git"
+  },
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.mjs'",
+    "test:opencode": "npm install --prefix integrations/opencode && node scripts/opencode-runtime-smoke.mjs",
+    "generate:agents": "node scripts/generate-agents.mjs",
+    "typecheck:opencode": "npm install --prefix integrations/opencode && npm --prefix integrations/opencode run typecheck",
+    "typecheck": "npm run typecheck:opencode"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": [".apm/skills/cradle/scripts/pi-extension.ts"],
+    "skills": [".apm/skills"]
+  },
+  "pi-subagents": {
+    "agents": ["integrations/pi/agents"]
+  }
+}

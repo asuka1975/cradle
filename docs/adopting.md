@@ -3,10 +3,34 @@
 ## 新規プロダクト
 
 1. `apm init` → `apm.yml` の `targets` に `claude` か `codex`（両方でもよい）、`apm install asuka1975/cradle`。Codex はさらに `apm compile --single-agents`（規約を 1 枚の AGENTS.md にする）。
-2. cradle-init スキル（Claude Code `/cradle-init`、Codex `$cradle-init`）で `--project <Root>`。`lean/` に動く最小ドメインが入る。
+2. cradle-init スキル（Claude Code `/cradle-init`、Codex `$cradle-init`、Pi `/skill:cradle-init`）で `--project <Root>`。`lean/` に動く最小ドメインが入る。
    `.apm/instructions/project.instructions.md` にこのプロジェクト固有の事実を書き、`apm compile` で rules / AGENTS.md に写す。`cd lean && lake build`。
 3. cradle-status スキルで現在地を確かめ、ddd スキルで探索を始める。最小ドメインは最初の形式化で置き換える。
 4. backend を作る段階で lean2kotlin を導入する（`backend-implement` スキル。Gradle の `dev.lean2kotlin` plugin と `lean2kotlin { … }` の設定）。
+
+## Pi での導入
+
+```bash
+pi install -l /path/to/cradle
+# または git 経由
+pi install -l git:github.com/asuka1975/cradle
+pi config -l          # Extension/Skills/Agents を有効化
+```
+
+Pi では `.pi/settings.json` にパッケージが登録され、`pi config -l` / `/reload` で ON/OFF できる。
+
+## OpenCode V2 での導入
+
+`opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["./integrations/opencode"]
+}
+```
+
+OpenCode V2 用 Plugin と Agents が読み込まれる。V1 とは API が異なる。
 
 ## 既存プロジェクト（monowa 型）
 

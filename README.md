@@ -3,7 +3,7 @@
 **仕様はハーネスである。ハーネスは決定論的であるべきである。だから Lean で書かれた仕様は効果的なハーネスになる。**
 
 Cradle は、プロダクトオーナーがゆりかごに身を任せるようにプロダクトの開発を最後までやりきるための、
-Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
+Claude Code / Codex / Pi / OpenCode V2 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
 探索（イベントストーミング）→ インフラ設計 → Lean 実行可能仕様 → 仕様アニメーション → API 契約 → フロントエンド → 人間による確認 → バックエンド → E2E の
 一方向のパイプラインと、それを守る規約・スキル・エージェント・hook・決定論的な道具を配る。
 
@@ -67,6 +67,7 @@ Codex はプロジェクトを「信頼」したときだけ `.codex/`（hooks�
 - [docs/pipeline.md](docs/pipeline.md) — フェーズ・成果物・ゲート
 - [docs/adopting.md](docs/adopting.md) — 新規 / 既存プロジェクトへの導入
 - [docs/decisions.md](docs/decisions.md) — Cradle 自身の設計判断
+- [docs/integrations.md](docs/integrations.md) — Pi / OpenCode V2 統合
 - [docs/monowa-improvements.md](docs/monowa-improvements.md) — 監査で見つけた MonoWa の改善点（パスは monowa リポジトリ基準）
 - [Lean CLI プロトコル](.apm/skills/cradle/references/protocol.md)
 - [cradle.json（設定）](.apm/skills/cradle/references/cradle-json.md)
@@ -78,6 +79,8 @@ apm compile --validate            # 構造検査
 apm install --dry-run --target claude
 apm install --dry-run --target codex
 apm pack                          # Claude Code plugin 形式のバンドル（残る .claude-plugin/ と build/ は消す。残っていると local install が plugin 扱いになり skills が配られない）
+npm run typecheck                  # OpenCode V2 Plugin の型チェック
+npm run test:opencode              # 実際の opencode2 で Plugin の runtime smoke test
 ```
 
 ## ライセンス

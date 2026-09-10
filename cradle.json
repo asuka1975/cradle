@@ -1,0 +1,7 @@
+{
+  "project": "Cradle",
+  "lean": { "dir": "lean" },
+  "backend": { "dir": "backend" },
+  "frontend": { "dir": "frontend" },
+  "documents": { "dir": "documents" }
+}
