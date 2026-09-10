@@ -1,8 +1,8 @@
 // Cradle for Pi — Extension entry point.
-// Uses the shared policy from ./policy.mjs and adapts Pi events.
+// Pi専用の判定処理を使う。既存のClaude/Codex hookは変更しない。
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { evaluatePreGuard, evaluatePostBash, evaluatePostEdit, evaluateStopCheck } from "./policy.mjs";
+import { evaluatePreGuard, evaluatePostBash, evaluatePostEdit, evaluateStopCheck } from "./pi-policy.mjs";
 import { findProjectRoot, loadConfig } from "./lib.mjs";
 
 const EXTENSION_NAME = "cradle-pi";

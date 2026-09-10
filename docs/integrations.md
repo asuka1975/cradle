@@ -74,7 +74,9 @@ npm run test:opencode
 Pi/OpenCode 用の Agent にはモデルを固定しない。利用者の設定に委ねる。
 Pi では `pi-subagents.agentOverrides` で、OpenCode では `agents` 設定で割り当てる。
 
-## 共通ポリシー
+## 既存ハーネスとの分離
 
-`.apm/skills/cradle/scripts/policy.mjs` に Claude/Codex/Pi/OpenCode 共通の判定ロジックがある。
-新しいハーネスを追加する際はこのファイルを拡張する。
+Claude/Codex の `hook.mjs` と `unslop-lint.mjs` は変更しない。
+Pi の判定は `.apm/skills/cradle/scripts/pi-policy.mjs`、OpenCode の判定は `integrations/opencode/index.ts` に独立して置く。
+Pi は既存の `lib.mjs` と unslop 検査器を変更せず利用する。ハーネス間の判定の共通化は今回の対象外。
+Pi の終了検査は `--all`、既存の Claude/Codex の終了検査は従来どおり差分を対象とする。

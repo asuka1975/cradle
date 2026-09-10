@@ -1,5 +1,5 @@
-// Cradle 共通判定ポリシー。Claude Code / Codex / Pi / OpenCode などから入力を正規化し、同一の判断を返す。
-// 入出力形式の変換は呼び出し側が担当する。
+// Pi専用の判定処理。既存のClaude/Codex hookを変更しないため、判定は独立して持つ。
+// 設定・パス・Git処理とunslop検査器は、既存の実装を変更せず利用する。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, findProjectRoot, matchesAny, rel, git } from "./lib.mjs";
@@ -53,7 +53,7 @@ export function classifyOperation(toolName) {
  * 戻り値:
  *   { action: "allow" }
  *   { action: "deny", reason }
- *   { action: "ask", reason }      （Claude Code向け。Piはconfirm、OpenCodeはpermission hookのaskへ変換）
+ *   { action: "ask", reason }      （呼び出し側が確認操作へ変換）
  *   { action: "remind", message }  （止めずに注意を出す）
  */
 export function evaluatePreGuard({
