@@ -1,4 +1,4 @@
-apm_modules/
-.claude/
-.claude-plugin/
-build/
+/apm_modules/
+/.claude/
+/.claude-plugin/
+/build/

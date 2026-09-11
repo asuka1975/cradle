@@ -4,9 +4,9 @@
 
 1. `apm init` → `apm.yml` の `targets` に `claude` か `codex`（両方でもよい）、`apm install asuka1975/cradle`。Codex はさらに `apm compile --single-agents`（規約を 1 枚の AGENTS.md にする）。
 2. cradle-init スキル（Claude Code `/cradle-init`、Codex `$cradle-init`）で `--project <Root>`。`lean/` に動く最小ドメインが入る。
-   `.apm/instructions/project.instructions.md` にこのプロジェクト固有の事実を書き、`apm compile` で rules / AGENTS.md に写す。`cd lean && lake build`。
+   `.apm/instructions/project.instructions.md` にこのプロジェクト固有の事実を書き、`apm install` で rules に写す（Codex は `apm compile --single-agents` で AGENTS.md に）。`cd lean && lake build`。
 3. cradle-status スキルで現在地を確かめ、ddd スキルで探索を始める。最小ドメインは最初の形式化で置き換える。
-4. backend を作る段階で lean2kotlin を導入する（`backend-implement` スキル。Gradle の `dev.lean2kotlin` plugin と `lean2kotlin { … }` の設定）。
+4. backend を作る段階で lean2kotlin を導入する（`backend-implement` スキル。Gradle の `dev.lean2kotlin` plugin と `lean2kotlin { … }` の設定）。生成器の置き場と配線は同スキルの `references/gradle-wiring.md`。`cradle doctor` で解決できることを先に確かめる。
 
 ## 既存プロジェクト（monowa 型）
 

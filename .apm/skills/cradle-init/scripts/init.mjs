@@ -4,7 +4,7 @@
 //   --only <prefix> は、そのパスで始まるファイルだけを対象にする（例: --only lean/mockup --force で骨格由来のモックアップだけ更新）
 //   --backend <package> を付けると backend/ の骨格（ktlint 独自ルール・.editorconfig・gradle.properties）も敷く（例: com.example.notes）
 //   <Root> は Lean のルート名前空間（例: MonoWa）。lake の exe 名は小文字にしたもの。
-// 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm compile が rules / AGENTS.md に写す）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
+// 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm install が rules に写す。Codex は apm compile --single-agents で AGENTS.md に）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
 // .claude/ と .codex/ の設定例は、その置き場が既にあるもの（apm install 済みのターゲット）だけ敷く。どちらも無ければ両方。
 // 既にあるファイルは上書きしない（--force で上書き）。
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, appendFileSync } from "node:fs";
@@ -83,5 +83,5 @@ for (const w of written) console.log(`  + ${w}`);
 for (const s of skipped) console.log(`  = ${s}（既存のため据え置き）`);
 for (const f of failed) console.log(`  ! ${f}`);
 if (failed.length) console.log(`\n${failed.length} 件を書けなかった。書ける権限で同じコマンドをもう一度実行すると、敷いた分は据え置いて残りだけ敷く。`);
-console.log(`\n次: apm compile（固有の事実を rules / AGENTS.md に写す。Codex は --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める`);
+console.log(`\n次: apm install（固有の事実を rules に写す。Codex は apm compile --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める`);
 process.exit(failed.length ? 1 : 0);
