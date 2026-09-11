@@ -20,6 +20,8 @@ Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](htt
 
 ## 導入
 
+Pi / OpenCode V2 の追加統合はプレビューです。[導入手順と検証範囲](docs/integrations.md)を参照してください。
+
 ```bash
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>

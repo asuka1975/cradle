@@ -31,7 +31,6 @@ description: Use to run or continue domain exploration with the product owner as
 2. **セッション起動**: `ddd-domain-explorer` を起動する。プロンプトに書くのは「探索セッションを 1 回実施する」「その時点で聞けるものは 1 巡に全部載せる」「読むのは documents/ddd/ だけ（lean/ は読まない）」「テーマ: …（指定があれば）」だけ。現状の要約は渡さない（自分で読む）。
    - Claude Code: Agent ツールで **フォアグラウンド**（`run_in_background: false`）。返事は SendMessage。
    - Codex: `spawn_agent`（`agent_type: "ddd-domain-explorer"`）。`wait_agent` を最終状態になるまで繰り返す。タイムアウト（空の status）は待ち直すだけで、`send_input` で「完了して報告を返せ」と急かさない（急かすと問いが捨てられる）。返事は `send_input`。
-   - Pi: `subagent` ツールで agent: `ddd-domain-explorer`、async: true（読取りレビュー可）。`contact_supervisor` で [QUESTIONS] / [SESSION_REPORT] を中継する。Pi では `run_in_background` という引数はない; そのままバックグラウンド起動し、supervisor channel で待つ。
 3. **質問中継**（`[SESSION_REPORT]` が返るまで繰り返す）:
    - explorer が `[QUESTIONS]` + JSON を返す → 問いが少なければ（その時点で聞けるものが他にあるなら）差し戻す。
    - `ddd.mjs questions @<json を保存したファイル>` で `documents/ddd/questions.md` を書く（改変せず写す。書式は `references/question-format.md`）。

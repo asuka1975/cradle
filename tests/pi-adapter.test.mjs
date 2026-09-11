@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const { createJiti } = await import("/Users/shojisatoru/.nodebrew/node/v24.3.0/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti/lib/jiti.cjs");
+import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
-const piExtension = (await jiti.import(fileURLToPath(new URL("../.apm/skills/cradle/scripts/pi-extension.ts", import.meta.url)))).default;
+const piExtension = (await jiti.import(fileURLToPath(new URL("../integrations/pi/index.ts", import.meta.url)))).default;
 
 function makeCtx(root) {
   const notifications = [];

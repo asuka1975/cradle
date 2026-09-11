@@ -1,0 +1,23 @@
+name: integrations
+on: [push, pull_request]
+jobs:
+  adapters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/generate-agents.mjs --check
+      - run: npm ci --prefix integrations/opencode
+      - run: npm --prefix integrations/opencode run typecheck
+      - run: node --test integrations/opencode/adapter.test.mjs
+      - name: reject machine-specific home paths
+        shell: bash
+        run: |
+          if git grep -nE '/Users/[^/[:space:]]+/' -- '*.mjs' '*.ts' '*.md' '*.json'; then
+            echo 'Machine-specific home paths must not be committed.' >&2
+            exit 1
+          fi

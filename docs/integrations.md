@@ -1,82 +1,114 @@
-# Pi / OpenCode V2 統合
+# Pi / OpenCode V2 統合（プレビュー）
 
-Cradle は APM パッケージとして Claude Code / Codex に加え、Pi と OpenCode V2 でも利用できる。
+既存の Claude Code / Codex の hook と検査器を変更せず、追加のアダプターから利用する。
+Pi/OpenCodeの子エージェントへのガード適用と探索の質問中継は、まだ実運用の検証が済んでいない。全面的な互換対応とは扱わない。
+
+## 共通の前提
+
+Pi/OpenCodeでも **APMによる導入が必要**。Pi Packageだけではプロジェクトの規約や骨格を用意しない。
+この統合はリリース前のため、以下はPRブランチを使う例。リリース後は検証したタグに固定する。
+
+```bash
+# 消費側のプロジェクトで実行。既存のapm.ymlがあればtargetsにcodexを追加する。
+printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - codex\ndependencies:\n  apm: []\n' > apm.yml
+apm install asuka1975/cradle#feat/pi-opencode-harness
+apm compile --single-agents
+```
+
+- 規約は compile 後の `AGENTS.md`、スキルと道具は `.agents/skills/` を利用する。`<skills>` は Pi/OpenCodeでも `.agents/skills` と読み替える。
+- 新規プロジェクトでは `.agents/skills/cradle-init/scripts/init.mjs` を `--project MyProduct` で実行し、`apm compile --single-agents` を再実行する。
+- `cradle.json` は消費側の設定。保護領域・生成先などの変更はこの設定に書く。
+- APMの配置が異なる場合、以下の `apm_modules/asuka1975/cradle` は実際のインストール先に読み替える。
 
 ## Pi
 
-### インストール
-
 ```bash
-pi install -l /path/to/cradle
-# または git 経由
-pi install -l git:github.com/asuka1975/cradle
-```
-
-### 有効化 / 無効化
-
-```bash
-# 対話式
+pi install -l ./apm_modules/asuka1975/cradle
 pi config -l
-
-# Extension だけ OFF（Skills/Agents は残る）
-pi config -l extensions.cradle-pi false
 ```
 
-変更後は `/reload`。
+`pi config` / `pi config -l` は対話式。ExtensionのON/OFFを選び、Pi内で `/reload` する。
+設定を直接書く場合は `.pi/settings.json` の既存エントリを次のように変更する（相対パスは設定ファイル基準）。
 
-### 提供されるもの
+```json
+{
+  "packages": [
+    {
+      "source": "../apm_modules/asuka1975/cradle",
+      "extensions": []
+    }
+  ]
+}
+```
 
-- Extension: `.apm/skills/cradle/scripts/pi-extension.ts`
-- Skills: `.apm/skills/`
-- Agents: `integrations/pi/agents/`
+`extensions: []` はこのパッケージのExtensionを読み込まない指定。
+Pi用Extensionは `integrations/pi/index.ts`。スキルはAPMが配った `.agents/skills` から自動検出されるため、Pi Packageからは重複登録しない。
+Agentsは `integrations/pi/agents` を pi-subagents が読み込む。モデルは `subagents.agentOverrides.<name>.model` など利用者設定に委ねる。
 
-### 動作
+### 動作と限界
 
-- `tool_call` で生成物・保護領域・golden・探索正式ドキュメントへの編集をブロック
-- `tool_result` でビルド・編集後の促しを追加
-- `agent_end` で unslop error 検査を行い、違反があれば follow-up を投入
-- Claude/Codex の Stop hook と完全には一致しない。終了検査はベストエフォート
+- `tool_call` は相対パスを `ctx.cwd` 基準で既存hookへ渡す。
+- 成功した `tool_result` に既存hookの促しを追記する。
+- `agent_end` で既存unslop検査器の `--all` を実行し、違反一覧をfollow-upへ渡す。自己投入したfollow-upの終了は1回飛ばし、その後の通常ターンでは検査を再開する。
+- Claude/CodexのStopは従来どおり差分が対象。Piの全件検査とは範囲が違う。
+- Piのイベントから子の役割を識別する処理は未実装。探索役の中継操作ガードやdddの質問中継を保証しない。
 
 ## OpenCode V2
 
-### 設定
+OpenCodeを使う場合だけ、SDK依存を導入する。ルートの `npm ci` やPi Packageの導入では、このネストしたパッケージはインストールされない。
 
-`opencode.jsonc`:
+```bash
+npm ci --omit=dev --prefix apm_modules/asuka1975/cradle/integrations/opencode
+mkdir -p .opencode/agents
+cp apm_modules/asuka1975/cradle/integrations/opencode/agents/*.md .opencode/agents/
+```
+
+`opencode.json` または `opencode.jsonc` の既存設定へ追記する。
 
 ```jsonc
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./integrations/opencode"]
+  "plugins": ["./apm_modules/asuka1975/cradle/integrations/opencode"]
 }
 ```
 
-### 提供されるもの
+Cradle自身のcheckoutを開くときだけ `./integrations/opencode` を使う。
+`cradle doctor` は設定にパスがあることを表示するが、実際のロード成功までは判定しない。
+Agentsのコピーは更新時にも必要。既存の同名エージェントは上書き前に確認する。
 
-- Plugin: `integrations/opencode/index.ts`
-- Agents: `integrations/opencode/agents/`
+### 動作と限界
 
-### 動作
+- `permission.evaluate` の `edit` / `shell` を既存hookへ委譲する。`cradle.json` とセッションの作業ディレクトリを利用し、`read` はブロックしない。
+- 探索役の識別はコマンド文字列でなく `event.agent` を使う。
+- `execute.after` の成功結果に既存hookの促しを追加する。別のターンは起動しない。
+- OpenCodeの終了検査は未実装。V1との互換性は対象外。
+- 依存SDKは `0.0.0-beta-19425` に固定。実ランタイムsmokeの確認済みCLIは `0.0.0-beta-19135`。両者は同一の版番号ではないので、更新時には組合せを再検証する。
 
-- `ctx.permission.hook("evaluate")` で保護領域・生成物・golden・探索正式ドキュメントを deny
-- `ctx.tool.hook("execute.after")` でビルド・編集後の促しを synthetic message で追加
-- V1 の hook API とは互換がない
+## エージェント生成
 
-### 実ランタイム smoke test
+`.apm/agents/*.agent.md` を正本に `node scripts/generate-agents.mjs` で生成する。
+Piの `Glob` は `find, ls` に対応させる。Claude固有のMCPツール名は移植せず除外する。
+ブラウザ用MCPは利用者の環境で設定し、実画面を触れない場合は未実施と報告する。
+OpenCodeには存在しない `tools` 設定を出さず、書込みを持たないレビュアーの `edit` はdeny、書込み役はaskにする。
+
+## 開発・検証
 
 ```bash
-npm run test:opencode
+npm ci
+npm test
+node scripts/generate-agents.mjs --check
+npm ci --prefix integrations/opencode
+npm run typecheck
+node --test integrations/opencode/adapter.test.mjs
+node scripts/opencode-runtime-smoke.mjs
+node scripts/opencode-tools-smoke.mjs
 ```
 
-一時プロジェクトを作り、実際の `opencode2 serve` にこの Plugin をロードさせる。`/api/health` を確認した後、golden と探索正式ドキュメントへの permission を API 経由で評価し、いずれも `deny` になることを確認する。Plugin の依存パッケージは `integrations/opencode/package.json` の `@opencode/plugin@beta` で解決する。
+実ランタイムsmokeは一時プロジェクトと独立した設定・データ領域で `opencode2 serve` を起動する。
+health、goldenのdeny、探索ドキュメントのdeny/セッション印がある場合のallowを確かめる。
+ツールsmokeはローカルの固定モデル応答から実際の `write` / `edit` / `shell` を呼び出す。
+実機で確認した入力は `write: {path, content}`、`edit: {path, oldString, newString}`、`shell: {command}`。
+Lean編集・契約編集・Gradle build・lake buildの促し、Gradle cleanでは促さないことを、保存されたツール結果まで確認する。
+Gradle/Leanそのもののビルドはこのsmokeの対象外で、成功メッセージを出すテスト用実行ファイルを使う。モデルへの外部送信は行わない。
 
-## モデル
-
-Pi/OpenCode 用の Agent にはモデルを固定しない。利用者の設定に委ねる。
-Pi では `pi-subagents.agentOverrides` で、OpenCode では `agents` 設定で割り当てる。
-
-## 既存ハーネスとの分離
-
-Claude/Codex の `hook.mjs` と `unslop-lint.mjs` は変更しない。
-Pi の判定は `.apm/skills/cradle/scripts/pi-policy.mjs`、OpenCode の判定は `integrations/opencode/index.ts` に独立して置く。
-Pi は既存の `lib.mjs` と unslop 検査器を変更せず利用する。ハーネス間の判定の共通化は今回の対象外。
-Pi の終了検査は `--all`、既存の Claude/Codex の終了検査は従来どおり差分を対象とする。
+判定の抽出・共通化は別途検討する。追加した `integrations/hook-client.mjs` は既存CLIを子プロセスで呼び、入出力を変換するだけで、保護パスやビルド判定の規則は持たない。

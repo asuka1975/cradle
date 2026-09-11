@@ -63,9 +63,9 @@ if (cmd === "doctor") {
     console.log(`${piPackage ? "ok     " : "info   "} pi         ${piPackage ? ".pi/settings.json に cradle パッケージが登録済み" : "pi install -l <cradle> / pi config -l で有効化"}`);
   }
   {
-    const opencodeConfig = join(root, "opencode.jsonc");
-    const opencodePlugins = existsSync(opencodeConfig) && readFileSync(opencodeConfig, "utf8").includes("cradle-opencode");
-    console.log(`${opencodePlugins ? "ok     " : "info   "} opencode   ${opencodePlugins ? "opencode.jsonc に cradle-opencode plugin が登録済み" : "opencode.jsonc に integrations/opencode を plugin として追加"}`);
+    const opencodeConfig = ["opencode.json", "opencode.jsonc"].find(file =>
+      existsSync(join(root, file)) && readFileSync(join(root, file), "utf8").includes("integrations/opencode"));
+    console.log(`${opencodeConfig ? "ok     " : "info   "} opencode   ${opencodeConfig ? `${opencodeConfig} に Cradle plugin のパスあり（ロード状態は未確認）` : "opencode.json(c) に Cradle の integrations/opencode を plugin として追加"}`);
   }
   if (existsSync(join(root, ".codex/hooks.json"))) {
     // Codex は起動時のレビューで信頼した hook だけを動かし、その記録を ~/.codex/config.toml に [hooks.state."<hooks.json の絶対パス>:<event>:<group>:<hook>"] で持つ

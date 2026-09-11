@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // OpenCode V2 の実プロセスで Plugin のロードと permission hook を検証する。
-// 実行前に integrations/opencode で npm install を済ませる。
+// 実行前に integrations/opencode で npm ci を済ませる。
 
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
@@ -42,6 +42,7 @@ async function waitFor(predicate, timeoutMs = 15000) {
 async function request(base, password, path, options = {}) {
   const response = await fetch(`${base}${path}`, {
     ...options,
+    signal: AbortSignal.timeout(15000),
     headers: {
       authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
       ...(options.body ? { "content-type": "application/json" } : {}),
@@ -54,6 +55,7 @@ async function request(base, password, path, options = {}) {
 }
 
 const directory = await mkdtemp(join(tmpdir(), "cradle-opencode-v2-"));
+await writeFile(join(directory, "cradle.json"), JSON.stringify({ project: "Example" }));
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 await writeFile(join(directory, "opencode.jsonc"), JSON.stringify({
@@ -63,6 +65,7 @@ await writeFile(join(directory, "opencode.jsonc"), JSON.stringify({
 
 const child = spawn(opencode, ["--print-logs", "serve", "--hostname", "127.0.0.1", "--port", String(port)], {
   cwd: directory,
+  env: { ...process.env, HOME: directory, XDG_CONFIG_HOME: join(directory, "config"), XDG_DATA_HOME: join(directory, "data"), XDG_CACHE_HOME: join(directory, "cache"), XDG_STATE_HOME: join(directory, "state") },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let logs = "";
@@ -115,6 +118,8 @@ try {
   console.log(`OpenCode V2 runtime smoke passed (${health.version})`);
 } finally {
   child.kill("SIGTERM");
-  await Promise.race([exit, new Promise((resolvePromise) => setTimeout(resolvePromise, 3000))]);
+  const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
+  await exit;
+  clearTimeout(timer);
   await rm(directory, { recursive: true, force: true });
 }

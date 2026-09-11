@@ -1,5 +1,8 @@
 # Cradle の設計判断
 
+Pi/OpenCodeの追加統合では、既存の決定論的CLI（依存ゼロ）を無変更で呼び出す。
+OpenCodeのSDKは `integrations/opencode` だけの実行時依存、jitiとTypeScriptは検証用の開発依存とする。Claude/Codex/Piの利用者へOpenCode SDKのインストールを要求しない。詳細は [統合手順](integrations.md)。
+
 | # | 判断 | 理由 |
 |---|---|---|
 | 1 | 配布形式は APM パッケージ（`.apm/` 配下に instructions / skills / agents / hooks）。ターゲットは Claude Code と Codex | hooks は両者で同じ stdin / stdout。agents は APM が Codex の toml に写し、rules は Codex では AGENTS.md に compile される。`apm pack` で Claude Code の plugin バンドルにもなる |

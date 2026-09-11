@@ -1,111 +1,61 @@
 #!/usr/bin/env node
-// 7 つの Cradle 専任エージェントを、Pi / OpenCode V2 用の形に変換する。
-// APM が配る `.apm/agents/*.agent.md` を正本とする。
-
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
-import { join, basename, extname } from "node:path";
+// .apm/agentsを正本として、実行環境固有のヘッダーだけを生成する。
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const sourceDir = join(root, ".apm", "agents");
-const piDir = join(root, "integrations", "pi", "agents");
-const opencodeDir = join(root, "integrations", "opencode", "agents");
+const check = process.argv.includes("--check");
+const toolMap = { Read: ["read"], Write: ["write"], Edit: ["edit"], Bash: ["bash"], Grep: ["grep"], Glob: ["find", "ls"] };
+const guidance = "プロジェクトの AGENTS.md と利用するスキルの SKILL.md を読む。道具の <skills> は .agents/skills。子エージェント自身は ddd.mjs・questions.md・.session を操作せず、質問を親へ返す。";
+let stale = false;
 
-mkdirSync(piDir, { recursive: true });
-mkdirSync(opencodeDir, { recursive: true });
-
-const AGENT_RE = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/;
-
-function parseAgent(path) {
-  const text = readFileSync(path, "utf8");
-  const m = text.match(AGENT_RE);
-  if (!m) throw new Error(`Invalid agent frontmatter: ${path}`);
-  const front = Object.fromEntries(
-    m[1].split("\n")
-      .filter(l => l.includes(":") && !l.startsWith("---"))
-      .map(l => {
-        const idx = l.indexOf(":");
-        return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()];
-      })
-  );
-  return { front, body: m[2].trim() };
-}
-
-function toPiAgent({ front, body }) {
-  const lines = ["---"];
-  lines.push(`name: ${front.name}`);
-  lines.push(`description: ${front.description}`);
-  lines.push("advertise: true");
-  // ツール名を小へ統一
-  const tools = (front.tools ?? "")
-    .split(/,\s*|\s+/)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean)
-    .join(", ");
-  lines.push(`tools: ${tools}`);
-  lines.push("inheritProjectContext: true");
-  lines.push("async: true");
-  lines.push("---");
-  lines.push("");
-  // 子専用ガード：同じリポジトリの Cradle 規約を読むよう指示
-  lines.push("Cradle 規約はプロジェクトの `.apm/instructions/*.instructions.md` と `SKILL.md` にある。自分が子エージェントとして動くとき、生成物・人間専用領域・golden・探索正式ドキュメントへの直接編集は行わない。`ddd` 役は `ddd.mjs`・`questions.md`・`.session` に触らない。");
-  lines.push("");
-  lines.push(body);
-  return lines.join("\n");
-}
-
-function toOpenCodeAgent({ front, body }) {
-  const lines = ["---"];
-  lines.push(`name: ${front.name}`);
-  lines.push(`description: ${front.description}`);
-  lines.push("mode: subagent");
-  // OpenCode V2 では model は利用者設定に委ねる
-  lines.push("tools:");
-  for (const t of (front.tools ?? "").split(/,\s*|\s+/).map(s => s.trim().toLowerCase()).filter(Boolean)) {
-    lines.push(`  - ${t}`);
+for (const target of ["pi", "opencode"]) {
+  const dir = join(root, "integrations", target, "agents");
+  if (!check) mkdirSync(dir, { recursive: true });
+  const expected = new Set();
+  for (const file of readdirSync(join(root, ".apm", "agents")).sort()) {
+    if (!file.endsWith(".agent.md")) continue;
+    const text = readFileSync(join(root, ".apm", "agents", file), "utf8");
+    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+    if (!match) throw new Error(`Invalid agent: ${file}`);
+    const fields = Object.fromEntries(match[1].split(/\r?\n/).map(line => {
+      const colon = line.indexOf(":");
+      return [line.slice(0, colon).trim(), line.slice(colon + 1).trim()];
+    }));
+    const tools = (fields.tools ?? "").split(/,\s*/);
+    const description = fields.description.replace(/Claude Code では[^。]*。/g, "").replace(/Codex では[^。]*。/g, "").trim();
+    const header = ["---", `name: ${fields.name}`, `description: ${description}`];
+    if (target === "pi") {
+      header.push("advertise: true", `tools: ${tools.flatMap(tool => toolMap[tool] ?? []).join(", ")}`, "inheritProjectContext: true");
+    } else {
+      // 許可範囲は正本のツールから導出し、書込みのないレビュアーへeditを与えない。
+      header.push("mode: subagent", "permissions:");
+      const permissions = [
+        ["read", "allow"],
+        ["edit", tools.some(t => t === "Write" || t === "Edit") ? "ask" : "deny"],
+        ["shell", tools.includes("Bash") ? "ask" : "deny"],
+      ];
+      for (const [action, effect] of permissions) header.push(`  - action: ${action}`, '    resource: "*"', `    effect: ${effect}`);
+    }
+    header.push("---", "", guidance, "");
+    if (tools.some(tool => tool.startsWith("mcp__"))) header.push("ブラウザ用MCPは環境ごとに設定する。利用できなければ実画面のレビューは未実施と報告し、実施済みと扱わない。", "");
+    const result = [...header, match[2].trim(), ""].join("\n");
+    const name = `${fields.name}.md`;
+    expected.add(name);
+    const output = join(dir, name);
+    if (!existsSync(output) || readFileSync(output, "utf8") !== result) {
+      stale = true;
+      if (!check) writeFileSync(output, result);
+    }
   }
-  lines.push("permissions:");
-  lines.push("  - action: edit");
-  lines.push("    resource: documents/ddd/*");
-  lines.push("    effect: allow");
-  lines.push("  - action: edit");
-  lines.push("    resource: documents/ai-notes/*");
-  lines.push("    effect: allow");
-  lines.push("  - action: edit");
-  lines.push("    resource: documents/developer/*");
-  lines.push("    effect: deny");
-  lines.push("---");
-  lines.push("");
-  lines.push("Cradle 規約はプロジェクトの `.apm/instructions/*.instructions.md` と `SKILL.md` にある。子エージェントとして動くとき、生成物・人間専用領域・golden・探索正式ドキュメント（セッション印無し）への直接編集は行わない。`ddd` 役は `ddd.mjs`・`questions.md`・`.session` に触らない。");
-  lines.push("");
-  lines.push(body);
-  return lines.join("\n");
-}
-
-let changed = false;
-for (const file of readdirSync(sourceDir)) {
-  if (extname(file) !== ".md") continue;
-  const agent = parseAgent(join(sourceDir, file));
-  const piPath = join(piDir, file);
-  const opencodePath = join(opencodeDir, file);
-  const piText = toPiAgent(agent);
-  const opencodeText = toOpenCodeAgent(agent);
-  if (!existsSync(piPath) || readFileSync(piPath, "utf8") !== piText) {
-    writeFileSync(piPath, piText);
-    changed = true;
-  }
-  if (!existsSync(opencodePath) || readFileSync(opencodePath, "utf8") !== opencodeText) {
-    writeFileSync(opencodePath, opencodeText);
-    changed = true;
+  for (const file of existsSync(dir) ? readdirSync(dir) : []) {
+    if (!file.endsWith(".md") || expected.has(file)) continue;
+    stale = true;
+    if (!check) unlinkSync(join(dir, file));
   }
 }
-
-if (process.argv.includes("--check")) {
-  if (changed) {
-    process.stderr.write("generated agents are out of date. Run: node scripts/generate-agents.mjs\n");
-    process.exit(1);
-  }
-  process.stdout.write("generated agents are up to date\n");
-} else {
-  process.stdout.write(`generated Pi/OpenCode agents from ${sourceDir}\n`);
-}
+if (check && stale) {
+  console.error("generated agents are out of date. Run: node scripts/generate-agents.mjs");
+  process.exitCode = 1;
+} else console.log(check ? "generated agents are up to date" : "generated Pi/OpenCode agents");
