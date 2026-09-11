@@ -1,0 +1,16 @@
+# テストリソース
+
+## sprout/sprout-ir.json
+骨格（`.apm/skills/cradle-init/assets/lean`、名前空間 `Sprout`）を抽出器に通した IR。
+採り直し: `cd lean2kotlin/scaffold-check && ./gradlew --no-daemon extractLeanIr` のあと
+`build/lean2kotlin/lean2kotlin-ir.json` をここへ写す（`GenerationTest` が `scaffold-check/src/generated` と突き合わせるので、両方を同じ生成器で採る）。
+
+## sprout/golden/
+骨格の golden（`.apm/skills/cradle-init/assets/lean/golden/` の 3 ファイル）の写し。
+採り直し: 骨格の golden を更新したら同じ 3 ファイルをここへ写す。
+`basic.request.json` は Golden.load が読み飛ばすことの検査に使う。
+
+## computed-row/
+手書きの最小 IR（Row に「状態の要素に無いフィールド」を持たせた読み取りモデル）と golden 1 組。
+`OrderRow.total` が第一階層、`OrderRow.lines[].LineRow.amount` が入れ子の計算フィールド。
+抽出器の出力ではないので採り直しは無い。IR のスキーマが変わったら手で直す。

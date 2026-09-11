@@ -94,6 +94,14 @@ if (cmd === "doctor") {
     const limit = Number((toml.match(/^\s*project_doc_max_bytes\s*=\s*(\d+)/m) ?? [])[1] ?? 32768);
     console.log(`${size > limit ? "STALE  " : "ok     "} AGENTS.md  ${size} bytes / Codex の上限 ${limit}${size > limit ? "（.codex/config.toml の project_doc_max_bytes を上げる。超えた分は黙って切られる）" : ""}`);
   }
+  {
+    // 生成器 lean2kotlin: LEAN2KOTLIN_HOME → apm が配った写し（apm_modules/<owner>/cradle/lean2kotlin）の順に、generator/ と lean/ を両方持つ場所を探す
+    const { readdirSync } = await import("node:fs");
+    const modules = join(root, "apm_modules");
+    const shipped = existsSync(modules) ? readdirSync(modules).map(o => join(modules, o, "cradle", "lean2kotlin")) : [];
+    const l2k = [process.env.LEAN2KOTLIN_HOME, ...shipped].filter(Boolean).find(d => existsSync(join(d, "generator")) && existsSync(join(d, "lean")));
+    console.log(`${l2k ? "ok     " : "missing"} lean2kotlin ${l2k ?? "（backend フェーズで要る。apm install で apm_modules に配られる。別のチェックアウトを使うなら LEAN2KOTLIN_HOME）"}`);
+  }
   const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["apm", ["--version"]], ["claude", ["--version"]], ["codex", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
   for (const [bin, args] of tools) {
     const r = spawnSync(bin, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });

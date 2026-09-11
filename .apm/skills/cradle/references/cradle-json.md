@@ -31,7 +31,7 @@
     "openapi": "documents/codebase/openapi.yaml"
   },
   "e2e": { "dir": "e2e" },
-  "infra": { "dir": "infra" },
+  "infra": { "dir": "infra", "up": "docker compose --project-directory infra/local up -d --build", "containers": ["myapp-local-backend", "myapp-local-frontend"] },
   "ports": { "mockup": 8787, "frontend": 5173, "backend": 8080, "idp": 8090 },
   "protected": ["documents/developer/**"],
   "unslop": { "disable": [], "extraHedges": [], "ignorePaths": [], "skipFiles": [] }
@@ -46,6 +46,8 @@
 | `lean.entityImportAllow` | 読み取り側で `Domain.Entity` の import を許す例外（射影・観測モデル） |
 | `backend.generated` | 生成物のディレクトリ。hook が直接編集を止め、`regen-impact` が差分を読む |
 | `backend.regenerate` | 再生成コマンド（`backend.dir` で実行） |
+| `infra.up` | local スタックを立てる 1 コマンド（ルートで実行）。既定なし |
+| `infra.containers` | local スタックのコンテナ名。`cradle doctor --local` が Created と HEAD の時刻を比べる |
 | `protected` | AI が書き込まない領域（glob） |
 | `unslop.*` | `cradle unslop` の調整。`disable` に規則 id、`ignorePaths` に実在しなくてよいパスの glob、`skipFiles` に検査しないファイルの glob（他リポジトリを引用する文書など。`apm.lock.yaml` は既定で除外） |
 

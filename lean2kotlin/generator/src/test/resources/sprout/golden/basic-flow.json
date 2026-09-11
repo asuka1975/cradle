@@ -1,0 +1,158 @@
+{
+  "ok": {
+    "trace": [
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "postNote": {
+            "title": {
+              "text": "新しいメモ"
+            }
+          }
+        },
+        "state": {
+          "noteIds": {
+            "next": 3
+          },
+          "notes": [
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 0
+              },
+              "title": {
+                "text": "買い出し"
+              }
+            },
+            {
+              "author": {
+                "id": 2
+              },
+              "closed": true,
+              "id": {
+                "id": 1
+              },
+              "title": {
+                "text": "打合せ"
+              }
+            },
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 2
+              },
+              "title": {
+                "text": "新しいメモ"
+              }
+            }
+          ]
+        },
+        "views": {
+          "notes": [
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 0
+              },
+              "title": "買い出し"
+            },
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 2
+              },
+              "title": "新しいメモ"
+            }
+          ]
+        }
+      },
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "closeNote": {
+            "note": {
+              "id": 0
+            }
+          }
+        },
+        "state": {
+          "noteIds": {
+            "next": 3
+          },
+          "notes": [
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": true,
+              "id": {
+                "id": 0
+              },
+              "title": {
+                "text": "買い出し"
+              }
+            },
+            {
+              "author": {
+                "id": 2
+              },
+              "closed": true,
+              "id": {
+                "id": 1
+              },
+              "title": {
+                "text": "打合せ"
+              }
+            },
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 2
+              },
+              "title": {
+                "text": "新しいメモ"
+              }
+            }
+          ]
+        },
+        "views": {
+          "notes": [
+            {
+              "author": {
+                "id": 1
+              },
+              "closed": false,
+              "id": {
+                "id": 2
+              },
+              "title": "新しいメモ"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "rootNamespace": "Shop",
+  "types": [
+    {
+      "lean": "Shop.Runtime.OrderId", "kotlin": "OrderId", "role": "valueObject", "isId": true,
+      "module": "Shop.Runtime.Ids",
+      "shape": {"kind": "structure", "fields": [{"name": "id", "type": {"k": "nat"}}]}
+    },
+    {
+      "lean": "Shop.Application.LineRow", "kotlin": "LineRow", "role": "readModelRow",
+      "module": "Shop.Application.ReadModel",
+      "shape": {"kind": "structure", "fields": [
+        {"name": "sku", "type": {"k": "string"}},
+        {"name": "amount", "type": {"k": "nat"}}
+      ]}
+    },
+    {
+      "lean": "Shop.Application.OrderRow", "kotlin": "OrderRow", "role": "readModelRow",
+      "module": "Shop.Application.ReadModel",
+      "shape": {"kind": "structure", "fields": [
+        {"name": "id", "type": {"k": "ref", "name": "Shop.Runtime.OrderId"}},
+        {"name": "lines", "type": {"k": "list", "of": {"k": "ref", "name": "Shop.Application.LineRow"}}},
+        {"name": "total", "type": {"k": "nat"}}
+      ]}
+    },
+    {
+      "lean": "Shop.Application.OrdersUseCase.ReadModel", "kotlin": "OrdersReadModel", "role": "readModel",
+      "module": "Shop.Application.UseCase.OrdersUseCase.ReadModel",
+      "shape": {"kind": "structure", "fields": [
+        {"name": "orders", "type": {"k": "list", "of": {"k": "ref", "name": "Shop.Application.OrderRow"}}}
+      ]}
+    },
+    {
+      "lean": "Shop.Application.OrdersUseCase.Query", "kotlin": "OrdersQuery", "role": "viewDto",
+      "module": "Shop.Application.UseCase.OrdersUseCase.QueryService",
+      "shape": {"kind": "structure", "fields": []}
+    },
+    {
+      "lean": "Shop.Application.OrderView", "kotlin": "OrderView", "role": "viewDto",
+      "module": "Shop.Application.View",
+      "shape": {"kind": "structure", "fields": [
+        {"name": "id", "type": {"k": "ref", "name": "Shop.Runtime.OrderId"}},
+        {"name": "total", "type": {"k": "nat"}}
+      ]}
+    }
+  ],
+  "queryServices": [
+    {
+      "name": "OrdersQueryService", "module": "OrdersUseCase",
+      "methods": [
+        {
+          "name": "query",
+          "params": [
+            {"name": "q", "type": {"k": "ref", "name": "Shop.Application.OrdersUseCase.Query"}},
+            {"name": "rm", "type": {"k": "ref", "name": "Shop.Application.OrdersUseCase.ReadModel"}}
+          ],
+          "ret": {"k": "list", "of": {"k": "ref", "name": "Shop.Application.OrderView"}}
+        }
+      ]
+    }
+  ],
+  "useCases": [
+    {
+      "name": "OrdersUseCase", "module": "OrdersUseCase",
+      "methods": [
+        {
+          "name": "execute",
+          "params": [
+            {"name": "q", "type": {"k": "ref", "name": "Shop.Application.OrdersUseCase.Query"}},
+            {"name": "rm", "type": {"k": "ref", "name": "Shop.Application.OrdersUseCase.ReadModel"}}
+          ],
+          "ret": {"k": "list", "of": {"k": "ref", "name": "Shop.Application.OrderView"}}
+        }
+      ]
+    }
+  ]
+}

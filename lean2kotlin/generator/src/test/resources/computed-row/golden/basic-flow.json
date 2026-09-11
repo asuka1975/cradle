@@ -1,0 +1,19 @@
+{
+  "ok": {
+    "trace": [
+      {
+        "command": {"addLine": {"order": {"id": 0}, "sku": "plum"}},
+        "state": {
+          "orders": [
+            {"id": {"id": 0}, "lines": [{"sku": "apple"}, {"sku": "pear"}, {"sku": "plum"}]}
+          ]
+        },
+        "views": {
+          "orders": [
+            {"id": {"id": 0}, "total": 3}
+          ]
+        }
+      }
+    ]
+  }
+}

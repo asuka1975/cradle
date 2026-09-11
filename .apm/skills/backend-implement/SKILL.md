@@ -5,11 +5,11 @@ description: Use when it is time to make the backend follow the Lean model — r
 
 # バックエンド追随
 
-順序の確認から始める: `cradle status` で「人間による画面確認」が済んでいるか。済んでいなければ着手しない（バックエンドは最後）。
+順序の確認から始める: `cradle status` で「人間による画面確認」が済んでいるか。済んでいなければ着手しない（バックエンドは画面確認の後）。
 
 ## 手順
 
-0. **初回だけ**: cradle-init スキルの `scripts/init.mjs --project <Root> --backend <package>` で ktlint 独自ルール・`.editorconfig`・`gradle.properties` を敷き、`references/gradle-wiring.md` の断片で lean2kotlin・OpenAPI・jOOQ・ktlint を配線する。
+0. **初回だけ**: 先に `cradle doctor` で lean2kotlin が ok であること（apm が `apm_modules/` に配る。別のチェックアウトは `LEAN2KOTLIN_HOME`）。cradle-init スキルの `scripts/init.mjs --project <Root> --backend <package>` で ktlint 独自ルール・`.editorconfig`・`gradle.properties` を敷き、`references/gradle-wiring.md` の断片で lean2kotlin・OpenAPI・jOOQ・ktlint を配線する。
 1. **影響範囲**: `cradle regen-impact`。変わった生成シンボル・参照する手書き実装・未配線の契約テスト・golden 回帰を読む。想定外の広がりは設計の見直しのサイン（ユーザーに示す）。
 2. **コンパイルエラーが TODO リスト**: `./gradlew compileKotlin compileTestKotlin`。消えた interface・変わった署名を追随する。
 3. **実装**（規約は backend-kotlin / backend-design）:

@@ -3,8 +3,8 @@
 **仕様はハーネスである。ハーネスは決定論的であるべきである。だから Lean で書かれた仕様は効果的なハーネスになる。**
 
 Cradle は、プロダクトオーナーがゆりかごに身を任せるようにプロダクトの開発を最後までやりきるための、
-Claude Code / Codex / Pi / OpenCode V2 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
-探索（イベントストーミング）→ インフラ設計 → Lean 実行可能仕様 → 仕様アニメーション → API 契約 → フロントエンド → 人間による確認 → バックエンド → E2E の
+Claude Code と Codex 向けの配布可能なハーネス（[Microsoft APM](https://github.com/microsoft/apm) パッケージ）。
+探索（イベントストーミング）→ インフラ設計 → Lean 実行可能仕様 → 仕様アニメーション → API 契約 → フロントエンド → 人間による確認 → バックエンド → インフラ実装 → E2E → 本番投入 の
 一方向のパイプラインと、それを守る規約・スキル・エージェント・hook・決定論的な道具を配る。
 
 ## 何が入っているか
@@ -12,10 +12,11 @@ Claude Code / Codex / Pi / OpenCode V2 向けの配布可能なハーネス（[M
 | 種類 | 中身 |
 |---|---|
 | rules（常時） | 芯（順序・正本・道具）、documents、コメント、unslop、生成物、Lean、backend（実装・設計品質）、frontend、API 契約、infra、e2e |
-| skills | `cradle`（status / golden-check / lean-check / regen-impact / unslop）、`spec-query`（Lean を動かして仕様に答える）、`cradle-init`、`ddd`、`lean-domain-model`、`domain-mockup`、`infra-design`、`api-contract`、`backend-implement`、`regen-impact`、`e2e-parity`、`frontend-ux-review`、`sql-perf-review`、`backend-design-review`、`unslop` |
+| skills | `cradle`（status / golden-check / lean-check / regen-impact / unslop）、`spec-query`（Lean を動かして仕様に答える）、`cradle-init`、`ddd`、`lean-domain-model`、`domain-mockup`、`infra-design`、`api-contract`、`frontend`、`backend-implement`、`infra-implement`、`regen-impact`、`e2e-parity`、`frontend-ux-review`、`sql-perf-review`、`backend-design-review`、`unslop` |
 | agents | `ddd-domain-explorer`、`ddd-ux-reviewer`、`lean-domain-modeler`、`frontend-ux-reviewer`、`sql-performance-reviewer`、`backend-design-reviewer`、`unslop-reviewer` |
 | hooks | 生成物・人間専用領域・golden・探索ドキュメントへの直接編集を止める / ビルド成功後にレビューを促す / 止まる前に unslop の error を差し戻す |
 | 骨格 | `cradle.json`、documents のテンプレート、動く最小ドメイン付きの Lean 実行可能仕様（CLI・モックアップ・golden がその場で通る。モックアップは型から入力欄を、用語集から表示名を作る）、CI ワークフロー、backend の ktlint 独自ルール（設計上の作法を検査する 8 本） |
+| 生成器 | `lean2kotlin/`（Lean → Kotlin。Gradle plugin `dev.lean2kotlin` と抽出器。backend フェーズで、apm が配った写し `apm_modules/<owner>/cradle/lean2kotlin` を composite build で参照する） |
 
 ## 導入
 
@@ -23,7 +24,7 @@ Claude Code / Codex / Pi / OpenCode V2 向けの配布可能なハーネス（[M
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml   # Codex なら - codex（両方でもよい）
-apm install asuka1975/cradle#v0.1.0-alpha.7      # タグで固定する
+apm install asuka1975/cradle#v0.1.0-alpha.8      # タグで固定する
 apm compile --single-agents                      # Codex: 規約を 1 枚の AGENTS.md にする（Claude Code では不要）
 ```
 
@@ -34,7 +35,7 @@ apm compile --single-agents                      # Codex: 規約を 1 枚の AGE
 
 ```
 cradle-init --project MyProduct      # 骨格を敷く（cradle.json, .apm/instructions/project.instructions.md, documents/, lean/）
-apm compile [--single-agents]        # 固有の事実を rules / AGENTS.md に写す
+apm install                          # 固有の事実を rules に写す（Codex は apm compile --single-agents で AGENTS.md に）
 cd lean && lake build
 cradle-status                        # 現在地
 ddd                                  # 探索を始める
@@ -42,7 +43,8 @@ ddd                                  # 探索を始める
 
 Codex はプロジェクトを「信頼」したときだけ `.codex/`（hooks・agents・設定）を読み、hooks は起動時のレビューで信頼したものだけが動く。骨格が置く `.codex/config.toml` は AGENTS.md の読込上限（既定 32 KiB）を上げる。
 
-要件: Node 20+、elan / lake（Lean 4）、JDK 21（backend）、pnpm（frontend）。生成器 [lean2kotlin](https://github.com/asuka1975/lean2kotlin) は backend フェーズで使う。
+要件: Node 20+、elan / lake（Lean 4）、JDK 21（backend）、pnpm（frontend）。
+backend フェーズの生成器 lean2kotlin はこのリポジトリの `lean2kotlin/` にある（配線は backend-implement スキル。`cradle doctor` が解決できるかを出す）。
 
 ## 決定論的な道具
 
@@ -55,7 +57,8 @@ Codex はプロジェクトを「信頼」したときだけ `.codex/`（hooks�
 | `cradle regen-impact` | 再生成で変わった生成シンボルと、それを参照する手書き実装・契約テスト |
 | `cradle unslop` | コメント規約・腐ったパス・逃げ言葉・握りつぶし |
 | `cradle ddd-clean-check` | 探索の残骸 |
-| `cradle doctor` | 道具の有無と版 |
+| `cradle doctor` | ハーネスの配線、道具の有無と版、lean2kotlin の解決可否 |
+| `cradle doctor --local` | local スタックのコンテナの鮮度（Created と HEAD） |
 | `contract-check`（api-contract スキル） | Lean のコマンド・画面と openapi の操作が 1 対 1 か |
 | `flows-from-golden`（e2e-parity スキル） | golden から E2E の台本 |
 
@@ -67,7 +70,6 @@ Codex はプロジェクトを「信頼」したときだけ `.codex/`（hooks�
 - [docs/pipeline.md](docs/pipeline.md) — フェーズ・成果物・ゲート
 - [docs/adopting.md](docs/adopting.md) — 新規 / 既存プロジェクトへの導入
 - [docs/decisions.md](docs/decisions.md) — Cradle 自身の設計判断
-- [docs/integrations.md](docs/integrations.md) — Pi / OpenCode V2 統合
 - [docs/monowa-improvements.md](docs/monowa-improvements.md) — 監査で見つけた MonoWa の改善点（パスは monowa リポジトリ基準）
 - [Lean CLI プロトコル](.apm/skills/cradle/references/protocol.md)
 - [cradle.json（設定）](.apm/skills/cradle/references/cradle-json.md)
@@ -79,8 +81,8 @@ apm compile --validate            # 構造検査
 apm install --dry-run --target claude
 apm install --dry-run --target codex
 apm pack                          # Claude Code plugin 形式のバンドル（残る .claude-plugin/ と build/ は消す。残っていると local install が plugin 扱いになり skills が配られない）
-npm run typecheck                  # OpenCode V2 Plugin の型チェック
-npm run test:opencode              # 実際の opencode2 で Plugin の runtime smoke test
+(cd lean2kotlin/generator && ./gradlew test)          # 生成器の単体テスト（Lean 不要）
+(cd lean2kotlin/scaffold-check && ./gradlew test)     # 骨格を生成器に通す回帰検査（elan + JDK 21。src/generated がスナップショット）
 ```
 
 ## ライセンス

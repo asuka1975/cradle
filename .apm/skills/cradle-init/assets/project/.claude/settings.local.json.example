@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node .claude/skills/*/scripts/*)",
+      "Bash(lake build *)", "Bash(lake exe *)", "Bash(lake env *)",
+      "Bash(./gradlew test *)", "Bash(./gradlew build *)", "Bash(./gradlew ktlintCheck *)",
+      "Bash(pnpm lint *)", "Bash(pnpm test *)", "Bash(pnpm typecheck *)", "Bash(pnpm build *)",
+      "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(git add *)", "Bash(git commit *)"
+    ]
+  }
+}

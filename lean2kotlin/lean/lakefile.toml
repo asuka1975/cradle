@@ -1,0 +1,9 @@
+# lean2kotlin — 抽出器(#kotlin_ir が対象の環境を走査して IR JSON を書く)
+# 依存はドメイン→生成側の逆ではなく、生成側がドメインに適合する。対象ドメインは require せず、
+# Gradle plugin が対象ドメインの toolchain で抽出器と抽出ドライバを合成する — 対象にコードを要求しない。
+name = "lean2kotlin"
+defaultTargets = ["Lean2Kotlin"]
+
+[[lean_lib]]
+name = "Lean2Kotlin"
+globs = ["Lean2Kotlin.Extract"]

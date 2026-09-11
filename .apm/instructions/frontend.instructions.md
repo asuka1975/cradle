@@ -13,6 +13,7 @@ applyTo: "frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.css,frontend/**/*.jso
 - コマンド後の遷移先・次の状態を画面で予測しない。読み直した View から決める。
 - 未決（open な HS / MQ）をデザインで埋めない。モデルに無い操作を置かない（反機能一覧は `lean/<Root>/Runtime/Command.lean`）。
 - 利用者が明示的に求めた絞り込みだけは許す。条件は「伏せた件数を出す」「全部を見る場所へ戻れる」。
+- 画面を集約ごと・コマンドごとに割らない。単位は業務のまとまり（frontend スキル）。
 
 ## 口は契約 1 枚
 

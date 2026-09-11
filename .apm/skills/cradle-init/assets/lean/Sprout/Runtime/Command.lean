@@ -26,7 +26,9 @@ structure Actor where
 deriving Repr, DecidableEq
 
 inductive Command where
+  /-- メモを書く。 -/
   | postNote  (c : PostNoteUseCase.Command)
+  /-- メモを閉じる。 -/
   | closeNote (c : CloseNoteUseCase.Command NoteId)
 deriving Repr, DecidableEq
 

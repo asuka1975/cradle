@@ -1,0 +1,8 @@
+# Lean (lake)
+.lake/
+# Gradle
+.gradle/
+build/
+.kotlin/
+# 一時
+*.log

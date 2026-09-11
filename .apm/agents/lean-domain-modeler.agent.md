@@ -27,4 +27,4 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 - `lake build` 成功、`cradle lean-check` OK、`lake exe … init` が ok を返す、`cradle golden-check` の CHANGED は意図した変更だけ（`--update` して理由を報告）。
 - 検出した曖昧さが `model-review.md` に MQ として起票済み。
-- SKILL の報告フォーマットで報告する（対応表・sorry の残数と理由・起票した MQ）。Views や CLI プロトコルの変更がモックアップに影響するなら明記する。
+- SKILL の報告フォーマットで報告する（対応表・sorry の残数と理由・起票した MQ・用語集に無い名前の件数）。Views や CLI プロトコルの変更がモックアップに影響するなら明記する。

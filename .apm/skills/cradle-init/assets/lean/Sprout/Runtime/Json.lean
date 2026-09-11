@@ -12,7 +12,16 @@ open Lean
 deriving instance ToJson, FromJson for NoteId
 deriving instance ToJson, FromJson for UserId
 deriving instance ToJson, FromJson for Sprout.Application.NoteIdGeneratorState
-deriving instance ToJson, FromJson for Sprout.Title
+deriving instance ToJson for Sprout.Title
+
+/-- 題の文字列をそのまま受ける（`{"text": …}` も受ける）。 -/
+instance : FromJson Sprout.Title where
+  fromJson?
+    | .str s => pure ⟨s⟩
+    | j      => do
+      let s ← (← j.getObjVal? "text").getStr?
+      pure ⟨s⟩
+
 deriving instance ToJson, FromJson for Sprout.DomainError
 deriving instance ToJson, FromJson for Sprout.Application.QueryError
 deriving instance ToJson, FromJson for Sprout.Domain.Note
