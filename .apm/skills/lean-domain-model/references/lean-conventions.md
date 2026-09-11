@@ -9,7 +9,7 @@ cradle-init スキルが敷く最小ドメイン（メモを書く・閉じる�
 - 述語は `Bool` を返す関数か `Decidable` が付く形にする（`decide` が効く・`#guard` で固定できる）。
 - 出典参照（`[HS-xxx]` `[イベント#n]`）は実在する記述に限る。定理の docstring は自然言語の記述を全文で持つ（タグだけにしない）。
 - 依存はゼロ（Lean core のみ）。mathlib は入れない。
-- 仕様層（Domain / Application）で `ToJson` / `FromJson` を deriving しない。ワイヤ形式は境界（`Runtime/Json.lean`）の契約。
+- 仕様層（Domain / Application）で `ToJson` / `FromJson` を deriving しない。ワイヤ形式は境界（`Runtime/Json.lean`）の契約。人が打つ表記が内部表現と違う VO は、境界の手書き `FromJson` が文字列 1 本を受ける（`ToJson` は変えない）。
 
 ## 2. 値の市民（`Domain/ValueObject.lean`）
 
@@ -87,7 +87,7 @@ def execute (actor) (fountain) (c) (before) := (validate actor c before).map (ac
 - `Machine.lean`: `Snapshot`（ルートごとのコレクション + 泉の残高）・`check`（per-Root valid + 泉の境界 `bounds`）・`opened`（名義が届いた帰結。既定は何もしない）・`applyCommand`（各腕は UseCase の execute への 1 行）・`apply`。
 - `Reachable.lean`: `Snapshot.Reachable`（checked | step）と `Reachable.check`。腕ごとに `check_of_<root>_add` / `check_of_<root>_update` を用意し、`except_map_eq_ok` と `execute_ok_shape` で結果の形を取り出して適用する。
 - `Views.lean`: 射影と束。`views today s viewer`。口は画面名、`Option`。
-- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` は手書きで平らに固定（変更は golden が検知）。
+- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` は手書きで平らに固定（変更は golden が検知）。人が打つ表記を受ける手書き `FromJson` は、直前の docstring にその表記を書く — `spec-query schemas` が入力欄の注記にする（骨格の `Title`: 文字列 `"買い物"` と `{"text": "買い物"}` の両方を受ける）。
 - `Scenarios.lean`: 名前付き初期状態と `scenarioByName`、`#guard`。
 
 ## 7. 転送（`Laws/Properties.lean`）
@@ -110,6 +110,6 @@ def execute (actor) (fountain) (c) (before) := (validate actor c before).map (ac
 - validate 面の定理に `@[contract]` を付けない。フィールド 0 の `@[actorContext]` を作らない。
 - **契約面に置ける型の語彙**: `Nat` `String` `Bool` `Unit` `List` `Option` `Prod` `Except` `Std.Time.PlainDate` と `<Root>` 配下の structure / inductive だけ。`Int` `Float` `Array` `HashMap` `Fin` `Subtype`・依存型・関数フィールドは契約面（Command / State / View / DomainError / Row）に置かない。
 - **生成器が要求する固定名**: 失敗の語彙は `<Root>.DomainError`、観測モデルは `<Root>RepositoryState`（↔ `<Root>Repository`）、泉の状態は `<X>IdGeneratorState`（↔ `<X>IdGenerator`）、Entity の同一性フィールドは `id`。
-- **Kotlin の名前は Lean の名前から機械的に決まる**（ルート名前空間を落として連結）。衝突・不正な識別子は Lean 側の改名で解く（生成側の上書きに逃げない）。
+- **Kotlin の名前は Lean の名前から機械的に決まる**（宣言名の末尾要素。`UseCase/<X>UseCase/` の型は `<X>` を前置）。衝突・不正な識別子は Lean 側の改名で解く（生成側の上書きに逃げない）。
 - **`<X>UseCase/UseCase.lean` の structure 名は生成区分になる**: `State` = 観測モデル（fixture）、`Result` = 写像対象外、それ以外 = View の DTO。関数フィールドを持つ structure（泉の抽象など）は本番署名から落ちる。
 - **同一性のワイヤ**: `Std.Time` の日付は ISO-8601 文字列、ID は数値なら `Long`、canonical UUID 文字列なら value class に写る。表現の決定はインフラ設計（INFRA-D）。

@@ -15,6 +15,7 @@ def Snapshot.noteRows (s : Snapshot) : List (NoteRow NoteId UserId) := Applicati
 
 /-- 画面の束。フィールド名は画面（UseCase）の名前にそろえる。 -/
 structure Views where
+  /-- メモの一覧。 -/
   notes : Option (List (NoteView NoteId UserId))
 deriving Repr, DecidableEq
 

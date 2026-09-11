@@ -101,8 +101,23 @@ function parseDecl(lines) {
   return { kind: "other" };
 }
 
-/** 入力欄の種類を型名から決める（表示の都合。可否はモデルが決める）。id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクトで wire に乗る。 */
-function kindOf(type, params) {
+/** Runtime/Json.lean の手書き `instance : FromJson <T>` と直前の docstring（人が打つ表記の注記）。`deriving instance` は手書きではない。
+    docstring の無い手書き instance（Snapshot / Actor / Command など、object を受けるもの）は注記の対象外。 */
+function wireHints() {
+  const hints = {};
+  const src = readFileSync(join(cfg.lean.modelDir, "Runtime", "Json.lean"), "utf8");
+  for (const m of src.matchAll(/(?:\/--\s*((?:(?!-\/)[\s\S])*?)\s*-\/\s*)?^instance\s*:\s*FromJson\s+\(?([^\s()]+)/gm)) if (m[1]) hints[m[2]] = m[1];
+  return hints;
+}
+
+/** 型名に合う手書き FromJson の注記。完全一致か `<Root>.` 以下の末尾一致。 */
+function hintOf(type, hints) {
+  const under = type.startsWith(cfg.lean.root + ".") ? type.slice(cfg.lean.root.length + 1) : null;
+  return Object.entries(hints).find(([n]) => type === n || under === n || under?.endsWith("." + n))?.[1];
+}
+
+/** 入力欄の種類を型名から決める（表示の都合。可否はモデルが決める）。id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクトで wire に乗る。手書きの FromJson を持つ型は人が打つ表記の文字列 1 本（hint に注記）。 */
+function kindOf(type, params, hints) {
   let s = type.trim(), optional = false;
   if (/^Option\s+/.test(s)) { optional = true; s = s.replace(/^Option\s+/, "").replace(/^\((.*)\)$/, "$1").trim(); }
   const base = { type: s, optional };
@@ -112,6 +127,8 @@ function kindOf(type, params) {
   if (s === "String") return { ...base, kind: "text" };
   if (/(^|\.)(Date|PlainDate)$/.test(s)) return { ...base, kind: "date" };
   const head = s.split(/\s+/)[0];
+  const hint = hintOf(head, hints);
+  if (hint !== undefined) return { ...base, kind: "text", wire: "string", hint };
   if (params.includes(head) || /Id$/.test(head.split(".").pop())) return { ...base, kind: "id" };
   if (head.startsWith(cfg.lean.root + ".")) return { ...base, kind: "object", ref: head };
   return { ...base, kind: "json" };
@@ -127,6 +144,7 @@ function commandSchemas() {
   }
   const structNames = [...new Set(Object.values(specs).map(s => s.arg && s.arg.split(/\s+/)[0]).filter(Boolean))];
   const printed = printMany(structNames);
+  const hints = wireHints();
   const refs = new Set();
   for (const s of Object.values(specs)) {
     if (!s.arg) { s.fields = []; continue; }
@@ -134,7 +152,7 @@ function commandSchemas() {
     const d = parseDecl(printed[head] ?? []);
     s.type = head;
     if (!d || d.kind !== "structure") { s.fields = null; continue; }
-    s.fields = d.fields.map(f => ({ name: f.name, ...kindOf(f.type, d.params) }));
+    s.fields = d.fields.map(f => ({ name: f.name, ...kindOf(f.type, d.params, hints) }));
     for (const f of s.fields) if (f.kind === "object") refs.add(f.ref);
     delete s.arg;
   }
@@ -143,7 +161,7 @@ function commandSchemas() {
     if (f.kind !== "object") continue;
     const d = parseDecl(printed2[f.ref] ?? []);
     if (d?.kind === "enum") { f.kind = "enum"; f.options = d.options; }
-    else if (d?.kind === "structure") f.fields = d.fields.map(g => ({ name: g.name, ...kindOf(g.type, d.params) })).map(g => g.kind === "object" ? { ...g, kind: "json" } : g);
+    else if (d?.kind === "structure") f.fields = d.fields.map(g => ({ name: g.name, ...kindOf(g.type, d.params, hints) })).map(g => g.kind === "object" ? { ...g, kind: "json" } : g);
     else f.kind = "json";
     delete f.ref;
   }

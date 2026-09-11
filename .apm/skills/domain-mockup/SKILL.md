@@ -21,12 +21,13 @@ description: Use to create, update or run the spec-animation mockup under lean/m
 ## 土台（骨格の汎用 UI）
 
 cradle-init スキルが敷く `public/index.html` は、views の口ごとの表、`/api/meta` の schemas（Lean の Command 構造体の型）から生成した入力欄、用語集（`ubiquitous-language.md` の英語候補 → 用語）による表示名を持つ。判断は持たない。
+人が打つ表記が内部表現と違う値オブジェクトは、`Runtime/Json.lean` の手書き `FromJson`（文字列 1 本を受ける）と docstring の注記で欄になる（schemas の `hint`）。型名の特別扱いを index.html に書かない。
 これは「動く」が「読める」ではない。集約と操作の関係、誰が何をできるかは、ドメインの語彙で並べて初めて見える。
 
 ## 作り込み（必須）
 
 1. `cradle status` で画面の口（Views）を確かめる。口が無い・足りないなら先に lean-domain-model スキルで `Views` に足す（描画は Lean の結果を写すだけ。UI で補わない）。
-2. 画面の単位は **Views の口ごとに 1 画面（タブ）**。名前はユビキタス言語の用語。`null`（見られない）と `[]`（見えたうえで空）を描き分ける。
+2. 画面の単位は **Views の口ごとに 1 画面（タブ）**。名前はユビキタス言語の用語。`null`（見られない）と `[]`（見えたうえで空）を描き分ける。フロントエンドはこの規則を引き継がない（画面の単位は業務のまとまり — frontend スキル）。
 3. 操作の置き場は **コマンドごとに 1 フォーム。対象の行の横に置く**。行の ID はフォームが持ち、人に打たせない。対象を持たない操作（登録など）は口の上に置く。入力欄のラベルは用語、Option は任意入力、列挙は選択肢。
 4. 「誰として」は、シナリオに現れる名義（views に出る人・部署など）の一覧から選ぶ。viewer と actor を同時に切り替える。
 5. 置かないもの: Command に無い操作のボタン（反機能）、段階で隠すボタン、documents で却下されたもの。

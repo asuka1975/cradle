@@ -12,6 +12,7 @@
     - views の口ごとの表。列名は /api/meta の glossary（ユビキタス言語の英語候補 → 用語）で引く。
     - コマンドの入力欄。/api/meta の schemas（Lean の Command 構造体の型）から生成する。
       wire の規約: id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクト、Option の未指定は null。
+      手書きの FromJson を持つ値オブジェクトは文字列 1 本（schemas の hint に人が打つ表記。出どころは Runtime/Json.lean）。
       生成した JSON は下の欄に見え、手で直せる（型から決められない形はそこで直す）。
   domain-mockup スキルはこれを土台に、ドメインの語彙の画面（口ごとの画面・対象の横のフォーム・登場人物の切り替え）を作り込む。
   「誰として」の切り替えはセッションの切り替えであって名義の選択ではない — viewer と actor は必ず同時に動く。
@@ -207,7 +208,7 @@ function inputFor(f, onChange) {
   const on = el("input", { type: "checkbox" }); on.onchange = () => { inp.disabled = !on.checked; onChange(); }; inp.disabled = true;
   return { inp: el("div", { className: "opt" }, on, inp), get: () => on.checked ? get() : null };
 }
-function labelFor(f) { return el("label", {}, document.createTextNode(label(f.name)), el("small", { textContent: ` ${f.optional ? "任意 " : ""}${f.type}` })); }
+function labelFor(f) { return el("label", {}, document.createTextNode(label(f.name)), el("small", { textContent: ` ${f.optional ? "任意 " : ""}${f.type}` }), ...(f.hint ? [el("small", { textContent: ` ${f.hint}` })] : [])); }
 function buildForm(ctor) {
   const box = $("form"); box.replaceChildren();
   const schema = meta.schemas?.[ctor];
