@@ -79,7 +79,7 @@ Agentsのコピーは更新時にも必要。既存の同名エージェント�
 ### 動作と限界
 
 - `permission.evaluate` の `edit` / `shell` を既存hookへ委譲する。`cradle.json` とセッションの作業ディレクトリを利用し、`read` はブロックしない。
-- 探索役の識別はコマンド文字列でなく `event.agent` を使う。
+- 探索役の識別はコマンド文字列でなく `event.agent` を使う。`ddd-domain-explorer.md` で定義した同名のエージェントを実機で起動し、通常のshellは通り、`node ddd.mjs end` は既存hookの理由付きで拒否されることを確認している。任意のID/表示名への変更まで保証するものではない。
 - `execute.after` の成功結果に既存hookの促しを追加する。別のターンは起動しない。
 - OpenCodeの終了検査は未実装。V1との互換性は対象外。
 - 依存SDKは `0.0.0-beta-19425` に固定。実ランタイムsmokeの確認済みCLIは `0.0.0-beta-19135`。両者は同一の版番号ではないので、更新時には組合せを再検証する。
@@ -110,5 +110,6 @@ health、goldenのdeny、探索ドキュメントのdeny/セッション印が�
 実機で確認した入力は `write: {path, content}`、`edit: {path, oldString, newString}`、`shell: {command}`。
 Lean編集・契約編集・Gradle build・lake buildの促し、Gradle cleanでは促さないことを、保存されたツール結果まで確認する。
 Gradle/Leanそのもののビルドはこのsmokeの対象外で、成功メッセージを出すテスト用実行ファイルを使う。モデルへの外部送信は行わない。
+同じsmokeでmarkdown定義の探索役セッションも起動する。shellを設定でallowにした状態で通常コマンドは成功し、中継操作はhookで拒否され、実行確認用ファイルが作られないことを確かめる。質問の往復や `subagent` ツールからの起動はこの検証に含まない。
 
 判定の抽出・共通化は別途検討する。追加した `integrations/hook-client.mjs` は既存CLIを子プロセスで呼び、入出力を変換するだけで、保護パスやビルド判定の規則は持たない。

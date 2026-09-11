@@ -2,7 +2,7 @@
 // モデル応答だけをローカル固定応答にし、OpenCode V2の実ツール・hook・結果保存を検証する。
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,13 +19,14 @@ const plan = [
   { name: "shell", input: { command: "lake build" }, expected: /golden-check/ },
 ];
 let step = 0;
+let currentPlan = plan;
 let modelError;
 const model = createServer(async (req, res) => {
   try {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
-    const next = body.tools?.length ? plan[step] : null;
+    const next = body.tools?.length ? currentPlan[step] : null;
     let delta = { role: "assistant", content: "done" };
     let finish = "stop";
     if (next) {
@@ -53,6 +54,20 @@ try {
   mkdirSync(join(directory, "lean"));
   mkdirSync(join(directory, "bin"));
   mkdirSync(join(directory, "documents/codebase"), { recursive: true });
+  mkdirSync(join(directory, ".opencode/agents"), { recursive: true });
+  // shellの設定denyで成功したように見せない。探索役でもallowからhookで拒否させる。
+  writeFileSync(join(directory, ".opencode/agents/ddd-domain-explorer.md"), `---
+name: ddd-domain-explorer
+description: ローカルsmokeの探索役
+mode: subagent
+permissions:
+  - action: shell
+    resource: "*"
+    effect: allow
+---
+固定応答による探索役ガードの検証。
+`);
+  writeFileSync(join(directory, "ddd.mjs"), 'import { writeFileSync } from "node:fs"; writeFileSync("relay-ran", "ran");\n');
   // ビルド自体は対象外。終了メッセージを出す実行可能ファイルでhookへの配線を検証する。
   writeFileSync(join(directory, "gradlew"), '#!/bin/sh\nprintf "BUILD SUCCESSFUL\\n"\n', { mode: 0o755 });
   writeFileSync(join(directory, "bin/lake"), '#!/bin/sh\nprintf "Build completed successfully\\n"\n', { mode: 0o755 });
@@ -119,6 +134,28 @@ try {
     evidence.push({ tool: call.name, inputKeys: Object.keys(call.state.input).sort(), status: call.state.status, reminder: Boolean(item.expected) });
   }
   assert.equal(readFileSync(join(directory, "lean/Example.lean"), "utf8"), "-- after\n");
+  currentPlan = [
+    { name: "shell", input: { command: "printf ready" } },
+    { name: "shell", input: { command: "node ddd.mjs end" } },
+  ];
+  step = 0;
+  const { data: explorer } = await api("/api/session", { agent: "ddd-domain-explorer", model: { providerID: "smoke", id: "smoke" } });
+  await api(`/api/session/${explorer.id}/prompt`, { text: "Run the local explorer permission fixture." });
+  let explorerMessages;
+  while (Date.now() < deadline) {
+    if (modelError) throw modelError;
+    explorerMessages = (await api(`/api/session/${explorer.id}/message`)).data;
+    if (explorerMessages.some(message => message.type === "assistant" && message.finish === "stop")) break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(explorerMessages?.some(message => message.type === "assistant" && message.finish === "stop"), "Explorer run did not finish");
+  const explorerCalls = explorerMessages.flatMap(message => message.type === "assistant" ? message.content.filter(part => part.type === "tool") : []);
+  assert.equal(explorerCalls.find(call => call.id === "call-smoke-0")?.state.status, "completed", "Explorer shell control must run");
+  const denied = explorerCalls.find(call => call.id === "call-smoke-1");
+  assert.equal(denied?.state.status, "error");
+  assert.match(denied.state.error.message, /探索役.*ddd-domain-explorer/);
+  assert.equal(existsSync(join(directory, "relay-ran")), false, "Denied relay must not execute");
+  evidence.push({ agent: "ddd-domain-explorer", tool: "shell", control: "completed", relay: "denied-by-hook" });
   console.log(JSON.stringify({ cli: health.version, sdk: JSON.parse(readFileSync(join(root, "integrations/opencode/package.json"))).dependencies["@opencode/plugin"], evidence }, null, 2));
 } finally {
   if (child && exited) {
