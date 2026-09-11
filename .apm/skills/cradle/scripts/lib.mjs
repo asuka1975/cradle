@@ -240,3 +240,73 @@ export function fail(msg, code = 1) {
   process.stderr.write(`cradle: ${msg}\n`);
   process.exit(code);
 }
+
+/** 形式化が付けた名前: コマンド構成子・失敗語彙・画面の口。doc は宣言直前の docstring の 1 文目（無ければ ""）。 */
+export function leanVocabulary(cfg) {
+  const targets = [
+    { kind: "コマンド", file: "Runtime/Command.lean", decl: /^\s*inductive\s+Command\b/, member: /^\s*\|\s*(\w+)/ },
+    { kind: "失敗", file: "Domain/Error.lean", decl: /^\s*inductive\s+DomainError\b/, member: /^\s*\|\s*(\w+)/ },
+    { kind: "画面の口", file: "Runtime/Views.lean", decl: /^\s*structure\s+Views\b/, member: /^\s*(\w+)\s*:/ },
+  ];
+  const out = [];
+  for (const t of targets) {
+    const file = join(cfg.lean.modelDir, t.file);
+    if (!existsSync(file)) continue;
+    const raw = readFileSync(file, "utf8");
+    // 宣言の検出はコメントを消した写しで行う（行数は変えない。ブロック（docstring を含む）を先に消してから行コメント）。docstring は元テキストから取る
+    const code = raw.replace(/\/-[\s\S]*?-\//g, (m) => m.replace(/[^\n]/g, "")).replace(/--.*$/gm, "").split("\n");
+    const start = code.findIndex(l => t.decl.test(l));
+    if (start < 0) continue;
+    const indent = code[start].match(/^\s*/)[0].length;
+    for (let i = start + 1; i < code.length; i++) {
+      const m = code[i].match(t.member);
+      if (m) { out.push({ kind: t.kind, name: m[1], doc: docstringBefore(raw, i), file, line: i + 1 }); continue; }
+      // 構成子でもフィールドでもない行が宣言と同じ字下げまで戻ったら宣言の終わり（deriving・次の宣言）
+      if (code[i].trim() && code[i].match(/^\s*/)[0].length <= indent) break;
+    }
+  }
+  return out;
+}
+
+/** 行 index（0 始まり）の直前にある docstring `/-- … -/` の 1 文目（`。` の手前まで）。 */
+function docstringBefore(raw, index) {
+  const before = raw.split("\n").slice(0, index).join("\n").trimEnd();
+  if (!before.endsWith("-/")) return "";
+  const open = before.lastIndexOf("/--");
+  if (open < 0) return "";
+  const body = before.slice(open + 3, -2);
+  if (body.includes("-/")) return "";
+  return body.replace(/\s+/g, " ").trim().split("。")[0];
+}
+
+/** Markdown の表を行ごとに読む: { line（1 始まり）, cells, columns }。columns はその行が属する表の見出し（見出し行 = 次の行が区切り行）。
+    行頭・行末の `|` の外側は数えない（行末の `|` が無くても最後のセルを落とさない）。`\|` は区切りにしない。 */
+export function tableRows(text) {
+  const lines = text.split("\n");
+  const cellsOf = (l) => {
+    const c = l.split(/(?<!\\)\|/).map(x => x.trim());
+    c.shift();
+    if (/\|\s*$/.test(l)) c.pop();
+    return c;
+  };
+  const separator = (l) => /^\s*\|\s*:?-+/.test(l ?? "");
+  const out = [];
+  let columns = [];
+  lines.forEach((l, i) => {
+    if (!l.trimStart().startsWith("|") || separator(l)) return;
+    if (separator(lines[i + 1])) { columns = cellsOf(l); return; }
+    out.push({ line: i + 1, cells: cellsOf(l), columns });
+  });
+  return out;
+}
+
+/** 用語集の英語候補 → 用語。`/`・`、`・`,` で割り、空白を除いて小文字化した名前で引く。 */
+export function glossaryEnglish(cfg) {
+  const map = new Map();
+  for (const line of readFileSync(join(cfg.root, cfg.documents.ddd, "ubiquitous-language.md"), "utf8").split("\n")) {
+    const cells = line.split("|").map(c => c.trim());
+    if (cells.length < 4 || !cells[1] || cells[1] === "用語" || /^-+$/.test(cells[1])) continue;
+    for (const e of cells[2].split(/[\/、,]/).map(x => x.trim()).filter(Boolean)) map.set(e.replace(/\s+/g, "").toLowerCase(), cells[1]);
+  }
+  return map;
+}

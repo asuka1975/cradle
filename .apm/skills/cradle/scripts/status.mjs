@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -18,13 +18,13 @@ const phase = (name, state, facts, next) => s.phases.push({ name, state, facts, 
 const dddDir = cfg.documents.ddd;
 const files = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"];
 const present = files.filter(f => existsSync(R(`${dddDir}/${f}`)));
+const hsOpen = countRows(read(`${dddDir}/hotspots.md`), "open");
+const uxOpen = countRows(read(`${dddDir}/ux-review.md`), "open");
+const mqOpen = countRows(read(`${dddDir}/model-review.md`), "open");
 if (present.length === 0) phase("探索 (DDD)", "未着手", [`${dddDir}/ が無い`], "cradle-init スキルで骨格を作り、ddd スキルで探索を始める");
 else {
   const tl = read(`${dddDir}/event-timeline.md`) ?? "";
   const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
-  const hsOpen = countRows(read(`${dddDir}/hotspots.md`), "open");
-  const uxOpen = countRows(read(`${dddDir}/ux-review.md`), "open");
-  const mqOpen = countRows(read(`${dddDir}/model-review.md`), "open");
   const openQ = existsSync(R(`${dddDir}/questions.md`));
   phase("探索 (DDD)", events ? "進行中" : "着手済", [`出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${files.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
     mqOpen ? `ddd スキルで open の MQ ${mqOpen} 件を先に検証する（形式化を止めている問い）` : hsOpen ? `ddd スキルで open の HS ${hsOpen} 件を掘る` : "次の探索テーマを決める、または次フェーズへ");
@@ -34,9 +34,12 @@ else {
 const infraDesign = cfg.documents.infraDesign;
 if (!existsSync(R(infraDesign))) phase("インフラ設計", "未着手", [`${infraDesign}/ が無い`], "infra-design スキルでモデルから非機能要件と決定（INFRA-D）を導く");
 else {
-  const md = walk(R(infraDesign), { ext: [".md"] }).map(f => readFileSync(f, "utf8")).join("\n");
-  const d = (md.match(/INFRA-D-\d+/g) ?? []).length, q = (md.match(/\|\s*INFRA-Q-\d+\s*\|/g) ?? []).length;
-  phase("インフラ設計", d ? "着手済" : "骨格のみ", [`決定 INFRA-D の言及 ${d}`, `未決 INFRA-Q ${q} 件`], q ? "未決 INFRA-Q をユーザー判断で閉じる" : "—");
+  const rows = walk(R(infraDesign), { ext: [".md"] }).flatMap(f => tableRows(readFileSync(f, "utf8")));
+  const d = rows.filter(r => /^INFRA-D-\d+$/.test(r.cells[0])).length;
+  // 未決 = 状況セル（その行の表の見出しにある `状況` の位置。無ければ 4 番目）が空か open / 未決 で始まる行
+  const open = rows.filter(r => /^INFRA-Q-\d+$/.test(r.cells[0])).filter(r => { const i = r.columns.indexOf("状況"); const v = r.cells[i < 0 ? 3 : i] ?? ""; return !v || /^(open|未決)/.test(v); }).map(r => r.cells[0]);
+  phase("インフラ設計", d ? "着手済" : "骨格のみ", [`決定 INFRA-D ${d} 件`, `未決 INFRA-Q ${open.length} 件${open.length ? `（${open.join(", ")}）` : ""}`],
+    open.length ? `未決 INFRA-Q ${open.length} 件をユーザー判断で閉じる（状況列に 決着。INFRA-D-nnn）` : "—");
 }
 
 // 3. Lean モデル
@@ -82,12 +85,13 @@ else {
   else phase("API 契約 (OpenAPI)", "着手済", [`操作 ${ops} 件`, `frontend 生成クライアント ${feGen ? "あり" : "なし"}`], feGen ? "—" : `frontend で ${cfg.frontend.genApi}`);
 }
 
-// 5. フロントエンド
-if (!existsSync(R(cfg.frontend.dir))) phase("フロントエンド", "未着手", [], "画面を Lean CLI 相手に作り、人間が触って確かめる");
+// 5. フロントエンド（材料: 業務の流れを止めている問いが無いこと）
+const flowFact = hsOpen || mqOpen ? `open の HS ${hsOpen} / MQ ${mqOpen}（業務の流れを止めている問いがあれば先に閉じる）` : "open の HS / MQ なし";
+if (!existsSync(R(cfg.frontend.dir))) phase("フロントエンド", "未着手", [flowFact], "frontend スキルで画面を業務のまとまりごとに作る（相手は Lean CLI）");
 else {
   const src = walk(R(`${cfg.frontend.dir}/src`), { ext: [".ts", ".tsx"] });
   const tests = src.filter(f => /\.test\.tsx?$/.test(f)).length;
-  phase("フロントエンド", "着手済", [`src ${src.length} ファイル（テスト ${tests}）`], "/frontend-ux-review で体験を確かめる");
+  phase("フロントエンド", "着手済", [`src ${src.length} ファイル（テスト ${tests}）`, flowFact], "/frontend-ux-review で体験を確かめる");
 }
 
 // 6. バックエンド
@@ -103,8 +107,21 @@ else {
     !gen.length ? `${cfg.backend.regenerate} で生成` : wired < abstractNames.length ? `未配線の契約テスト ${abstractNames.length - wired} 件を具象クラスで繋ぐ` : "cradle regen-impact で追随漏れを確かめる");
 }
 
-// 7. E2E
-if (!existsSync(R(cfg.e2e.dir))) phase("E2E（Lean × REST の一致）", "未着手", [], "バックエンド追随後に e2e-parity スキルで締める");
+// 7. インフラ実装（local スタック。E2E の前提）
+// 投入表 = documents/infra-design/README.md の「## 投入」節の local / prod 行。セルは 未 か 済（YYYY-MM-DD）
+const deploySec = (read(`${infraDesign}/README.md`) ?? "").split(/^## /m).find(s => s.startsWith("投入")) ?? "";
+const deployed = (env) => deploySec.match(new RegExp(`^\\|\\s*\`?${env}\`?\\s*\\|([^|]*)\\|`, "m"))?.[1].trim() ?? null;
+const deployFact = (env, v) => v === null ? "投入表が無い（README の末尾に骨格と同じ「投入」の節を足す）" : `投入表 ${env}: ${v}`;
+const local = deployed("local"), prod = deployed("prod");
+const hasInfra = existsSync(R(cfg.infra.dir));
+phase("インフラ実装", hasInfra ? "着手済" : "未着手",
+  [hasInfra ? `${cfg.infra.dir}/ ${walk(R(cfg.infra.dir)).length} ファイル` : `${cfg.infra.dir}/ が無い`, `infra.up ${cfg.infra.up ? `あり（${cfg.infra.up}）` : "未設定"}`, `infra.containers ${(cfg.infra.containers ?? []).length} 件`, deployFact("local", local)],
+  !hasInfra ? "backend 追随後に infra-implement スキルで local スタックを作る"
+    : !cfg.infra.up ? "cradle.json の infra.up に 1 コマンドを書く"
+    : !local?.startsWith("済") ? "infra.up で立て、cradle doctor --local が fresh になったら投入表の local を済にする" : "—");
+
+// 8. E2E
+if (!existsSync(R(cfg.e2e.dir))) phase("E2E（Lean × REST の一致）", "未着手", [], "インフラ実装（local スタック）の後に e2e-parity スキルで締める");
 else {
   const fromGolden = existsSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`)) ? (JSON.parse(readFileSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`), "utf8")).flows ?? []).length : 0;
   const scenDir = R(`${cfg.e2e.dir}/scenarios`);
@@ -112,7 +129,10 @@ else {
   phase("E2E（Lean × REST の一致）", "着手済", [`golden 由来の台本 ${fromGolden} 本`, `その他の台本 ${others} 本`], fromGolden ? "pnpm test で差分ゼロを確かめる" : "flows-from-golden で台本を起こす");
 }
 
-// 8. 申し送り
+// 9. 本番投入（E2E 合格の後）
+phase("本番投入", prod?.startsWith("済") ? "投入済" : "未投入", [deployFact("prod", prod)], prod?.startsWith("済") ? "—" : "E2E 合格後、サンドボックスで一度 apply し投入表の prod を済にする");
+
+// 10. 申し送り
 const notes = existsSync(R(cfg.documents.aiNotes)) ? readdirSync(R(cfg.documents.aiNotes)).filter(f => f.endsWith(".md")).length : 0;
 s.aiNotes = notes;
 

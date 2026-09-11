@@ -5,11 +5,12 @@
 //     既定は --diff（HEAD との差分 + 未追跡ファイル）。
 //
 // 規則（cradle.json の unslop.disable で個別に切れる / unslop.extraHedges で語を足せる / unslop.skipFiles で見ないファイル / unslop.ignorePaths で実在しなくてよいパス）:
-//   comment-status   [error] コードのコメントにドメイン事実のステータス語（open/resolved/反映済/却下/未決）
+//   comment-status   [error] コードのコメントにドメイン事実のステータス語（open / resolved / unresolved / 反映済 / 却下 / 未決 / 検証済 / 未検証）
 //   comment-domain-id[error] コードに documents の ID（HS-/UX-/MQ-/ADR-/INFRA-/イベント#）— 参照は documents → code の一方向。
 //                            例外は Lean モデル（形式化の出典として持てる）。その代わり:
 //   lean-ref-missing [error] Lean が引く出典 ID が documents に無い
-//   lean-ref-retracted[warn] Lean が引く出典 ID が撤回・却下済み
+//   lean-ref-retracted[warn] Lean が引く出典 ID が撤回・却下済み（状態列の値、状態列の無い表では最後の列の先頭で判定）
+//   lean-name-unlisted[warn] 形式化が付けた名前（コマンド構成子・失敗語彙・画面の口）に用語集の行が無い（骨格のサンプルの間は見ない）
 //   comment-history  [warn]  コードのコメントに日付・経緯（「2026-08-21 に撤回」等）— 経緯は documents の持ち物
 //   comment-ai-notes [warn]  コードから ai-notes を根拠として引く — ai-notes は規約ではない
 //   todo-bare        [warn]  TODO/FIXME/HACK に理由が無い（TODO(proof): 形式は可）
@@ -23,7 +24,7 @@
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, extname, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, git, fail, globToRegExp } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, git, fail, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
 const cfg = loadConfig();
@@ -89,7 +90,7 @@ function inString(line, idx) {
 }
 
 const HEDGES = ["たぶん", "おそらく", "とりあえず", "一旦", "仮に", "暫定的に", "多分", "should work", "should be fine", "probably", "maybe", "hopefully", "I think", "for now", "quick fix", "temporary hack", ...(cfg.unslop.extraHedges ?? [])];
-const STATUS = /\b(open|resolved|unresolved)\b|反映済|却下|未決|検証済|未検証|保留中/;
+const STATUS = /\b(open|resolved|unresolved)\b|反映済|却下|未決|検証済|未検証/;
 const DOMAIN_ID = /\b(HS|UX|MQ|ADR|INFRA-[DAQ]|L2K-Q|FE-Q)-\d{3}\b|イベント#\d+/;
 const HISTORY = /(?:20\d{2}-\d{2}-\d{2}|20\d{6}(?:-\d{2})?)\s*(?:に|の|時点|版|裁定|改訂|移行|決定|撤回)|に撤回|に改訂|に廃止|に確定|の経緯|議論の結果|裁定/;
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{274C}]/u;
@@ -111,24 +112,37 @@ function pathExistsSomewhere(p, fromFile) {
   return allProjectFiles.some(f => f.endsWith(suffix) || f === p);
 }
 
-/** documents/ddd の ID 台帳: ID → 行のステータス語（撤回・却下を拾う）。 */
+/** documents の ID 台帳: ID → { cells, columns, statusIdx }。columns は表の見出し、statusIdx は `状態` / `状況` 列の位置（無い表は null）。 */
 let ledger = null;
 function lookupId(id) {
   if (!ledger) {
     ledger = new Map();
     for (const f of walk(join(cfg.root, cfg.documents.dir), { ext: [".md"] })) {
-      for (const l of readFileSync(f, "utf8").split("\n")) {
-        const m = l.match(/^\|\s*((?:HS|UX|MQ|ADR|INFRA-[DAQ])-\d{3})\s*\|/);
-        if (m && !ledger.has(m[1])) ledger.set(m[1], l);
-        for (const ev of l.matchAll(/^\|\s*(\d+(?:\.\d+)?[a-z]?)\s*\|/g)) if (/event-timeline/.test(f)) ledger.set(`イベント#${ev[1]}`, l);
+      for (const r of tableRows(readFileSync(f, "utf8"))) {
+        const idx = r.columns.findIndex(c => c === "状態" || c === "状況");
+        const entry = { cells: r.cells, columns: r.columns, statusIdx: idx < 0 ? null : idx };
+        const first = r.cells[0] ?? "";
+        if (/^(?:HS|UX|MQ|ADR|INFRA-[DAQ])-\d{3}$/.test(first) && !ledger.has(first)) ledger.set(first, entry);
+        if (/event-timeline/.test(f) && /^\d+(?:\.\d+)?[a-z]?$/.test(first)) ledger.set(`イベント#${first}`, entry);
       }
     }
   }
   return ledger.get(id) ?? null;
 }
 
+/** 撤回・却下の判定。状態列があればその値が `撤回` / `却下` で始まるとき、無い表では最後の列（見出しで決める）の先頭が `撤回:` のとき。見た列と値を返す。 */
+function retractedBy(entry) {
+  if (entry.statusIdx !== null) {
+    const value = entry.cells[entry.statusIdx] ?? "";
+    return /^(撤回|却下)/.test(value) ? `${entry.columns[entry.statusIdx]}: ${value}` : null;
+  }
+  const idx = entry.columns.length - 1;
+  const value = entry.cells[idx] ?? "";
+  return /^撤回[:：]/.test(value) ? `${entry.columns[idx]}: ${value}` : null;
+}
+
 /** 実在しなくて当然のパス: ビルド成果物・一時ファイル・cradle.json の unslop.ignorePaths（glob）。 */
-const IGNORED_PATHS = [/^(build|dist|node_modules|\.lake|target|out)\//, /\/(build|dist|node_modules|\.lake|target)\//, /questions\.md$/, /\.session$/, /(^|\/)lake-manifest\.json$/,
+const IGNORED_PATHS = [/^(build|dist|node_modules|\.lake|target|out)\//, /\/(build|dist|node_modules|\.lake|target)\//, /questions\.md$/, /naming\.md$/, /\.session$/, /(^|\/)lake-manifest\.json$/,
   ...((cfg.unslop.ignorePaths ?? []).map(globToRegExp))];
 
 const findings = [];
@@ -136,7 +150,8 @@ const add = (rule, severity, file, line, message) => { if (!disabled.has(rule)) 
 
 // APM が生成する lockfile は配布物のパス一覧で、散文ではない
 const SKIP_FILES = ["apm.lock.yaml", ...(cfg.unslop.skipFiles ?? [])].map(globToRegExp);
-for (const file of candidateFiles()) {
+const files = candidateFiles();
+for (const file of files) {
   const relPath = rel(cfg.root, file);
   if (SKIP_FILES.some(re => re.test(relPath))) continue;
   const ext = extname(file);
@@ -182,7 +197,7 @@ for (const file of candidateFiles()) {
           const id = m[1] ?? m[2];
           const row = lookupId(id);
           if (!row) add("lean-ref-missing", "error", file, c.line, `出典 ${id} が documents に見当たらない — 実在しない記述の引用`);
-          else if (/撤回|却下/.test(row)) add("lean-ref-retracted", "warn", file, c.line, `出典 ${id} は撤回・却下されている — 根拠が消えたまま残っていないか確かめる`);
+          else { const by = retractedBy(row); if (by) add("lean-ref-retracted", "warn", file, c.line, `出典 ${id} は撤回・却下されている（${by}）— 根拠が消えたまま残っていないか確かめる`); }
         }
       } else add("comment-domain-id", "error", file, c.line, "コードから documents の ID を引いている — 参照は documents → code の一方向（Lean モデルだけが出典を持てる）");
     }
@@ -221,6 +236,18 @@ for (const file of candidateFiles()) {
       }
       if (/console\.(log|debug)\(/.test(l) && relPath.startsWith(cfg.frontend.dir + "/src/") && !/\.test\.|\/test\//.test(relPath)) add("console-log", "warn", file, i + 1, "本番コードの console.log");
     });
+  }
+}
+
+// lean-name-unlisted: 形式化が付けた名前に用語集の行があるか。骨格のサンプルが残る間は名前もサンプルなので見ない
+{
+  const named = leanVocabulary(cfg).filter(v => files.includes(v.file));
+  if (named.length && !scaffoldSampleFiles(cfg).length) {
+    const glossary = glossaryEnglish(cfg);
+    for (const v of named) {
+      if (glossary.has(v.name.toLowerCase())) continue;
+      add("lean-name-unlisted", "warn", v.file, v.line, `用語集に「${v.name}」の行が無い（${v.kind}${v.doc ? `。暫定: ${v.doc}` : ""}）— 次の探索セッションで用語と英語候補を確かめる`);
+    }
   }
 }
 
