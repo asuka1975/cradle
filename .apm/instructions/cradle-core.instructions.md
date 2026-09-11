@@ -12,8 +12,8 @@ description: Cradle の芯 — 仕様はハーネスであり、ハーネスは�
   スキルは Claude Code では `/名前`、Codex では `$名前` で呼ぶ。規約もスキルも以下では名前だけで書く。
 - **現在地は `cradle status` が正。** 作業を始める前に一度走らせ、どのフェーズにいるかを確かめる。
 - **開発の順序**: 探索（ddd）→ インフラ設計（infra-design）→ Lean 化（lean-domain-model）→ モックアップで確認（domain-mockup）
-  → API 契約（api-contract）→ フロントエンド（相手は Lean CLI）→ **人間による画面確認** → バックエンド（backend-implement）→ E2E（e2e-parity）。括弧内はスキル名。
-  バックエンドが最後なのは、モデルの正しさは人間が画面で動かして初めて分かるから。
+  → API 契約（api-contract）→ フロントエンド（frontend。相手は Lean CLI）→ **人間による画面確認** → バックエンド（backend-implement）→ インフラ実装（infra-implement）→ E2E（e2e-parity）→ 本番投入（infra-implement）。括弧内はスキル名。
+  バックエンドが画面確認の後なのは、モデルの正しさは人間が画面で動かして初めて分かるから。
   モデルを変えた直後にバックエンドがコンパイルできない期間は正常で、それを理由に先回りしない。
   修正点が出たら戻る先は Lean の 1 か所。下流を先に触らない。
 - **決まっていないことは実装しない。** ドメインの事実は `documents/ddd/` の正式ドキュメント（event-timeline / hotspots の resolved / ubiquitous-language の確定）にある裏付けだけを根拠にする。

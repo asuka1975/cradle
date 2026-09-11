@@ -15,4 +15,5 @@ applyTo: "infra/**,documents/infra-design/**,backend/Dockerfile,frontend/Dockerf
 - 秘密は state・ログ・リポジトリに載せない。TLS の既定を fail-open にしない（証明書未設定で平文に倒れる既定値を置かない）。
 - 最小権限（非 root コンテナ、必要な IAM だけ、既定で ECS Exec を開けない）。利用者の同一性の器（ユーザープール等）は削除保護を付ける。
 - 監視は 5xx 率・応答時間・稼働数・ログ由来エラーのアラームと通知先。
-- 本番イメージは CI で焼く。開発者端末とリポジトリ外の依存に頼らない。local のコンテナは作り直しの前に鮮度（Created と HEAD の時刻）を確かめる。
+- 本番イメージは CI で焼く。開発者端末とリポジトリ外の依存に頼らない。
+- local スタックは `cradle.json` の `infra.up` の 1 コマンドで立てる。コンテナ名を `infra.containers` に書き、作り直しの前に `cradle doctor --local` で鮮度（Created と HEAD の時刻）を確かめる。

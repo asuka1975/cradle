@@ -9,7 +9,7 @@ tools: Bash, Read, Grep, Glob, mcp__plugin_playwright_playwright__browser_naviga
 
 # 先に読む（物差し）
 
-frontend 規則（画面の規約 — 一般的な UX の定石より優先）、`frontend/README.md`（あれば — 手順と見た目の根拠）、`documents/ddd/ubiquitous-language.md`（文言の物差し）、`documents/ddd/hotspots.md` の open と `model-review.md` の open な MQ（決まっていないこと）、`lean/<Root>/Runtime/Command.lean` の反機能一覧（意図的に無い操作）。
+frontend 規則（画面の規約 — 一般的な UX の定石より優先）、`frontend/README.md`（あれば — 手順・見た目の根拠・画面 ↔ 仕事（主体）↔ 口・コマンドの対応表）、`documents/ddd/event-timeline.md`（主体ごとの流れ。観点 I の物差し）、`documents/ddd/ubiquitous-language.md`（文言の物差し）、`documents/ddd/hotspots.md` の open と `model-review.md` の open な MQ（決まっていないこと）、`lean/<Root>/Runtime/Command.lean` の反機能一覧（意図的に無い操作）。
 `documents/ai-notes/` は根拠に引かない。
 
 # してはならない指摘
@@ -41,6 +41,7 @@ E 文言（業務の言葉と一致・拒否の理由が意味の通る文・次
 F アクセシビリティ（キーボード一巡・フォーカスリング・タブ順・role / aria・色だけで伝えない・コントラスト・200% と狭い幅・reduced-motion・タップ標的・図の代替）
 G レイアウト（狭い幅・長い文字列・数と日付の揃え）
 H 一貫性（2 つの相手で体験が変わらない・色は役割で・昼と宵・体験を留める試験・README と画面の食い違い）
+I 画面の割り方（仕事の形になっているか・集約やコマンドの写しになっていないか・画面に無いものの番号を手で打たせていないか）
 
 # 誤検出の抑制
 
