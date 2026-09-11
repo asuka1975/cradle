@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ddd-clean-check — 探索セッション（ddd スキル）が残したプローブ・問いかけファイル・セッション印が消えていることを機械で確かめる。
+// ddd-clean-check — 探索セッション（ddd スキル）が残したプローブ・問いかけファイル・命名の確認・セッション印が消えていることを機械で確かめる。
 //   ddd-clean-check [--build]
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ const opts = parseArgs(process.argv.slice(2), { build: "bool", json: "bool" });
 const cfg = loadConfig();
 const problems = [];
 const ddd = join(cfg.root, cfg.documents.ddd);
-for (const f of ["questions.md", ".session"]) if (existsSync(join(ddd, f))) problems.push(`${cfg.documents.ddd}/${f} が残っています`);
+for (const f of ["questions.md", "naming.md", ".session"]) if (existsSync(join(ddd, f))) problems.push(`${cfg.documents.ddd}/${f} が残っています`);
 for (const f of [...walk(cfg.lean.rootDir, { ext: [".lean", ".html", ".mjs"] })]) {
   const text = readFileSync(f, "utf8");
   const m = text.match(/probe-[\w-]+/);

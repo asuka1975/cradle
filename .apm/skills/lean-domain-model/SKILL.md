@@ -14,7 +14,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 |---|---|
 | `ubiquitous-language.md` | 型名・フィールド名の源（英語候補をそのまま識別子に）。「確定」だけ型にする |
 | `event-timeline.md` | 更新系イベント 1 つ = UseCase 1 ディレクトリ。主体「サイト」のイベントは execute の帰結 |
-| `hotspots.md` | resolved の結論だけを不変条件に。open はモデル化しない |
+| `hotspots.md` | resolved の結論だけを不変条件に。状態 `撤回` の結論は使わない。open はモデル化しない |
 | `ux-review.md` | 「却下」は反機能として固定。「反映済」は二重取り込みに注意。open は不可 |
 | `model-review.md` | 自分の起票の帳簿。反映済 / 却下になった MQ の暫定解釈を確定し `-- 起票候補` を出典参照に置き換える |
 
@@ -33,13 +33,13 @@ description: Use to create, update or verify the Lean 4 executable specification
 ### 差分更新（セッション後）
 
 1. `git diff` で documents の変更点（新 resolved HS・新イベント・却下 / 反映された UX・MQ の状態変化）を特定する。
-2. 影響するモジュールだけを更新する。resolved が撤回・変更されたら旧結論に基づく型・定理を必ず削除・改訂する（出典 ID を grep）。
+2. 影響するモジュールだけを更新する。resolved が状態 `撤回` になったか結論が変わったら、旧結論に基づく型・定理を必ず削除・改訂する（出典 ID を grep）。
 3. `lake build` → `cradle lean-check` → `cradle golden-check`。証明が壊れたら、それは documents とモデルの不整合の検知が機能した瞬間なので報告に含める。golden の変化は意図したものだけ `--update`。
 
 ### コマンド（更新系）を増やす
 
 `Application/UseCase/<名前>UseCase/{Command,UseCase}.lean` → 失敗の語彙が要れば `Domain/Error.lean` → 対象 Entity にふるまいと `@[contract]` 定理 →
-`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ →
+`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ（人が打つ表記が違う値は手書き FromJson + docstring）→
 `Runtime/Reachable.lean` の check 保存に 1 腕 → `Scenarios.lean` に `#guard`。
 
 ### 画面（参照系）を増やす
@@ -53,7 +53,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 
 ## マッピング
 
-- 確定した用語は英語候補で型・フィールドに。英語候補が空の用語は文脈から命名し、日本語の原語を docstring に残す。
+- 確定した用語は英語候補で型・フィールドに。英語候補が空の用語は文脈から命名し、日本語の原語を docstring に残す。作った名前は用語集に無いので、docstring の 1 文目がそのまま暫定の呼び名として探索に戻る（`cradle unslop` の lean-name-unlisted が列挙し、`naming.md` に写る）。用語集の英語候補が識別子と違う行を見つけたら識別子を改名する（用語集 → Lean の一方向）。
 - 同一性が探索で確定しているものは構造で表す（同名の並存は「防がない」のではなく「同一性に関与しないから当然」）。定理が `rfl` で済むならモデルが正しい証拠。
 - resolved HS は (a) 型で表現不能にする (b) per-Root の `valid` にする (c) 集約ローカルの定理にする、の順で割り当てる。
 - 却下された UX 提案は反機能として `Runtime/Command.lean` の一覧に書き、コマンドが無いこととフレーム定理で固定する。
@@ -73,6 +73,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 - 更新モジュール: …
 - ビルド: 成功 / 失敗（原因）  lean-check: OK / NG  golden-check: 全一致 / CHANGED n 件（意図: …）
 - 証明状況: sorry n 件（一覧と TODO 理由）
+- 用語集に無い名前: n 件（cradle unslop --all の lean-name-unlisted）
 - 反機能の防波堤: 追加 / 更新した「存在しないこと」
 - 起票した MQ（model-review.md に起票済み）: …
 ```
