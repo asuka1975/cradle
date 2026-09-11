@@ -1,0 +1,84 @@
+name: cradle
+on: [push, pull_request]
+jobs:
+  # primitives（chatmodes / instructions）の検証
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install apm
+        run: |
+          curl -sSL https://aka.ms/apm-unix | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: apm compile --validate
+
+  # 生成器の単体テスト（Lean 不要）
+  generator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: cd lean2kotlin/generator && ./gradlew --no-daemon test
+
+  # 骨格を生成器に通し、生成物がコミット済みのものと一致することを見る
+  scaffold:
+    runs-on: ubuntu-latest
+    env:
+      LEAN2KOTLIN_HOME: ${{ github.workspace }}/lean2kotlin
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: install elan
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - uses: actions/cache@v5
+        with:
+          path: lean2kotlin/lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/**/*.lean', 'lean2kotlin/lean/**/*.lean') }}
+          restore-keys: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-
+      - name: scaffold check
+        run: cd lean2kotlin/scaffold-check && ./gradlew --no-daemon test
+      - name: generated is committed
+        run: test -z "$(git status --porcelain -- lean2kotlin/scaffold-check/src/generated)" || { git status --porcelain -- lean2kotlin/scaffold-check/src/generated; exit 1; }
+
+  # 消費側スモーク: このリポジトリを local path で apm install し、init.mjs で敷いた骨格を lake build と cradle の検査に通す
+  consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: install apm
+        run: |
+          curl -sSL https://aka.ms/apm-unix | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: install elan
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: lay a consumer
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke" && git init -q
+          printf 'name: smoke\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm:\n    - %s\n' "$GITHUB_WORKSPACE" > apm.yml
+          apm install
+          node .claude/skills/cradle-init/scripts/init.mjs --project Demo
+          apm install   # 骨格の project.instructions.md を rules に写す（無いと unslop が stale-path で落ちる）
+      - name: lake build
+        run: cd "$RUNNER_TEMP/smoke/lean" && lake build
+      - name: cradle checks
+        run: |
+          cd "$RUNNER_TEMP/smoke"
+          CRADLE=.claude/skills/cradle
+          node "$CRADLE/scripts/cradle.mjs" lean-check
+          node "$CRADLE/scripts/cradle.mjs" golden-check
+          node "$CRADLE/scripts/cradle.mjs" unslop --all

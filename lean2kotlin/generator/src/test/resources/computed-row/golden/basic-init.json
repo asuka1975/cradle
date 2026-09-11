@@ -1,0 +1,14 @@
+{
+  "ok": {
+    "state": {
+      "orders": [
+        {"id": {"id": 0}, "lines": [{"sku": "apple"}, {"sku": "pear"}]}
+      ]
+    },
+    "views": {
+      "orders": [
+        {"id": {"id": 0}, "total": 2}
+      ]
+    }
+  }
+}

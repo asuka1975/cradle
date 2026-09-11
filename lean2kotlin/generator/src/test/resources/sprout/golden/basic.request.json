@@ -1,0 +1,39 @@
+{
+  "init": {
+    "cmd": "init",
+    "scenario": "basic",
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01"
+  },
+  "flow": {
+    "cmd": "flow",
+    "scenario": "basic",
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "commands": [
+      {
+        "postNote": {
+          "title": {
+            "text": "新しいメモ"
+          }
+        }
+      },
+      {
+        "closeNote": {
+          "note": {
+            "id": 0
+          }
+        }
+      }
+    ]
+  }
+}
