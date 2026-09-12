@@ -6,12 +6,11 @@ Pi/OpenCodeの子エージェントへのガード適用と探索の質問中継
 ## 共通の前提
 
 Pi/OpenCodeでも **APMによる導入が必要**。Pi Packageだけではプロジェクトの規約や骨格を用意しない。
-この統合はリリース前のため、以下はPRブランチを使う例。リリース後は検証したタグに固定する。
 
 ```bash
 # 消費側のプロジェクトで実行。既存のapm.ymlがあればtargetsにcodexを追加する。
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - codex\ndependencies:\n  apm: []\n' > apm.yml
-apm install asuka1975/cradle#feat/pi-opencode-harness
+apm install asuka1975/cradle#v0.1.0-alpha.9
 apm compile --single-agents
 ```
 
