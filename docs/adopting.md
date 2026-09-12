@@ -1,5 +1,10 @@
 # 導入
 
+## Pi / OpenCode V2（プレビュー）
+
+APMでCodex向けの規約・スキルを配り、その上に追加の統合を読み込む。
+[Pi / OpenCode V2 導入手順](integrations.md)に、消費側の設定パス・依存関係・未検証の範囲を記載している。
+
 ## 新規プロダクト
 
 1. `apm init` → `apm.yml` の `targets` に `claude` か `codex`（両方でもよい）、`apm install asuka1975/cradle`。Codex はさらに `apm compile --single-agents`（規約を 1 枚の AGENTS.md にする）。

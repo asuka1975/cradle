@@ -1,0 +1,19 @@
+{
+  "name": "cradle-opencode-plugin",
+  "description": "Cradle harness plugin for OpenCode V2",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@opencode/plugin": "0.0.0-beta-19425"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  }
+}

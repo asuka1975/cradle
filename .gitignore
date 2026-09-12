@@ -2,3 +2,4 @@
 /.claude/
 /.claude-plugin/
 /build/
+node_modules/
