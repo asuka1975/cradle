@@ -164,6 +164,47 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `rootCollectionOf は Note の観測モデルと集約の列のフィールドを引く`() {
+		val rc = k.rootCollectionOf(td(note))
+		assertEquals("Sprout.Application.NoteRepositoryState", rc?.state?.lean)
+		assertEquals("notes", rc?.coll?.name)
+		assertEquals(null, k.rootCollectionOf(td(title)))
+	}
+
+	@Test
+	fun `uniqueKeysOf は観測モデルの制約を集約のフィールドへ解決する`() {
+		val rc = k.rootCollectionOf(td(note))!!
+		val keys = k.uniqueKeysOf(rc.state, rc.coll)
+		assertEquals(listOf("uniqueIds", "uniqueTitles"), keys.map { it.constraint.name })
+		assertEquals(listOf("id", "title"), keys.map { it.field.name })
+		assertTrue(k.uniqueKeysOf(td(note), (td(note).shape as IrShape.Structure).fields.first()).isEmpty())
+	}
+
+	@Test
+	fun `arbOfField は同一性の制約を二重に掛けず、listArb は宣言された制約で間引く`() {
+		val rc = k.rootCollectionOf(td(note))!!
+		assertEquals("Arb.list(arbNote(), 0..5).map { xs -> xs.distinctBy { x -> x.id }.distinctBy { x -> x.title } }",
+			k.arbOfField(rc.state, rc.coll))
+		val listT = IrType.ListOf(IrType.Ref(note))
+		val closedKey = Kotlinize.UniqueKey(
+			IrConstraint("unique", "uniqueClosed", "notes", "closed"),
+			(td(note).shape as IrShape.Structure).fields.single { it.name == "closed" })
+		assertEquals(
+			"Arb.list(arbNote(), size).map { xs -> xs.distinctBy { x -> x.id }.distinctBy { x -> x.closed } }",
+			k.listArb(listT, listOf(closedKey), "size"))
+	}
+
+	@Test
+	fun `distinctExpr は uniqueSome を値のある要素だけの初出に写す`() {
+		val nameKey = Kotlinize.UniqueKey(
+			IrConstraint("uniqueSome", "uniqueNames", "rooms", "name"),
+			IrField("name", IrType.OptionOf(IrType.Ref(title))))
+		assertEquals(
+			"xs.let { ys -> val seen = HashSet<TitleFixture>(); ys.filter { x -> x.name == null || seen.add(x.name) } }",
+			k.distinctExpr("xs", listOf(nameKey)))
+	}
+
+	@Test
 	fun `collecting は参照した型と Arb と fixture を集める`() {
 		val (_, c) = k.collecting {
 			k.typeRef(IrType.Ref(noteId))

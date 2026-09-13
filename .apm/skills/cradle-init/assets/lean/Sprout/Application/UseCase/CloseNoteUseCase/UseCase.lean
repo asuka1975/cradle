@@ -24,10 +24,10 @@ def validate (actor : ActorContext UserId) (c : Command NoteId)
       (if n.closed then .error .alreadyClosed else .ok n)
     else .error .notAuthor
 
-/-- 解釈: Entity のふるまいの適用一発。 -/
+/-- 解釈: Entity のふるまいの適用一発（閉じても同一性と題は変わらないので点更新できる）。 -/
 def act (c : Command NoteId) (before : NoteRepositoryState NoteId UserId) (_n : Note NoteId UserId) :
     NoteRepositoryState NoteId UserId :=
-  before.update c.note Note.close
+  before.update c.note Note.close (fun _ => rfl) (fun _ => rfl)
 
 def execute (actor : ActorContext UserId) (c : Command NoteId)
     (before : NoteRepositoryState NoteId UserId) : Except DomainError (NoteRepositoryState NoteId UserId) :=
@@ -70,10 +70,6 @@ theorem execute_ok_shape (actor : ActorContext UserId) (c : Command NoteId)
 /-- 同一性列は変わらない（フレーム — 消えない・増えない・入れ替わらない）。 -/
 @[contract] theorem act_ids (c : Command NoteId) (before : NoteRepositoryState NoteId UserId)
     (n : Note NoteId UserId) : (act c before n).ids = before.ids :=
-  NoteRepositoryState.update_ids before c.note Note.close (fun _ => rfl)
-
-theorem act_preserves_valid (c : Command NoteId) (before : NoteRepositoryState NoteId UserId)
-    (n : Note NoteId UserId) (hv : before.valid = true) : (act c before n).valid = true :=
-  NoteRepositoryState.update_valid before c.note Note.close (fun _ => rfl) hv
+  NoteRepositoryState.update_ids before c.note Note.close (fun _ => rfl) (fun _ => rfl)
 
 end Sprout.Application.CloseNoteUseCase

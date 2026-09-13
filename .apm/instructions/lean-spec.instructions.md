@@ -24,7 +24,7 @@ applyTo: "lean/**/*.lean"
   validate に置けるのは「業務が始まる前の拒否」だけ。既存集約を変える UseCase の validate は解決の成果物（集約ルート）を返す。
 - 参照系 UseCase = `ReadModel.lean`（観測の Set）+ `QueryService.lean`（Query 型 + 判断 + 固定名 `query : Query → ReadModel → List View`）+ `UseCase.lean`（validate / execute）。
 - 名義（`ActorContext`）と時計（`today`）は状態でも入力でもない引数種で、UseCase はポート位置（先頭）で受け取る。コマンドに名義を混ぜない。
-- 不変条件は per-Root の `valid`（Bool）。大域の不変条件・大域遷移は書かず、境界の `Snapshot.check` と `Reachable.check` が運ぶ。
+- 集約ルートが大域的に満たす制約（同一性・題の一意性）は `<Root>RepositoryState` の Prop フィールドに書き、`add` / `update` はその保存に要る証明（新鮮な同一性・変えない射影）を引数に取る。泉の新鮮性は UseCase が Prop 引数で受け、入力に依る証拠は validate が解決の成果物として返す（形と生成器の読み方は lean-conventions §4 / §9）。大域遷移は書かず、境界の検査（泉の境界）は `Snapshot.check` と `Reachable.check` が運ぶ。
 - View は Row を運ばず、ふるまいを持つドメインの VO も運ばない（View 自身の語彙で写す）。束（Views）の口は画面名で、`none`（そこに無い）と `some []`（見えたうえで空）を潰さない。
 - 反機能（存在しない操作）は `Runtime/Command.lean` の一覧に書き、コマンドを足さないことと定理で固定する。
 

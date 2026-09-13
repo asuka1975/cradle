@@ -441,7 +441,7 @@ class EmitTests(
 		for ((subject, contracts) in behaviorCs.groupBy { it.useCase }.toSortedMap()) {
 			val td = ir.typeDef(subject)
 			// State(RepositoryState)のふるまい定理は Kotlin に写さない — 不変量は
-			// 遷移テストのオラクル完全一致に包含される(valid は抽出側で前提の選別に働く)
+			// 遷移テストのオラクル完全一致に包含される(制約は抽出側で fixture の構築に働く)
 			if (td.role == "repositoryState") continue
 			// 入力語彙(Command 系)の定理も単体面を持たない — UseCase の
 			// validate / execute テストが保証
@@ -1366,20 +1366,71 @@ class EmitTests(
 				}
 			}
 		}
+		// 集約ルートの列(Repository の内容): 観測モデルの制約を満たす個体の列 — Repository 契約テストの播種
+		for (td in ir.types.filter { it.role == "aggregateRoot" && it.id != IrType.Unit }) {
+			body.append(repositoryArb(td)).append("\n\n")
+		}
 		return body.toString().trimEnd()
 	}
 
-	private fun structureArb(target: String, fields: List<IrField>, construct: (List<String>) -> String): String =
+	/** 入れ子の個体(List の Entity)の id を列の位置 index で変位させる copy 引数。
+	    個体の id はサイト全体で一意(PK)であり、独立に引いた集約をまたいで重複しうる。 */
+	private fun nestedIdShifts(td: IrTypeDef, index: String): List<String> =
+		((td.shape as? IrShape.Structure)?.fields ?: emptyList()).mapNotNull { f ->
+			val el = ((f.type as? IrType.ListOf)?.of as? IrType.Ref)
+				?.let { ir.typeDef(it.lean) } ?: return@mapNotNull null
+			val elIdLean = (el.id as? IrType.Ref)?.lean ?: return@mapNotNull null
+			val elIdField = (el.shape as? IrShape.Structure)?.fields
+				?.find { (it.type as? IrType.Ref)?.lean == elIdLean }
+				?: return@mapNotNull null
+			val elIdTd = ir.typeDef(elIdLean)
+			val elInner = ident((elIdTd.shape as IrShape.Structure).fields.single().name)
+			val fn = ident(f.name)
+			val idn = ident(elIdField.name)
+			// UUID ワイヤの Id は 128bit 値の下位へ同じオフセットを足す
+			val shifted = if (elIdTd.wire == "uuid")
+				"${k.name(elIdLean)}(java.util.UUID(y.$idn.$elInner.mostSignificantBits, " +
+					"y.$idn.$elInner.leastSignificantBits + $index * 1000000L))"
+			else "${k.name(elIdLean)}(y.$idn.$elInner + $index * 1000000L)"
+			"$fn = x.$fn.map { y -> y.copy($idn = $shifted) }"
+		}
+
+	/** 集約ルートの列の Arb(`arb<Root>Repository`): 観測モデル(`<Root>RepositoryState`)の
+	    一意制約と同一性で間引き、入れ子の個体の id を列の位置で変位させる。間引きで size を
+	    割った列は引き直す。 */
+	private fun repositoryArb(td: IrTypeDef): String {
+		val rc = k.rootCollectionOf(td)
+		val keys = rc?.let { k.uniqueKeysOf(it.state, it.coll) } ?: emptyList()
+		val listT = IrType.ListOf(IrType.Ref(td.lean))
+		val fixture = k.fixtureName(td)
+		val shifts = nestedIdShifts(td, "i")
+		val shiftExpr = if (shifts.isEmpty()) ""
+			else ".map { xs -> xs.mapIndexed { i, x -> x.copy(${shifts.joinToString(", ")}) } }"
+		val doc = if (rc == null) "`${td.lean}` の個体の列(同一性は重複しない)。"
+			else "`${rc.state.lean}` の制約(" +
+				(keys.joinToString("・") { "${it.constraint.name}: ${it.field.name}" }.ifEmpty { "無し" }) +
+				")と同一性を満たす個体の列。"
+		val shiftDoc = if (shifts.isEmpty()) "" else "\n    入れ子の個体の id は列の位置で変位させる(同一性はサイト全体で一意)。"
+		return "/** ${doc}間引きで size を割った列は引き直す。$shiftDoc */\n" +
+			"internal fun ${k.arbFunName("${td.kotlin}Repository")}(size: IntRange = 0..5): Arb<List<$fixture>> =\n" +
+			"\t${k.listArb(listT, keys, "size")}$shiftExpr.filter { it.size in size }"
+	}
+
+	/** 構造体のフィールド列から Arb を組む。td があれば List のフィールドを td の一意制約で間引く。 */
+	private fun structureArb(td: IrTypeDef?, target: String, fields: List<IrField>, construct: (List<String>) -> String): String =
 		when (fields.size) {
 			0 -> "Arb.constant(${construct(emptyList())})"
-			1 -> "${k.arbOf(fields[0].type)}.map { p0 -> ${construct(listOf("p0"))} }"
+			1 -> "${fieldArb(td, fields[0])}.map { p0 -> ${construct(listOf("p0"))} }"
 			else -> {
 				require(fields.size <= 14) { "$target: フィールドが多すぎます(Arb.bind の上限 14)" }
-				val arbs = fields.joinToString(", ") { k.arbOf(it.type) }
+				val arbs = fields.joinToString(", ") { fieldArb(td, it) }
 				val params = fields.indices.joinToString(", ") { "p$it" }
 				"Arb.bind($arbs) { $params -> ${construct(fields.indices.map { "p$it" })} }"
 			}
 		}
+
+	private fun fieldArb(td: IrTypeDef?, f: IrField): String =
+		if (td != null) k.arbOfField(td, f) else k.arbOf(f.type)
 
 	private fun constructCall(typeName: String, fields: List<IrField>, params: List<String>): String =
 		if (fields.isEmpty()) typeName
@@ -1394,7 +1445,7 @@ class EmitTests(
 				val fixture = k.isEntityLike(td) || k.isFixtureBridged(td.lean)
 				val ctor = if (fixture) "${td.kotlin}Fixture" else kn
 				val retT = if (fixture) "${td.kotlin}Fixture" else kn
-				val expr = structureArb(td.lean, shape.fields) { ps ->
+				val expr = structureArb(td, td.lean, shape.fields) { ps ->
 					constructCall(ctor, shape.fields, ps)
 				}
 				"internal fun $fn(): Arb<$retT> =\n\t$expr"
@@ -1406,7 +1457,7 @@ class EmitTests(
 				val branches = shape.ctors.mapIndexed { i, c ->
 					val expr =
 						if (c.fields.isEmpty()) "Arb.constant($base.${k.ctorClassName(c.name)})"
-						else structureArb("${td.lean}.${c.name}", c.fields) { ps ->
+						else structureArb(null, "${td.lean}.${c.name}", c.fields) { ps ->
 							constructCall("$base.${k.ctorClassName(c.name)}", c.fields, ps)
 						}
 					"\tval c$i: Arb<$base> = $expr"
@@ -1423,9 +1474,10 @@ class EmitTests(
 		val rootK = td.kotlin
 		val framework = junitImports + pbtImports + listOf("org.junit.jupiter.api.Assertions.assertNull")
 		emitFile(k.repositoryPackage, "${rootK}RepositoryContractTest", framework = framework) {
-			val arbRoot = k.arbCall(td.lean)
 			val ops = k.repoOps(td)
-			if (td.id == IrType.Unit) """
+			if (td.id == IrType.Unit) {
+				val arbRoot = k.arbCall(td.lean)
+				"""
 /**
  * ${rootK}Repository の契約テスト(v1 規約: 単一保持・上書き)。
  * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
@@ -1451,38 +1503,19 @@ abstract class ${rootK}RepositoryContractTest {
 		}
 	}
 }
-""".trimIndent() else {
+""".trimIndent()
+			} else {
 				val idField = ident(k.idFieldName(td))
-				val idTd = ir.typeDef((td.id as IrType.Ref).lean)
-				val idInner = ident((idTd.shape as IrShape.Structure).fields.single().name)
-				val idFresh = "${k.name(idTd.lean)}(af.$idField.$idInner + 1000000L)"
-				// 第 2 個体は root の id だけでなく、入れ子の個体の id も
-				// まとめて変位させる — 個体の id はサイト全体で一意(PK)であり、
-				// 独立に引いた 2 つの集約をまたいで重複しうる
-				val nestedShifts = ((td.shape as? IrShape.Structure)?.fields ?: emptyList())
-					.mapNotNull { f ->
-						val el = ((f.type as? IrType.ListOf)?.of as? IrType.Ref)
-							?.let { ir.typeDef(it.lean) } ?: return@mapNotNull null
-						val elIdLean = (el.id as? IrType.Ref)?.lean ?: return@mapNotNull null
-						val elIdField = (el.shape as? IrShape.Structure)?.fields
-							?.find { (it.type as? IrType.Ref)?.lean == elIdLean }
-							?: return@mapNotNull null
-						val elIdTd = ir.typeDef(elIdLean)
-						val elInner = ident((elIdTd.shape as IrShape.Structure).fields.single().name)
-						val fn = ident(f.name)
-						val idn = ident(elIdField.name)
-						// UUID ワイヤの Id は 128bit 値の下位へ同じオフセットを足す
-						val shifted = if (elIdTd.wire == "uuid")
-							"${k.name(elIdLean)}(java.util.UUID(x.$idn.$elInner.mostSignificantBits, " +
-								"x.$idn.$elInner.leastSignificantBits + 1000000L))"
-						else "${k.name(elIdLean)}(x.$idn.$elInner + 1000000L)"
-						"$fn = bf.$fn.map { x -> x.copy($idn = $shifted) }"
-					}
-				val freshCopy = (listOf("$idField = $idFresh") + nestedShifts).joinToString(", ")
+				val arbRepo = k.arbCallOf("${td.kotlin}Repository")
+				// update の播種は前後に個体を持つ 1 個体(並びの保持を観測する)+ 書き換えの元になる 1 個体(列の末尾)
+				val arbRepo2 = k.arbCallOf("${td.kotlin}Repository", "4..7")
+				val constraintDoc = k.rootCollectionOf(td)?.let { rc ->
+					" * 個体の列は `${rc.state.lean}` の制約を満たすように引く(${k.arbFunName("${td.kotlin}Repository")})。\n"
+				} ?: ""
 				"""
 /**
  * ${rootK}Repository の契約テスト(v1 規約: save は $idField による upsert)。
- * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
+$constraintDoc * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
  */
 abstract class ${rootK}RepositoryContractTest {
 	protected abstract fun repository(): ${rootK}Repository
@@ -1492,14 +1525,11 @@ ${if (ops.add) """
 	@Test
 	fun `add したものは findAll に保存順で並ぶ${if (ops.find) "、findById で引ける" else ""}`() {
 		runBlocking {
-			checkAll(PropTestConfig(seed = 42), $arbRoot, $arbRoot) { af, bf ->
+			checkAll(PropTestConfig(seed = 42), $arbRepo) { fs ->
 				val repo = repository()
-				val b2 = bf.copy($freshCopy)
-				repo.add(entity(af))
-				repo.add(entity(b2))
-				assertEquals(listOf(af, b2), repo.findAll().map { it.toFixture() })${if (ops.find) """
-				assertEquals(af, repo.findById(af.$idField)?.toFixture())
-				assertEquals(b2, repo.findById(b2.$idField)?.toFixture())""" else ""}
+				for (f in fs) repo.add(entity(f))
+				assertEquals(fs, repo.findAll().map { it.toFixture() })${if (ops.find) """
+				for (f in fs) assertEquals(f, repo.findById(f.$idField)?.toFixture())""" else ""}
 			}
 		}
 	}
@@ -1507,15 +1537,14 @@ ${if (ops.add) """
 	@Test
 	fun `update は既存個体を書き換え、並びを保つ`() {
 		runBlocking {
-			checkAll(PropTestConfig(seed = 42), $arbRoot, $arbRoot, $arbRoot) { af, bf, cf ->
-				val a2 = af
-				val b2 = bf.copy($freshCopy)
+			checkAll(PropTestConfig(seed = 42), $arbRepo2) { fs ->
+				val seeded = fs.dropLast(1)
+				val at = seeded.size / 2
+				val updated = fs.last().copy($idField = seeded[at].$idField)
 				val repo = repository()
-				repo.add(entity(a2))
-				repo.add(entity(b2))
-				val updated = cf.copy($idField = a2.$idField)
+				for (f in seeded) repo.add(entity(f))
 				repo.update(entity(updated))
-				assertEquals(listOf(updated, b2), repo.findAll().map { it.toFixture() })
+				assertEquals(seeded.mapIndexed { j, f -> if (j == at) updated else f }, repo.findAll().map { it.toFixture() })
 			}
 		}
 	}
@@ -1523,7 +1552,7 @@ ${if (ops.add) """
 	@Test
 	fun `未知の id の findById は null`() {
 		runBlocking {
-			checkAll(PropTestConfig(seed = 42), $arbRoot) { af ->
+			checkAll(PropTestConfig(seed = 42), ${k.arbCall(td.lean)}) { af ->
 				assertNull(repository().findById(entity(af).$idField))
 			}
 		}

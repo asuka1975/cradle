@@ -5,8 +5,8 @@ package dev.cradle.scaffold.domain.repository
 
 import dev.cradle.scaffold.NoteFixture
 import dev.cradle.scaffold.arbNote
+import dev.cradle.scaffold.arbNoteRepository
 import dev.cradle.scaffold.domain.entity.Note
-import dev.cradle.scaffold.domain.valueobject.NoteId
 import dev.cradle.scaffold.toFixture
 import io.kotest.property.PropTestConfig
 import io.kotest.property.checkAll
@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test
 
 /**
  * NoteRepository の契約テスト(v1 規約: save は id による upsert)。
+ * 個体の列は `Sprout.Application.NoteRepositoryState` の制約を満たすように引く(arbNoteRepository)。
  * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
  */
 abstract class NoteRepositoryContractTest {
@@ -27,14 +28,11 @@ abstract class NoteRepositoryContractTest {
 	@Test
 	fun `add したものは findAll に保存順で並ぶ、findById で引ける`() {
 		runBlocking {
-			checkAll(PropTestConfig(seed = 42), arbNote(), arbNote()) { af, bf ->
+			checkAll(PropTestConfig(seed = 42), arbNoteRepository()) { fs ->
 				val repo = repository()
-				val b2 = bf.copy(id = NoteId(af.id.id + 1000000L))
-				repo.add(entity(af))
-				repo.add(entity(b2))
-				assertEquals(listOf(af, b2), repo.findAll().map { it.toFixture() })
-				assertEquals(af, repo.findById(af.id)?.toFixture())
-				assertEquals(b2, repo.findById(b2.id)?.toFixture())
+				for (f in fs) repo.add(entity(f))
+				assertEquals(fs, repo.findAll().map { it.toFixture() })
+				for (f in fs) assertEquals(f, repo.findById(f.id)?.toFixture())
 			}
 		}
 	}
@@ -42,15 +40,14 @@ abstract class NoteRepositoryContractTest {
 	@Test
 	fun `update は既存個体を書き換え、並びを保つ`() {
 		runBlocking {
-			checkAll(PropTestConfig(seed = 42), arbNote(), arbNote(), arbNote()) { af, bf, cf ->
-				val a2 = af
-				val b2 = bf.copy(id = NoteId(af.id.id + 1000000L))
+			checkAll(PropTestConfig(seed = 42), arbNoteRepository(4..7)) { fs ->
+				val seeded = fs.dropLast(1)
+				val at = seeded.size / 2
+				val updated = fs.last().copy(id = seeded[at].id)
 				val repo = repository()
-				repo.add(entity(a2))
-				repo.add(entity(b2))
-				val updated = cf.copy(id = a2.id)
+				for (f in seeded) repo.add(entity(f))
 				repo.update(entity(updated))
-				assertEquals(listOf(updated, b2), repo.findAll().map { it.toFixture() })
+				assertEquals(seeded.mapIndexed { j, f -> if (j == at) updated else f }, repo.findAll().map { it.toFixture() })
 			}
 		}
 	}

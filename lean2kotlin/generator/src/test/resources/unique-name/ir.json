@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "rootNamespace": "Mini",
+  "types": [
+    {"lean": "Mini.Runtime.RoomId", "kotlin": "RoomId", "role": "valueObject", "isId": true, "module": "Mini.Runtime.Ids",
+     "shape": {"kind": "structure", "fields": [{"name": "id", "type": {"k": "nat"}}]}},
+    {"lean": "Mini.Runtime.MemberId", "kotlin": "MemberId", "role": "valueObject", "isId": true, "module": "Mini.Runtime.Ids",
+     "shape": {"kind": "structure", "fields": [{"name": "id", "type": {"k": "nat"}}]}},
+    {"lean": "Mini.RoomName", "kotlin": "RoomName", "role": "valueObject", "module": "Mini.Domain.ValueObject",
+     "shape": {"kind": "structure", "fields": [{"name": "text", "type": {"k": "string"}}]}},
+    {"lean": "Mini.Domain.Member", "kotlin": "Member", "role": "entity", "module": "Mini.Domain.Entity.Room",
+     "id": {"k": "ref", "name": "Mini.Runtime.MemberId"},
+     "shape": {"kind": "structure", "fields": [{"name": "id", "type": {"k": "ref", "name": "Mini.Runtime.MemberId"}}, {"name": "nick", "type": {"k": "string"}}]}},
+    {"lean": "Mini.Domain.Room", "kotlin": "Room", "role": "aggregateRoot", "module": "Mini.Domain.Entity.Room",
+     "id": {"k": "ref", "name": "Mini.Runtime.RoomId"},
+     "shape": {"kind": "structure", "fields": [
+       {"name": "id", "type": {"k": "ref", "name": "Mini.Runtime.RoomId"}},
+       {"name": "name", "type": {"k": "option", "of": {"k": "ref", "name": "Mini.RoomName"}}},
+       {"name": "members", "type": {"k": "list", "of": {"k": "ref", "name": "Mini.Domain.Member"}}}]}},
+    {"lean": "Mini.Application.RoomRepositoryState", "kotlin": "RoomRepositoryState", "role": "repositoryState", "module": "Mini.Application.RepositoryState",
+     "shape": {"kind": "structure", "fields": [{"name": "rooms", "type": {"k": "list", "of": {"k": "ref", "name": "Mini.Domain.Room"}}}]},
+     "constraints": [
+       {"kind": "unique", "name": "uniqueIds", "collection": "rooms", "field": "id"},
+       {"kind": "uniqueSome", "name": "uniqueNames", "collection": "rooms", "field": "name"}]},
+    {"lean": "Mini.Application.RenameRoomUseCase.Command", "kotlin": "RenameRoomCommand", "role": "command", "module": "Mini.Application.UseCase.RenameRoomUseCase.Command",
+     "shape": {"kind": "structure", "fields": [{"name": "room", "type": {"k": "ref", "name": "Mini.Runtime.RoomId"}}, {"name": "name", "type": {"k": "string"}}]}},
+    {"lean": "Mini.DomainError", "kotlin": "DomainError", "role": "error", "module": "Mini.Domain.Error",
+     "shape": {"kind": "enum", "ctors": ["nameTaken"]}}
+  ],
+  "queryServices": [],
+  "useCases": [],
+  "domainServices": [],
+  "contracts": [],
+  "faultContracts": [],
+  "behaviors": [
+    {"subject": "Mini.Domain.Room", "module": "Mini.Domain.Entity.Room", "methods": [
+      {"name": "open", "doc": "開く。", "params": [{"name": "id", "type": {"k": "ref", "name": "Mini.Runtime.RoomId"}}, {"name": "name", "type": {"k": "option", "of": {"k": "ref", "name": "Mini.RoomName"}}}], "ret": {"k": "ref", "name": "Mini.Domain.Room"}},
+      {"name": "rename", "doc": "改名する。", "params": [{"name": "r", "type": {"k": "ref", "name": "Mini.Domain.Room"}}, {"name": "name", "type": {"k": "ref", "name": "Mini.RoomName"}}], "ret": {"k": "ref", "name": "Mini.Domain.Room"}}]}
+  ]
+}

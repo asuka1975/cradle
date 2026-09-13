@@ -112,8 +112,8 @@ class EmitMain(
 					"(UseCase の validate / execute テストが保証)")
 				continue
 			}
-			// State のふるまい(valid 等)は写さない — 不変量は遷移テストの
-			// オラクル完全一致に包含され、Kotlin 側に消費者がいない
+			// State のふるまい(find? / ids 等)は写さない — 不変量は観測モデルの構造
+			// (constraints)が運び、遷移テストのオラクル完全一致に包含され、Kotlin 側に消費者がいない
 			if (td.role == "repositoryState") {
 				log("  note: ${td.kotlin}: State のふるまいは Kotlin に写さない(Lean 側の意味論装置)")
 				continue

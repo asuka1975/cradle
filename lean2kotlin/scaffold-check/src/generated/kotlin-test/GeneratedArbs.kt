@@ -6,6 +6,7 @@ package dev.cradle.scaffold
 import dev.cradle.scaffold.application.NoteView
 import dev.cradle.scaffold.application.QueryError
 import dev.cradle.scaffold.application.usecase.notesusecase.NotesQuery
+import dev.cradle.scaffold.application.usecase.postnoteusecase.PostNoteFreeTitle
 import dev.cradle.scaffold.domain.DomainError
 import dev.cradle.scaffold.domain.entity.Note
 import dev.cradle.scaffold.domain.valueobject.NoteId
@@ -25,6 +26,9 @@ internal fun arbNoteView(): Arb<NoteView> =
 internal fun arbNotesQuery(): Arb<NotesQuery> =
 	Arb.constant(NotesQuery)
 
+internal fun arbPostNoteFreeTitle(): Arb<PostNoteFreeTitle> =
+	Arb.constant(PostNoteFreeTitle)
+
 internal fun arbQueryError(): Arb<QueryError> = Arb.enum<QueryError>()
 
 internal fun arbNote(): Arb<NoteFixture> =
@@ -40,3 +44,7 @@ internal fun arbUserId(): Arb<UserId> =
 
 internal fun arbTitle(): Arb<TitleFixture> =
 	Arb.string(0..8, Codepoint.alphanumeric()).map { p0 -> TitleFixture(text = p0) }
+
+/** `Sprout.Application.NoteRepositoryState` の制約(uniqueIds: id・uniqueTitles: title)と同一性を満たす個体の列。間引きで size を割った列は引き直す。 */
+internal fun arbNoteRepository(size: IntRange = 0..5): Arb<List<NoteFixture>> =
+	Arb.list(arbNote(), size).map { xs -> xs.distinctBy { x -> x.id }.distinctBy { x -> x.title } }.filter { it.size in size }

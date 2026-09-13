@@ -20,7 +20,7 @@ description: Use when it is time to make the backend follow the Lean model — r
    - 性能バイパスは宣言（UseCase のディレクトリ）と実装（infrastructure）を分け、観測同値を KDoc に。
 4. **契約テストの配線**: 生成された抽象契約テスト**すべて**に具象サブクラス（本番実装を実 DB に配線。fake 禁止。骨格は `cradle contract-skeleton <生成ファイル>`）。`cradle status` の「契約テスト 配線 n/m」が m/m になるまで。
    生成ログの note（golden 0 件・語彙の壁で生成されなかった契約）は失敗として扱い、モデルか fixture に戻す（分類と戻り先は `references/gradle-wiring.md`）。
-   生成された PBT が実スキーマで通らない（生成値が大域不変条件を満たさない）ときは、`@Disabled` や InMemory で通さない。三択（モデルの型を見直す / 永続化の表現を変える / 配線を見送る）を ai-note に書いてユーザーに委ねる。
+   生成された PBT が実スキーマで通らない（生成値が大域不変条件を満たさない）ときは、`@Disabled` や InMemory で通さない。まずその不変条件が `<Root>RepositoryState` の Prop フィールドとして宣言されているかを見る（lean-conventions §4 / §9 — 読める形の宣言なら fixture がそれを満たす）。それでも通らなければ三択（モデルの型を見直す / 永続化の表現を変える / 配線を見送る）を ai-note に書いてユーザーに委ねる。
 5. **境界と門のテスト**: HTTP レベルで 401 / 403 / 404 / 422 の経路、トランザクションの巻き戻し（割った境界は両方向）。
 6. `./gradlew build`（ktlint 込み）。通ったら hook の指示どおり `sql-perf-review` と `backend-design-review`。High / Medium は直す。
 7. `cradle unslop --diff`。ai-notes に残す判断（設計判断・性能以外の選択）があれば書き置く。

@@ -18,7 +18,7 @@ def Scenario.today : Date := date("2026-01-01")
 /-- 基本シナリオ: alice の開いたメモ 1 件・bob の閉じたメモ 1 件。 -/
 def Scenario.basic : Snapshot :=
   { notes   := ⟨[ Note.post ⟨0⟩ alice ⟨"買い出し"⟩,
-                  (Note.post ⟨1⟩ bob ⟨"打合せ"⟩).close ]⟩
+                  (Note.post ⟨1⟩ bob ⟨"打合せ"⟩).close ], by decide, by decide⟩
     noteIds := ⟨2⟩ }
 
 def scenarioByName : String → Option Snapshot
@@ -36,10 +36,10 @@ def scenarioByName : String → Option Snapshot
 #guard (views Scenario.today Scenario.basic none).notes = none
 
 -- 本人だけが閉じられる
-#guard match Snapshot.apply Scenario.today ⟨⟨bob⟩⟩ (.closeNote ⟨⟨0⟩⟩) Scenario.basic with
+#guard match Snapshot.apply Scenario.today ⟨⟨bob⟩⟩ (.closeNote ⟨⟨0⟩⟩) Scenario.basic (by decide) with
   | .error .notAuthor => true
   | _ => false
-#guard match Snapshot.apply Scenario.today ⟨⟨alice⟩⟩ (.closeNote ⟨⟨0⟩⟩) Scenario.basic with
+#guard match Snapshot.apply Scenario.today ⟨⟨alice⟩⟩ (.closeNote ⟨⟨0⟩⟩) Scenario.basic (by decide) with
   | .ok s => (views Scenario.today s (some alice)).notes == some []
   | .error _ => false
 

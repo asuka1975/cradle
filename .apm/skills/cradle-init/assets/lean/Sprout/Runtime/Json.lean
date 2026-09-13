@@ -47,11 +47,15 @@ instance : FromJson Sprout.Date where
 instance : ToJson Snapshot where
   toJson s := Json.mkObj [("notes", toJson s.notes.notes), ("noteIds", toJson s.noteIds)]
 
+/-- 観測モデルの制約（同一性と題の一意性）は構築時に要るので、境界で決定して弾く。 -/
 instance : FromJson Snapshot where
   fromJson? j := do
     let notes ← (j.getObjVal? "notes") >>= fromJson? (α := List Note)
     let noteIds ← (j.getObjVal? "noteIds") >>= fromJson? (α := Application.NoteIdGeneratorState)
-    pure ⟨⟨notes⟩, noteIds⟩
+    if hid : (notes.map (·.id)).Nodup then
+      if ht : (notes.map (·.title)).Nodup then pure ⟨⟨notes, hid, ht⟩, noteIds⟩
+      else throw "state.notes: duplicate title"
+    else throw "state.notes: duplicate id"
 
 /-! ### 名義のワイヤ形式: `{"user": {"id": 1}}` — コマンドとは別に運ぶ -/
 

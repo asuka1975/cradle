@@ -204,6 +204,45 @@ class Kotlinize(private val ir: Ir) {
 			instanceMethodsOf(td).any { m -> m.ret.leafRefs().contains(td.lean) })
 	}
 
+	/** 集約ルートの観測モデル(命名規約 `<Root>RepositoryState`)と、その集約の列を運ぶフィールド。 */
+	data class RootCollection(val state: IrTypeDef, val coll: IrField)
+	fun rootCollectionOf(root: IrTypeDef): RootCollection? {
+		val state = ir.types.find { it.role == "repositoryState" && it.kotlin == root.kotlin + "RepositoryState" }
+			?: return null
+		val colls = (state.shape as? IrShape.Structure)?.fields
+			?.filter { f -> ((f.type as? IrType.ListOf)?.of as? IrType.Ref)?.lean == root.lean } ?: emptyList()
+		require(colls.size <= 1) { "${state.lean}: ${root.lean} の列を運ぶフィールドが 1 つではありません(${colls.map { it.name }})" }
+		return colls.singleOrNull()?.let { RootCollection(state, it) }
+	}
+
+	/** 一意制約の適用先: 制約と、それが指す要素型のフィールド。 */
+	data class UniqueKey(val constraint: IrConstraint, val field: IrField)
+
+	/** td の List フィールド coll に掛かる一意制約を要素型のフィールドへ解決する。 */
+	fun uniqueKeysOf(td: IrTypeDef, coll: IrField): List<UniqueKey> {
+		val el = ((coll.type as? IrType.ListOf)?.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
+			?: return emptyList()
+		val fields = (el.shape as? IrShape.Structure)?.fields ?: return emptyList()
+		return td.constraints.filter { it.collection == coll.name }.map { c ->
+			UniqueKey(c, fields.find { it.name == c.field }
+				?: error("${td.lean}.${c.name}: ${el.lean} にフィールド ${c.field} がありません"))
+		}
+	}
+
+	/** 列 xs を制約どおりに間引く式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す。 */
+	fun distinctExpr(xs: String, keys: List<UniqueKey>): String = keys.fold(xs) { acc, key ->
+		val f = ident(key.field.name)
+		when (key.constraint.kind) {
+			"unique" -> "$acc.distinctBy { x -> x.$f }"
+			"uniqueSome" -> {
+				val inner = (key.field.type as? IrType.OptionOf)?.of
+					?: error("${key.constraint.name}: uniqueSome は Option のフィールドに掛かる(${key.field.name})")
+				"$acc.let { ys -> val seen = HashSet<${typeRefFixture(inner)}>(); ys.filter { x -> x.$f == null || seen.add(x.$f) } }"
+			}
+			else -> error("${key.constraint.name}: 不明な制約の種類 ${key.constraint.kind}")
+		}
+	}
+
 	/** UseCase ディレクトリ名 → パッケージ(application.usecase.<小文字>)。 */
 	fun useCasePackage(dir: String): String = "application.usecase.${dir.lowercase()}"
 
@@ -371,10 +410,34 @@ class Kotlinize(private val ir: Ir) {
 	fun arbFunName(kotlinName: String): String = "arb$kotlinName"
 
 	/** Arb 関数の呼び出し(使用を記録する — Arb はテストのルートパッケージに置かれる)。 */
-	fun arbCall(lean: String): String {
-		val kn = ir.kotlinName(lean)
-		arbSink?.add(kn)
-		return "${arbFunName(kn)}()"
+	fun arbCall(lean: String): String = arbCallOf(ir.kotlinName(lean))
+
+	/** 生成型に対応しない Arb(集約の列など)の呼び出し。名前は Arb 関数名の規約に従う。 */
+	fun arbCallOf(kotlinName: String, args: String = ""): String {
+		arbSink?.add(kotlinName)
+		return "${arbFunName(kotlinName)}($args)"
+	}
+
+	/** 構造体 td のフィールド f の Arb。List のフィールドは td の一意制約で間引く。 */
+	fun arbOfField(td: IrTypeDef, f: IrField): String {
+		val t = (f.type as? IrType.WithDefault)?.of ?: f.type
+		return if (t is IrType.ListOf) listArb(t, uniqueKeysOf(td, f)) else arbOf(f.type)
+	}
+
+	/** 個体の列の Arb: 同一性を持つ個体の列は id を重複させない — id 重複は業務
+	    不変条件違反で、PK 制約を持つ実 DB では insert が必ず落ちる。宣言された
+	    一意制約(keys)でも間引く。同一性フィールドは名前でなく型(td.id)で特定する(View は noteId 等)。 */
+	fun listArb(t: IrType.ListOf, keys: List<UniqueKey>, size: String = "0..5"): String {
+		val el = (t.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
+		val base = "Arb.list(${arbOf(t.of)}, $size)"
+		val idLean = (el?.id as? IrType.Ref)?.lean
+		val idField = if (idLean == null) null
+			else (el.shape as? IrShape.Structure)?.fields?.find { f ->
+				(f.type as? IrType.Ref)?.lean == idLean
+			}
+		val start = if (idField != null) "xs.distinctBy { x -> x.${ident(idField.name)} }" else "xs"
+		val body = distinctExpr(start, keys.filter { it.field.name != idField?.name })
+		return if (body == "xs") base else "$base.map { xs -> $body }"
 	}
 
 	/** IR の型表現 → Arb 式(GeneratedArbs.kt 内で使う)。 */
@@ -385,27 +448,13 @@ class Kotlinize(private val ir: Ir) {
 		IrType.Unit -> "Arb.constant(Unit)"
 		// 暦の実在は LocalDate の構築が保証(構築時執行)。epoch 日で決定的
 		IrType.Date -> "Arb.long(0L..23000L).map { java.time.LocalDate.ofEpochDay(it) }"
-		// UUID ワイヤの Id の中身: 値域を小さく保つ(Repository 契約テストの変位 +1000000L との
-		// 不交和の論法を維持 — 乱択どうしの衝突回避は distinctBy / 変位が担う)
+		// UUID ワイヤの Id の中身: 値域を小さく保つ(集約の列の Arb が入れ子の個体の id を
+		// 列の位置 × 1000000L で変位させる論法と不交和 — 乱択どうしの衝突回避は distinctBy / 変位が担う)
 		IrType.Uuid -> "Arb.long(0L..4096L).map { java.util.UUID(0L, it) }"
 		IrType.DateTime ->
 			"Arb.long(0L..2_000_000_000L).map { java.time.LocalDateTime.ofEpochSecond(it, 0, java.time.ZoneOffset.UTC) }"
 		IrType.Zoned -> error("ZonedDateTime の Arb は未対応(必要になったら対応表を拡張)")
-		is IrType.ListOf -> {
-			// 同一性を持つ個体の列は id を重複させない — id 重複は業務
-			// 不変条件違反で、PK 制約を持つ実 DB では insert が必ず落ちる。
-			// 同一性フィールドは名前でなく型(td.id)で特定する(View は noteId 等)
-			val el = (t.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
-			val base = "Arb.list(${arbOf(t.of)}, 0..5)"
-			val idLean = (el?.id as? IrType.Ref)?.lean
-			val idField = if (idLean == null) null
-				else (el.shape as? IrShape.Structure)?.fields?.find { f ->
-					(f.type as? IrType.Ref)?.lean == idLean
-				}
-			if (idField != null)
-				"$base.map { xs -> xs.distinctBy { x -> x.${ident(idField.name)} } }"
-			else base
-		}
+		is IrType.ListOf -> listArb(t, emptyList())
 		is IrType.OptionOf -> "${arbOf(t.of)}.orNull(0.2)"
 		is IrType.PairOf -> "Arb.pair(${arbOf(t.fst)}, ${arbOf(t.snd)})"
 		is IrType.Arrow -> error("関数型の Arb は生成できません")

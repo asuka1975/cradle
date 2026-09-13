@@ -16,12 +16,12 @@ import dev.cradle.scaffold.domain.DomainError
  */
 interface PostNoteUseCase {
 	/**
-	 * 始まる前の拒否: 題が空なら書けない。新規追加なので解決の成果物は無い（Unit）。
+	 * 始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題が空いている証拠を返す。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
 	 * validate を呼ぶ」形に一本化する — 分岐条件を再実装しない)。
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。
 	 */
-	fun validate(c: PostNoteCommand): DomainResult<DomainError, Unit>
+	fun validate(c: PostNoteCommand): DomainResult<DomainError, PostNoteFreeTitle>
 	/** execute は validate を呼ぶ定義（入り口の一致は定義の系）。 */
 	fun execute(c: PostNoteCommand): DomainResult<DomainError, Unit>
 }

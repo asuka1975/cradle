@@ -20,7 +20,7 @@ scaffold-check/  骨格（cradle-init の Sprout）を通す回帰検査。src/g
 
 ## 対象プロジェクト側の契約
 
-モデルに生成配線は書かない。生成器が読むのは Cradle の規約だけ — 印と固定名・ディレクトリの形は `.apm/instructions/lean-spec.instructions.md`、契約面に置ける型の語彙・固定名（`<Root>.DomainError` / `<Root>RepositoryState` / `<X>IdGeneratorState` / `id`）・binder 規約（`<Root>.Runtime.<binder>`、例外は `binderOverrides`）は `lean-domain-model` スキルの `references/lean-conventions.md` §9。
+モデルに生成配線は書かない。生成器が読むのは Cradle の規約だけ — 印と固定名・ディレクトリの形は `.apm/instructions/lean-spec.instructions.md`、契約面に置ける型の語彙・固定名（`<Root>.DomainError` / `<Root>RepositoryState` / `<X>IdGeneratorState` / `id`）・binder 規約（`<Root>.Runtime.<binder>`、例外は `binderOverrides`）・観測モデルの制約（`<Root>RepositoryState` の Prop フィールド）は `lean-domain-model` スキルの `references/lean-conventions.md` §4 / §9。
 
 ## 検査
 

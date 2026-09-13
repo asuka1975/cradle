@@ -66,7 +66,7 @@ class GenerationTest {
 			"note: NotesUseCase.execute: 引数を合成できないため basic-flow #0 をスキップ",
 			"note: NotesUseCase.execute: 引数を合成できないため basic-flow #1 をスキップ",
 			"note: 契約テスト: NotesUseCase — golden+定理で 12 ケース(参照系)",
-			"note: 契約定理テスト: PostNoteUseCase — 定理 2 本から 8 ケース(遷移形 — Repository 直参照)",
+			"note: 契約定理テスト: PostNoteUseCase — 定理 3 本から 10 ケース(遷移形 — Repository 直参照)",
 			"note: 契約定理テスト: Note(Entity)— 定理 6 本から 24 ケース",
 			"note: 契約定理テスト: Title(Entity)— 定理 1 本から 4 ケース",
 		)

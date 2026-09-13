@@ -20,6 +20,9 @@
      (ドライバ引数で上書きできる。表現は仮置き — 生成は ID の中身に依存しない)。
   4. **契約定理** — `@[contract]` / `@[faultContract]` を Lean 内で評価し、期待値(オラクル)を
      IR に焼き込む。golden は生成器側で読む。
+  5. **制約** — 構造体の Prop フィールド(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup`)を
+     一意制約として IR に出す(fixture の構築規律)。Prop フィールドと def の Prop 引数は
+     データでも interface 面でもない — 形状と署名から除き、評価では decide の証明で埋める。
 -/
 import Lean
 
@@ -188,15 +191,20 @@ def ctorFields (rootNs : Name) (reg : MonoReg) (ctor : Name) (targs : Array Expr
   let isStruct := isStructure (← getEnv) structName
   let ty ← instantiateForall ci.type targs
   forallTelescopeReducing ty fun xs _ => do
-    xs.mapIdxM fun i x => do
+    let mut out : Array FieldIR := #[]
+    let mut i := 0
+    for x in xs do
       let decl ← x.fvarId!.getDecl
+      -- 制約(Prop フィールド)はデータではない — 形状から除く(読み取りは structConstraints)
+      if ← Meta.isProp decl.type then continue
       let name := if decl.userName.hasMacroScopes then s!"arg{i}" else toString decl.userName
       let tJ ← typeToIR rootNs reg decl.type
       let dflt ← if isStruct then defaultLit? structName decl.userName targs else pure none
-      match dflt with
-      | some d => return { name, type := Json.mkObj [("k", "withDefault"),
-          ("of", tJ), ("default", d)] }
-      | none => return { name, type := tJ }
+      out := out.push (match dflt with
+        | some d => { name, type := Json.mkObj [("k", "withDefault"), ("of", tJ), ("default", d)] }
+        | none => { name, type := tJ })
+      i := i + 1
+    return out
 
 def shapeOf (rootNs : Name) (reg : MonoReg) (head : Name) (targs : Array Expr) : MetaM Json := do
   let env ← getEnv
@@ -314,10 +322,12 @@ def evalBoolExpr (_ : Expr) : MetaM Bool :=
 
 /-- 前方宣言用: ctorFieldTypes は下に定義される(シリアライザ合成が使う)。 -/
 private def ctorFieldTypesFwd (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
-    MetaM (Array Expr) := do
+    MetaM (Array (Expr × Bool)) := do
   let app := mkAppN (mkConst ctorName lvls) typeArgs
   forallTelescopeReducing (← inferType app) fun xs _ =>
-    xs.mapM fun x => inferType x
+    xs.mapM fun x => do
+      let t ← inferType x
+      return (t, ← Meta.isProp t)
 
 /-- 型 → (その型 → Json) のシリアライザ式を合成する。ToJson インスタンスに
     依存しない(対象は読み取り専用でインスタンスを足せない)。
@@ -366,12 +376,16 @@ partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
       let ctor := ii.ctors.head!
       let fnames := getStructureFields env tn
       let ftys ← ctorFieldTypesFwd ctor lvls args
-      let sers ← ftys.mapM mkSerializer
+      -- 制約(Prop フィールド)は直列化しない
+      let dataIdx := (List.range fnames.size).filter (fun i => !ftys[i]!.2)
+      let mut sers : Array Expr := #[]
+      for i in dataIdx do
+        sers := sers.push (← mkSerializer ftys[i]!.1)
       withLocalDeclD `s ty fun s => do
         let mut pairs : List Expr := []
-        for i in [0:fnames.size] do
+        for (i, k) in dataIdx.zip (List.range dataIdx.length) do
           pairs := pairs ++ [← mkPair (toString fnames[i]!)
-            (mkApp sers[i]! (Expr.proj tn i s))]
+            (mkApp sers[k]! (Expr.proj tn i s))]
         let body ← mkAppM ``Lean.Json.mkObj #[← mkListLit pairTy pairs]
         mkLambdaFVars #[s] body
     else
@@ -391,6 +405,7 @@ partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
                 let mut pairs : List Expr := []
                 for f in fs do
                   let d ← f.fvarId!.getDecl
+                  if ← Meta.isProp d.type then continue
                   let ser ← mkSerializer d.type
                   pairs := pairs ++ [← mkPair (toString d.userName) (mkApp ser f)]
                 let inner ← mkAppM ``Lean.Json.mkObj #[← mkListLit pairTy pairs]
@@ -494,6 +509,8 @@ partial def valueToJson (e : Expr) : MetaM Json := do
         let fnames := getStructureFields env ci.induct
         let mut obj : List (String × Json) := []
         for i in [0:fields.size] do
+          -- 制約(Prop フィールド)の証明は直列化しない
+          if ← Meta.isProof fields[i]! then continue
           obj := obj ++ [(toString fnames[i]!, ← valueToJson fields[i]!)]
         return Json.mkObj obj
       else
@@ -505,15 +522,19 @@ partial def valueToJson (e : Expr) : MetaM Json := do
           let argNames := names.extract ci.numParams names.size
           let mut obj : List (String × Json) := []
           for i in [0:fields.size] do
+            if ← Meta.isProof fields[i]! then continue
             obj := obj ++ [(toString argNames[i]!, ← valueToJson fields[i]!)]
           return Json.mkObj [(short, Json.mkObj obj)]
 
-/-- ctor のフィールド型(型引数適用後)を得る。 -/
+/-- ctor のフィールド型(型引数適用後)と、それが制約(Prop)かを得る。制約の判定は
+    telescope の中で行う — 先行フィールドに依存する型は外に出すと判定できない。 -/
 def ctorFieldTypes (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
-    MetaM (Array Expr) := do
+    MetaM (Array (Expr × Bool)) := do
   let app := mkAppN (mkConst ctorName lvls) typeArgs
   forallTelescopeReducing (← inferType app) fun xs _ =>
-    xs.mapM fun x => inferType x
+    xs.mapM fun x => do
+      let t ← inferType x
+      return (t, ← Meta.isProp t)
 
 /-- 型が Id 型(と List / Option / Prod)だけから成るか(泉から導出する引数の判定)。 -/
 partial def isIdOnly (idHeads : List Name) (ty : Expr) : MetaM Bool := do
@@ -526,6 +547,20 @@ partial def isIdOnly (idHeads : List Name) (ty : Expr) : MetaM Bool := do
   else if tn == ``Prod && args.size == 2 then
     return (← isIdOnly idHeads args[0]!) && (← isIdOnly idHeads args[1]!)
   else return false
+
+/-- 命題を decide で評価(できなければ none)。 -/
+def decideProp (p : Expr) : MetaM (Option Bool) := do
+  let d ← try mkDecide p catch _ => return none
+  -- コンパイル実行が第一(kernel 簡約は WF 再帰で止まり、重い)
+  try
+    return some (← evalBoolExpr d)
+  catch _ => pure ()
+  try
+    let r ← withTransparency .all <| reduce d (skipTypes := true) (skipProofs := true)
+    if r.isConstOf ``Bool.true then return some true
+    else if r.isConstOf ``Bool.false then return some false
+    else return none
+  catch _ => return none
 
 /-- サンプル値の構築。variant 0 = 通常、1 = 境界(List を空に・別 ctor を選ぶ)。
     Id 型は固定鍵 91(泉の領域 100.. と非衝突)。文字列はカウンタで一意。 -/
@@ -570,7 +605,7 @@ partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
                 let stCtor := dii.ctors.head!
                 let dTargs := domW.getAppArgs
                 let fieldTys ← ctorFieldTypes stCtor dLvls dTargs
-                if (← whnf fieldTys[0]!).getAppFn.isConstOf ``Nat then
+                if (← whnf fieldTys[0]!.1).getAppFn.isConstOf ``Nat then
                   let proj := Expr.proj dn 0 (.bvar 0)
                   let idVal := mkAppN (mkConst idCtor idLvls) (idTargs ++ #[proj])
                   let stVal := mkAppN (mkConst stCtor dLvls)
@@ -639,23 +674,36 @@ partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
     let ctor := if isStructure env tn then ii.ctors.head!
       else if variant == 4 || variant == 6 then ii.ctors.head!
       else ii.ctors[min variant (ii.ctors.length - 1)]!
-    let ftys ← ctorFieldTypes ctor lvls args
     let fnames := if isStructure env tn then getStructureFields env tn else #[]
+    -- ctor の型を binder ごとに埋めながら歩く — 制約(Prop フィールド)の型は先行フィールドの値で閉じる
+    let mut cty ← inferType (mkAppN (mkConst ctor lvls) args)
     let mut vals : Array Expr := #[]
-    for i in [0:ftys.size] do
-      let fty := ftys[i]!
-      -- 泉の種(ids.next 規約フィールド): sampled な Id 変位(91..93)より必ず
-      -- 大きい床(500+)から払い出す — 「保存順 = id 昇順」で観測する実 DB でも
-      -- 既存(播種)< 新規(泉由来)の大小関係が成立する
-      if i < fnames.size && fnames[i]! == `next &&
-          (← whnf fty).getAppFn.isConstOf ``Nat then
-        vals := vals.push (mkNatLit (500 + variant))
-      else
-        -- variant 1 = 境界(List を空に)、variant 2 = 別 ctor・別値
-        -- (内側の inductive が第 2 構成子を選ぶ/Bool が true — .new・liked 等へ届く)
-        let v ← buildValue idHeads ctr fty variant
-        let some v := v | return none
+    let mut i := 0
+    repeat
+      match ← whnf cty with
+      | .forallE _ fty fbody _ =>
+        let v ←
+          if ← Meta.isProp fty then
+            -- 制約: 組んだ値で decide し、真なら証明を作る。偽なら fixture として組めない
+            match ← decideProp fty with
+            | some true => mkDecideProof fty
+            | _ => return none
+          -- 泉の種(ids.next 規約フィールド): sampled な Id 変位(91..93)より必ず
+          -- 大きい床(500+)から払い出す — 「保存順 = id 昇順」で観測する実 DB でも
+          -- 既存(播種)< 新規(泉由来)の大小関係が成立する
+          else if i < fnames.size && fnames[i]! == `next &&
+              (← whnf fty).getAppFn.isConstOf ``Nat then
+            pure (mkNatLit (500 + variant))
+          else
+            -- variant 1 = 境界(List を空に)、variant 2 = 別 ctor・別値
+            -- (内側の inductive が第 2 構成子を選ぶ/Bool が true — .new・liked 等へ届く)
+            match ← buildValue idHeads ctr fty variant with
+            | some v => pure v
+            | none => return none
         vals := vals.push v
+        cty := fbody.instantiate1 v
+        i := i + 1
+      | _ => break
     return some (mkAppN (mkConst ctor lvls) (args ++ vals))
 
 /-- List 値の要素列(ctor 正規形を歩く)。 -/
@@ -707,7 +755,7 @@ partial def deriveWellIds (idHeads : List Name) (queue : IO.Ref (List Nat))
             let ftys ← ctorFieldTypes scn (sv.getAppFn.constLevels!) (svArgs.extract 0 sci.numParams)
             let mut found : Option Expr := none
             for i in [0:ftys.size] do
-              let fty ← whnf ftys[i]!
+              let fty ← whnf ftys[i]!.1
               if fty.getAppFn.isConstOf ``List then
                 found := some svArgs[sci.numParams + i]!
             pure found
@@ -717,20 +765,6 @@ partial def deriveWellIds (idHeads : List Name) (queue : IO.Ref (List Nat))
     let some b ← deriveWellIds idHeads queue args[1]! subShape | return none
     return some (mkApp4 (mkConst ``Prod.mk [.zero, .zero]) args[0]! args[1]! a b)
   else return none
-
-/-- 命題を decide で評価(できなければ none)。 -/
-def decideProp (p : Expr) : MetaM (Option Bool) := do
-  let d ← try mkDecide p catch _ => return none
-  -- コンパイル実行が第一(kernel 簡約は WF 再帰で止まり、重い)
-  try
-    return some (← evalBoolExpr d)
-  catch _ => pure ()
-  try
-    let r ← withTransparency .all <| reduce d (skipTypes := true) (skipProofs := true)
-    if r.isConstOf ``Bool.true then return some true
-    else if r.isConstOf ``Bool.false then return some false
-    else return none
-  catch _ => return none
 
 /-- JSON を深く走査して、集合に含まれる自然数の初出順を集める(泉の値の出現順)。 -/
 partial def scanWellNums (allocated : List Nat) (j : Json) (acc : Array Nat) : Array Nat :=
@@ -811,6 +845,72 @@ def idFieldType (reg : MonoReg) (head : Name) (targs : Array Expr) :
         return some m
     return none
 
+/-- 構造体の制約(Prop フィールド)のうち生成器が読める形を IR にする:
+    `List.Nodup (List.map (fun x => x.f) coll)` は unique、
+    `List.Nodup (List.filterMap (fun x => x.f) coll)` は uniqueSome(値のあるものだけが対象)。
+    coll は同じ構造体の先行フィールド(List)、射影は `fun x => x.f` / `(·.f)` / `S.f`。
+    読めない形は note の文面にして返す。 -/
+def structConstraints (rootNs head : Name) (targs : Array Expr) :
+    MetaM (Array Json × Array String) := do
+  let env ← getEnv
+  unless isStructure env head do return (#[], #[])
+  let iv ← getConstInfoInduct head
+  let ci ← getConstInfoCtor iv.ctors.head!
+  let ty ← instantiateForall ci.type targs
+  forallTelescopeReducing ty fun xs _ => do
+    let mut out : Array Json := #[]
+    let mut unreadable : Array String := #[]
+    let mut data := 0
+    for x in xs do
+      let d ← x.fvarId!.getDecl
+      unless ← Meta.isProp d.type do
+        data := data + 1
+        continue
+      let name := toString d.userName
+      match ← uniqueForm? rootNs xs d.type with
+      | some (kind, coll, field) =>
+        out := out.push (Json.mkObj [("kind", kind), ("name", name),
+          ("collection", coll), ("field", field)])
+      | none => unreadable := unreadable.push s!"{head}.{name}: {← ppExpr d.type}"
+    -- データを運ばない構造体(validate の解決の成果物 = 証拠)には fixture が無い — note の対象外
+    return (out, if data == 0 then #[] else unreadable)
+where
+  /-- `List.Nodup l` の l。 -/
+  nodupArg? (t : Expr) : Option Expr :=
+    match t.getAppFn with
+    | .const n _ => if n == ``List.Nodup && t.getAppArgs.size == 2 then some t.getAppArgs[1]! else none
+    | _ => none
+  /-- 射影 `f : S → β` が指す S のフィールド名。 -/
+  projField? (f : Expr) : MetaM (Option String) := do
+    let .forallE _ dom _ _ ← whnf (← inferType f) | return none
+    withLocalDeclD `x dom fun x => do
+      let env ← getEnv
+      let e := (mkApp f x).headBeta
+      match e with
+      | .proj s i y => return if y == x then (getStructureFields env s)[i]? |>.map toString else none
+      | _ =>
+        let .const pf _ := e.getAppFn | return none
+        let some info := env.getProjectionFnInfo? pf | return none
+        unless e.getAppArgs.back? == some x do return none
+        return (getStructureFields env info.ctorName.getPrefix)[info.i]? |>.map toString
+  uniqueForm? (rootNs : Name) (xs : Array Expr) (t : Expr) :
+      MetaM (Option (String × String × String)) := do
+    let some inner := nodupArg? (← instantiateMVars t) | return none
+    let .const mapName _ := inner.getAppFn | return none
+    let kind ← if mapName == ``List.map then pure "unique"
+      else if mapName == ``List.filterMap then pure "uniqueSome"
+      else return none
+    -- List.map / List.filterMap : {α β} → (α → …) → List α → List β
+    let args := inner.getAppArgs
+    unless args.size == 4 do return none
+    let coll := args[3]!
+    unless coll.isFVar && xs.contains coll do return none
+    -- 要素は対象の structure(生成区分を持ち、fixture が引かれる型)に限る — Prod の射影などは読めない形
+    let .const elHead _ := (← whnf args[0]!).getAppFn | return none
+    unless rootNs.isPrefixOf elHead && isStructure (← getEnv) elHead do return none
+    let some field ← projField? args[2]! | return none
+    return some (kind, toString (← coll.fvarId!.getDecl).userName, field)
+
 elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
   let rootNs := nsStx.getString.toName
   let outPath := outStx.getString
@@ -849,7 +949,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let some (.ctorInfo ci) := env.find? ii.ctors.head! | return false
       forallTelescopeReducing ci.type fun xs _ => do
         for i in [ii.numParams:xs.size] do
-          if (← whnf (← inferType xs[i]!)).isForall then return true
+          let t ← inferType xs[i]!
+          -- 制約(Prop フィールド。∀ の形もある)は関数フィールドではない
+          if ← Meta.isProp t then continue
+          if (← whnf t).isForall then return true
         return false
     -- 時計ポート: 全フィールドが標準時間型の structure(Clock)。
     -- ポート束(関数フィールドの structure)と同格の「調達の引数種」— 型で識別する
@@ -858,12 +961,15 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let some (.inductInfo ii) := env.find? n | return false
       let some (.ctorInfo ci) := env.find? ii.ctors.head! | return false
       forallTelescopeReducing ci.type fun xs _ => do
-        if xs.size ≤ ii.numParams then return false
+        let mut data := 0
         for i in [ii.numParams:xs.size] do
-          let t ← whnf (← inferType xs[i]!)
+          let t ← inferType xs[i]!
+          if ← Meta.isProp t then continue
+          let t ← whnf t
           let .const tn _ := t.getAppFn | return false
           unless (stdTimeKind? tn).isSome do return false
-        return true
+          data := data + 1
+        return data > 0
     let mut roles : Std.HashMap Name Role := {}
     for (n, ci) in env.constants.toList do
       unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
@@ -983,6 +1089,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 ty := body.instantiate1 inst
               else if dom.isSort then
                 ty := body.instantiate1 (← binderConst rootNs nm)
+              else if ← Meta.isProp dom then
+                -- 制約の証明(泉の新鮮性など)は実装の義務 — 本番面に写らない
+                ty := body.instantiate1 (mkConst ``Unit)
               else
                 -- ポート束(関数フィールドの structure)は配線 —
                 -- 本番面に写らない(precise 入力と同じ扱い)
@@ -1023,7 +1132,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   let mut errJ : Option Json := none
                   for k in [0:ftys.size] do
                     if toString fnames[k]! == "error" then
-                      let fty ← whnf ftys[k]!
+                      let fty ← whnf ftys[k]!.1
                       if fty.getAppFn.isConstOf ``Option then
                         errJ := some (← typeToIR rootNs reg fty.getAppArgs[0]!)
                   match errJ with
@@ -1127,6 +1236,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               ty := body.instantiate1 inst
             else if dom.isSort then
               ty := body.instantiate1 (← binderConst rootNs nm)
+            else if ← Meta.isProp dom then
+              -- 制約の証明は実装の義務 — 署名に写らない
+              ty := body.instantiate1 (mkConst ``Unit)
             else
               let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
               params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
@@ -1195,6 +1307,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               ty := body.instantiate1 inst
             else if dom.isSort then
               ty := body.instantiate1 (← binderConst rootNs nm)
+            else if ← Meta.isProp dom then
+              -- 制約の証明は実装の義務 — 署名に写らない
+              ty := body.instantiate1 (mkConst ``Unit)
             else
               let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
               params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
@@ -1234,17 +1349,26 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let ci ← getConstInfo thmName
         let stmt := ci.type.instantiateLevelParams ci.levelParams
           (ci.levelParams.map fun _ => .zero)
+        -- 事前選別の対象: 結論と、結論の適用に引数として現れない仮定。結論が消費する仮定
+        -- (制約の証明 — 泉の新鮮性など)は主対象の義務で、選別に働かない(searchIn と同じ規則)
+        let view ← forallTelescopeReducing stmt fun xs concl => do
+          let mut parts : Array Expr := #[concl]
+          for x in xs do
+            let ty ← inferType x
+            if (← Meta.isProp ty) && !concl.containsFVar x.fvarId! then parts := parts.push ty
+          pure parts
+        let viewHas (pred : Expr → Bool) : Bool := view.any fun e => (e.find? pred).isSome
         -- 事前選別: UseCase(execute / validate)に触れる定理は UseCase モード、
         -- ふるまい(Entity / VO / State の def)に触れる定理はふるまいモード、
         -- どちらでもなければ対象外(判断関数・Projection — 次段)
-        let touchesExec := stmt.find? (fun e =>
+        let touchesExec := viewHas (fun e =>
           match e with
           | .const fn _ =>
             ["execute", "validate"].contains (toString (fn.updatePrefix Name.anonymous)) &&
               (match modOf fn with
                | some m => ucNs.isPrefixOf m && m.components.getLast! == `UseCase
                | none => false)
-          | _ => false) |>.isSome
+          | _ => false)
         let isBehaviorTarget (e : Expr) : Bool :=
           match e.getAppFn with
           | .const fn _ => behaviorDefs.contains fn
@@ -1259,11 +1383,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           | _ => false
         -- 優先順位: 射影 → 判断 → ふるまい(射影・判断の定理は仮定に
         -- valid 等のふるまいを含むため、ふるまい判定を後段に置く)
-        let projectionMode := !touchesExec && (stmt.find? isProjectionTarget).isSome
-        let judgmentMode := !touchesExec && !projectionMode &&
-          (stmt.find? isJudgmentTarget).isSome
+        let projectionMode := !touchesExec && viewHas isProjectionTarget
+        let judgmentMode := !touchesExec && !projectionMode && viewHas isJudgmentTarget
         let behaviorMode := !touchesExec && !projectionMode && !judgmentMode &&
-          (stmt.find? isBehaviorTarget).isSome
+          viewHas isBehaviorTarget
         unless touchesExec || behaviorMode || judgmentMode || projectionMode do
           nonUseCaseContracts := nonUseCaseContracts + 1
           continue
@@ -1298,8 +1421,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             else valIdx := valIdx.push i
           -- 主対象の探索: 仮定 → 結論の順。UseCase モードは execute を validate より優先
           -- (execute_invalid の仮定に validate が現れるため)
+          -- 結論の適用に引数として現れる仮定(制約の証明 — 泉の新鮮性など)は主対象の
+          -- 選択器ではなく主対象の義務。その型の中は探さない
           let searchIn (pred : Expr → Bool) : Elab.TermElabM (Option Expr) := do
             for i in hypIdx do
+              if concl.containsFVar xs[i]!.fvarId! then continue
               if let some app := (← inferType xs[i]!).find? pred then return some app
             pure (concl.find? pred)
           let primary? ←
@@ -1328,6 +1454,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     found := some xs[j]!
                     cnt := cnt + 1
                 return if cnt == 1 then found else none
+              let matchHyp : Expr → Elab.TermElabM (Option Expr) := fun ty => do
+                for j in hypIdx do
+                  if ← isDefEq (← inferType xs[j]!) ty then return some xs[j]!
+                return none
               let fillLeaf : Name → Expr → Elab.TermElabM Expr := fun nm ty => do
                 if let some x ← matchBinder nm ty then return x
                 match ← buildValue idHeads strCtrJ ty 0 with
@@ -1353,6 +1483,14 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                       match ← whnf cty with
                       | .forallE fnm fdom fbody bi =>
                         let v ← if bi == .instImplicit then synthInstance fdom
+                          else if ← Meta.isProp fdom then
+                            -- 制約: 定理が同じ命題を仮定に持てばそれを使い、無ければ decide の証明
+                            match ← matchHyp fdom with
+                            | some h => pure h
+                            | none =>
+                              match ← decideProp fdom with
+                              | some true => mkDecideProof fdom
+                              | _ => throwError "制約 {fnm} を満たす fixture を組めません"
                           else fillLeaf fnm fdom
                         cargs := cargs.push v
                         cty := fbody.instantiate1 v
@@ -1369,6 +1507,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   let v ←
                     if bi == .instImplicit then synthInstance dom
                     else if dom.isSort then binderConst rootNs nm
+                    else if ← Meta.isProp dom then
+                      match ← decideProp dom with
+                      | some true => mkDecideProof dom
+                      | _ => throwError "execute の制約 {nm} を満たす引数を組めません"
                     else fillArg nm dom
                   eArgs := eArgs.push v
                   ety := body.instantiate1 v
@@ -1391,8 +1533,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             let mut vi := 0
             for y in ys do
               let d ← y.fvarId!.getDecl
+              let isConstraint ← Meta.isProp d.type
               let kind := if d.binderInfo == .instImplicit then "inst"
-                else if d.type.isSort then "type" else "value"
+                else if d.type.isSort then "type"
+                else if isConstraint then "prop" else "value"
               -- 無名 binder は interface 側と同じ規約(arg<値引数の序数>)で消毒
               let nm := if kind == "value" then
                   (if d.userName.hasMacroScopes then Name.mkSimple s!"arg{vi}" else d.userName)
@@ -1516,6 +1660,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               let inst (e : Expr) : Expr := e.replaceFVars xs vals
               -- 仮定の検査: Eq(mvar あり)は左辺評価+単一化、他は decide
               let mut keep := true
+              let mut provenIdx : Array Nat := #[]
               for i in hypIdx do
                 let h ← instantiateMVars (inst (← inferType xs[i]!))
                 if h.hasExprMVar then
@@ -1537,7 +1682,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     pure ()
                 else
                   match ← decideProp h with
-                  | some true => pure ()
+                  | some true => provenIdx := provenIdx.push i
                   | some false =>
                     whys := whys.push "仮定が偽"
                     keep := false
@@ -1545,6 +1690,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     whys := whys.push s!"decide 不可: {h}"
                     keep := false
               unless keep do break
+              -- 真と決まった仮定は証明項に置き換える — 主対象が制約の証明(泉の新鮮性など)を
+              -- 引数に取るとき、評価する適用が閉じた項になる
+              for i in provenIdx do
+                vals := vals.set! i (← mkDecideProof (← instantiateMVars (inst (← inferType xs[i]!))))
+              let inst (e : Expr) : Expr := e.replaceFVars xs vals
               -- オラクル評価と泉の正規化
               let pApp ← instantiateMVars (inst primary)
               let expected := pApp   -- 評価は解釈側の whnf(頭だけ)+コンパイル実行が担う
@@ -1626,7 +1776,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     let some (bj, st) := beforeJ | unreachable!
                     let pRole := roles.get? (headOf pty)
                     let okExtra ←
-                      if pRole == some .aggregateRoot || pRole == some .entity then
+                      if pRole == some .aggregateRoot || pRole == some .entity ||
+                          pRole == some .viewDto then
                         pure [("ok", ← valueToJson payload)]
                       else pure []
                     caseFields := caseFields ++ [("kind", Json.str "transition"),
@@ -1732,31 +1883,52 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let dir := fMod.components.dropLast.getLast!
         let some execC := execByDir.get? dir
           | throwError "UseCase {dir} の execute が見つかりません"
-        -- 型・インスタンス引数を規約で埋め、値引数の (名前, 型) 列を得る
-        let instantiate : Name → Elab.TermElabM (Expr × Array (Name × Expr)) :=
-          fun declName => do
-            let ci ← getConstInfo declName
-            let mut app := mkConst declName
-            let mut ty := ci.type
-            let mut vals : Array (Name × Expr) := #[]
-            repeat
-              match ← whnf ty with
-              | .forallE nm dom body bi =>
-                if bi == .instImplicit then
-                  let i ← synthInstance dom
-                  app := mkApp app i
-                  ty := body.instantiate1 i
-                else if dom.isSort then
-                  let a ← binderConst rootNs nm
-                  app := mkApp app a
-                  ty := body.instantiate1 a
-                else
-                  vals := vals.push (nm, dom)
-                  ty := body.instantiate1 (mkConst ``Unit)   -- 非依存前提
-              | _ => break
-            return (app, vals)
-        let (fApp, fVals) ← instantiate fName
-        let (eApp, eVals) ← instantiate execC
+        -- 値引数の (名前, 型) 列(サンプルのプール用)。型・インスタンス引数は規約で埋め、
+        -- 制約(Prop)の引数は含めない
+        let valueBinders (declName : Name) : Elab.TermElabM (Array (Name × Expr)) := do
+          let ci ← getConstInfo declName
+          let mut ty := ci.type
+          let mut vals : Array (Name × Expr) := #[]
+          repeat
+            match ← whnf ty with
+            | .forallE nm dom body bi =>
+              if bi == .instImplicit then
+                ty := body.instantiate1 (← synthInstance dom)
+              else if dom.isSort then
+                ty := body.instantiate1 (← binderConst rootNs nm)
+              else
+                unless ← Meta.isProp dom do vals := vals.push (nm, dom)
+                ty := body.instantiate1 (mkConst ``Unit)   -- 非依存前提
+            | _ => break
+          return vals
+        -- 適用を組む: 型・インスタンスは規約、制約(Prop)は decide の証明、値は pick(none なら組めない)。
+        -- 返すのは適用と値引数の (名前, 型, 値) 列
+        let applyWith (declName : Name) (pick : Name → Expr → Elab.TermElabM (Option Expr)) :
+            Elab.TermElabM (Option (Expr × Array (Name × Expr × Expr))) := do
+          let ci ← getConstInfo declName
+          let mut app := mkConst declName
+          let mut ty := ci.type
+          let mut vals : Array (Name × Expr × Expr) := #[]
+          repeat
+            match ← whnf ty with
+            | .forallE nm dom body bi =>
+              let v? ←
+                if bi == .instImplicit then pure (some (← synthInstance dom))
+                else if dom.isSort then pure (some (← binderConst rootNs nm))
+                else if ← Meta.isProp dom then
+                  match ← decideProp dom with
+                  | some true => pure (some (← mkDecideProof dom))
+                  | _ => pure none
+                else do
+                  let v? ← pick nm dom
+                  if let some v := v? then vals := vals.push (nm, dom, v)
+                  pure v?
+              let some v := v? | return none
+              app := mkApp app v
+              ty := body.instantiate1 v
+            | _ => break
+          return some (app, vals)
+        let fVals ← valueBinders fName
         -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
         let strCtrF : IO.Ref Nat ← IO.mkRef 800
         let mut pools : Array (Name × Array (Nat × Expr)) := #[]
@@ -1788,18 +1960,13 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           -- execute の引数: fault 定義と同名はサンプル共有、それ以外(時計・他の泉)は
           -- 組合せの最大 variant で構築(独立にサンプルされる日付の整合 — clock.today)
           let vmax := combo.foldl (fun a (_, v, _) => max a v) 0
-          let mut eArgs : Array Expr := #[]
-          let mut buildOk := true
-          for (nm, ty) in eVals do
-            let v? ← match combo.find? (·.1 == nm) with
+          let some (eApp, eVals) ← applyWith execC (fun nm ty => do
+              match combo.find? (·.1 == nm) with
               | some (_, _, x) => pure (some x)
-              | none => buildValue idHeads strCtrF ty vmax
-            match v? with
-            | some x => eArgs := eArgs.push x
-            | none => buildOk := false
-          unless buildOk do continue
+              | none => buildValue idHeads strCtrF ty vmax)
+            | continue
           -- execute が成功する入力だけを採用(Result の error フィールドが none)
-          let eRes ← whnf (mkAppN eApp eArgs)
+          let eRes ← whnf eApp
           let .const rcn _ := eRes.getAppFn | continue
           let some (.ctorInfo rci) := env.find? rcn | continue
           let rFields := eRes.getAppArgs.extract rci.numParams eRes.getAppArgs.size
@@ -1810,18 +1977,15 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               if (← whnf rFields[fi]!).getAppFn.isConstOf ``Option.none then isOk := true
           unless isOk do continue
           -- 期待値 = fault 定義の値(障害で中断されたときに観測される状態)
-          let mut fArgs : Array Expr := #[]
-          for (nm, _) in fVals do
-            let some (_, _, x) := combo.find? (·.1 == nm) | throwError "内部エラー: fault 引数 {nm}"
-            fArgs := fArgs.push x
-          let afterJ ← valueToJson (← whnf (mkAppN fApp fArgs))
+          let some (fApp, _) ← applyWith fName (fun nm _ =>
+              pure ((combo.find? (·.1 == nm)).map (·.2.2)))
+            | continue
+          let afterJ ← valueToJson (← whnf fApp)
           -- args(ペイロード・時計)と before(状態)の仕分け(usecase モードと同じ)
           let mut beforeJ : Option (Json × Name) := none
           let mut argJs : List (String × Json) := []
           let mut cmdKey := ""
-          for i in [0:eVals.size] do
-            let (nm, ty) := eVals[i]!
-            let a := eArgs[i]!
+          for (nm, ty, a) in eVals do
             let tyW ← whnf ty
             let h := match tyW.getAppFn with | .const hn _ => hn | _ => Name.anonymous
             if roles.get? h == some .repositoryState then
@@ -1879,6 +2043,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         | some a => pure a
         | none => monoArgsByConv rootNs n
       let shape ← shapeOf rootNs reg n targs
+      -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
+      let (constraints, unreadable) ← structConstraints rootNs n targs
+      for u in unreadable do
+        logInfo m!"lean2kotlin: {u} は読める制約の形((coll.map (·.f)).Nodup / (coll.filterMap (·.f)).Nodup)ではないため、生成する fixture はこの制約を満たすとは限りません"
       let collectFromShape (j : Json) : Array Name :=
         match j.getObjVal? "fields" with
         | .ok (.arr fs) => fs.foldl (fun acc f =>
@@ -1903,6 +2071,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         throwError "lean2kotlin: {n} の Kotlin 名 {kname} が識別子として不正です"
       let mut entry := [("lean", Json.str (toString n)), ("kotlin", Json.str kname),
                         ("role", Json.str role.str), ("shape", shape)]
+      unless constraints.isEmpty do
+        entry := entry ++ [("constraints", Json.arr constraints)]
       -- 生成先パッケージの導出源: 型の在住モジュール(Lean のディレクトリ構成の写し)
       if let some m := modOf n then
         entry := entry ++ [("module", Json.str (toString m))]

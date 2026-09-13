@@ -25,7 +25,7 @@ lean/
     │   └── Entity/            具体構造体 + ふるまい + @[contract] 定理群
     ├── Application/           アプリケーション層 = 外部 Actor との面（Domain の影）
     │   ├── ActorContext.lean  名義（状態でも入力でもない第 3 の引数種）
-    │   ├── RepositoryState.lean 観測モデル（per-Root の valid）と ID の泉
+    │   ├── RepositoryState.lean 観測モデル（集約ルートの制約は構造体の Prop フィールド）と ID の泉
     │   ├── ReadModel.lean     Row（業務事実だけ）
     │   ├── View.lean          閲覧の共有語彙（View→Row の壁・View→ドメイン語彙の壁）
     │   ├── Projection.lean    書き込み → 読み取りの射影（Entity を読める唯一の読み側）
@@ -35,7 +35,7 @@ lean/
     ├── Runtime/               実行系（非規範 — 表現の仮置き・境界）
     │   ├── Ids.lean           同一性の仮置き + 泉の具体化
     │   ├── Command.lean       コマンドの輸送形式 + Actor + 反機能の一覧
-    │   ├── Machine.lean       Snapshot / check / apply（today と actor を受け取る）
+    │   ├── Machine.lean       Snapshot / check（泉の境界）/ apply（today と actor と check の証明を受け取る）
     │   ├── Reachable.lean     可到達性（apply が check を保つことの証明）
     │   ├── Views.lean         射影と画面の束（viewer と today を受け取る）
     │   ├── Json.lean          JSON の後付け（ワイヤ形式はここで固定）

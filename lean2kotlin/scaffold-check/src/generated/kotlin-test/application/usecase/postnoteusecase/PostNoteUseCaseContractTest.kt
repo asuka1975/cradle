@@ -143,4 +143,33 @@ abstract class PostNoteUseCaseContractTest {
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(504L, noteIdGenerator.next)
 	}
+
+	/** 同じ題のメモがもうあれば書けない。 */
+	@Test
+	fun `execute は定理 execute_title_taken を再現する(1)`() {
+		val noteRepository = noteRepository()
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
+		val noteIdGenerator = SequentialNoteIdGenerator(500L)
+		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
+		assertEquals(DomainResult.Err(DomainError.TitleTaken),
+			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s9")))))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)),
+			noteRepository.findAll().map { it.toFixture() })
+		assertEquals(500L, noteIdGenerator.next)
+	}
+
+	/** 同じ題のメモがもうあれば書けない。 */
+	@Test
+	fun `execute は定理 execute_title_taken を再現する(2)`() {
+		val noteRepository = noteRepository()
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)))
+		val noteIdGenerator = SequentialNoteIdGenerator(503L)
+		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
+		assertEquals(DomainResult.Err(DomainError.TitleTaken),
+			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s12")))))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)),
+			noteRepository.findAll().map { it.toFixture() })
+		assertEquals(503L, noteIdGenerator.next)
+	}
 }

@@ -3,6 +3,7 @@ package dev.cradle.scaffold
 import dev.cradle.scaffold.application.ActorContext
 import dev.cradle.scaffold.application.NoteIdGenerator
 import dev.cradle.scaffold.application.usecase.postnoteusecase.PostNoteCommand
+import dev.cradle.scaffold.application.usecase.postnoteusecase.PostNoteFreeTitle
 import dev.cradle.scaffold.application.usecase.postnoteusecase.PostNoteUseCase
 import dev.cradle.scaffold.domain.DomainError
 import dev.cradle.scaffold.domain.repository.NoteRepository
@@ -13,8 +14,10 @@ class PostNoteUseCaseImpl(
 	private val noteIdGenerator: NoteIdGenerator,
 	private val actor: ActorContext,
 ) : PostNoteUseCase {
-	override fun validate(c: PostNoteCommand): DomainResult<DomainError, Unit> =
-		if (c.title.valid()) DomainResult.Ok(Unit) else DomainResult.Err(DomainError.EmptyTitle)
+	override fun validate(c: PostNoteCommand): DomainResult<DomainError, PostNoteFreeTitle> =
+		if (!c.title.valid()) DomainResult.Err(DomainError.EmptyTitle)
+		else if (noteRepository.findAll().any { it.title == c.title }) DomainResult.Err(DomainError.TitleTaken)
+		else DomainResult.Ok(PostNoteFreeTitle)
 
 	override fun execute(c: PostNoteCommand): DomainResult<DomainError, Unit> =
 		when (val v = validate(c)) {

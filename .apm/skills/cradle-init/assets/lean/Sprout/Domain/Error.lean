@@ -15,6 +15,8 @@ inductive DomainError where
   | alreadyClosed
   /-- 題が空。 -/
   | emptyTitle
+  /-- 同じ題のメモがもうある。 -/
+  | titleTaken
 deriving Repr, DecidableEq
 
 end Sprout

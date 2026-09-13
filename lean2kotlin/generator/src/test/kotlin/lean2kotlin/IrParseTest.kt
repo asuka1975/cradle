@@ -71,18 +71,43 @@ class IrParseTest {
 	}
 
 	@Test
-	fun `骨格の IR は types 16 と useCases 3 と queryServices 1 と contracts 18 と behaviors 3 を持つ`() {
+	fun `constraints は unique と uniqueSome を読み、無ければ空`() {
+		val td = IrTypeDef.parse(json("""
+			{"lean":"T.RoomRepositoryState","kotlin":"RoomRepositoryState","role":"repositoryState",
+			 "shape":{"kind":"structure","fields":[{"name":"rooms","type":{"k":"list","of":{"k":"ref","name":"T.Room"}}}]},
+			 "constraints":[{"kind":"unique","name":"uniqueIds","collection":"rooms","field":"id"},
+			                {"kind":"uniqueSome","name":"uniqueNames","collection":"rooms","field":"name"}]}
+		""".trimIndent()))
+		assertEquals(
+			listOf(IrConstraint("unique", "uniqueIds", "rooms", "id"), IrConstraint("uniqueSome", "uniqueNames", "rooms", "name")),
+			td.constraints)
+		assertTrue(IrTypeDef.parse(json("""
+			{"lean":"T.Q","kotlin":"Q","role":"viewDto","shape":{"kind":"structure","fields":[]}}
+		""".trimIndent())).constraints.isEmpty())
+	}
+
+	@Test
+	fun `骨格の IR は NoteRepositoryState に uniqueIds と uniqueTitles の制約を持つ`() {
+		val ir = sproutIr()
+		assertEquals(
+			listOf(IrConstraint("unique", "uniqueIds", "notes", "id"), IrConstraint("unique", "uniqueTitles", "notes", "title")),
+			ir.typeDef("Sprout.Application.NoteRepositoryState").constraints)
+		assertTrue(ir.types.filter { it.lean != "Sprout.Application.NoteRepositoryState" }.all { it.constraints.isEmpty() })
+	}
+
+	@Test
+	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 19 と behaviors 3 を持つ`() {
 		val ir = sproutIr()
 		assertEquals("Sprout", ir.rootNamespace)
-		assertEquals(16, ir.types.size)
+		assertEquals(17, ir.types.size)
 		assertEquals(
 			mapOf(
 				"actorPort" to 1, "command" to 2, "repositoryState" to 3, "readModelRow" to 1,
-				"viewDto" to 2, "readModel" to 1, "error" to 2, "aggregateRoot" to 1, "valueObject" to 3),
+				"viewDto" to 3, "readModel" to 1, "error" to 2, "aggregateRoot" to 1, "valueObject" to 3),
 			ir.types.groupingBy { it.role }.eachCount())
 		assertEquals(3, ir.useCases.size)
 		assertEquals(1, ir.queryServices.size)
-		assertEquals(18, ir.contracts.size)
+		assertEquals(19, ir.contracts.size)
 		assertEquals(3, ir.behaviors.size)
 		assertTrue(ir.domainServices.isEmpty())
 		assertTrue(ir.faultContracts.isEmpty())

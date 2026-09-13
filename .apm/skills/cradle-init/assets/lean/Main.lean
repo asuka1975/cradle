@@ -77,11 +77,13 @@ def traceStep (today : Date) (viewer : Option UserId) (fallback : Option Actor)
     match fromJson? (α := Command) cj with
     | .error e => (s, out ++ [Json.mkObj [("command", cj), ("error", Json.str s!"bad command: {e}")]])
     | .ok c =>
-      match Snapshot.apply today actor c s with
-      | .ok s'   => (s', out ++ [Json.mkObj [("actor", toJson actor), ("command", cj),
-                      ("state", toJson s'), ("views", toJson (views today s' viewer))]])
-      | .error e => (s, out ++ [Json.mkObj [("actor", toJson actor), ("command", cj),
-                      ("domainError", toJson e)]])
+      if h : s.check = true then
+        match Snapshot.apply today actor c s h with
+        | .ok s'   => (s', out ++ [Json.mkObj [("actor", toJson actor), ("command", cj),
+                        ("state", toJson s'), ("views", toJson (views today s' viewer))]])
+        | .error e => (s, out ++ [Json.mkObj [("actor", toJson actor), ("command", cj),
+                        ("domainError", toJson e)]])
+      else (s, out ++ [Json.mkObj [("command", cj), ("error", Json.str "state failed Snapshot.check")]])
 
 def main : IO Unit := do
   let input ← (← IO.getStdin).readToEnd
@@ -103,14 +105,14 @@ def main : IO Unit := do
       | some sj, some cj =>
         match fromJson? (α := Snapshot) sj, fromJson? (α := Command) cj with
         | .ok s, .ok c =>
-          if !s.check then respond <| protocolError "state failed Snapshot.check"
-          else
+          if h : s.check = true then
             match actor? with
             | none => respond <| protocolError "step requires actor"
             | some actor =>
-              match Snapshot.apply today actor c s with
+              match Snapshot.apply today actor c s h with
               | .ok s'   => respond (okResponse today s' viewer)
               | .error e => respond (domainErrorResponse e)
+          else respond <| protocolError "state failed Snapshot.check"
         | .error e, _ => respond <| protocolError s!"bad state: {e}"
         | _, .error e => respond <| protocolError s!"bad command: {e}"
       | _, _ => respond <| protocolError "step requires state and command"

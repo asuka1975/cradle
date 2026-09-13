@@ -67,7 +67,8 @@
    "module": "PostNoteUseCase",
    "methods":
    [{"ret":
-     {"ok": {"k": "unit"},
+     {"ok":
+      {"name": "Sprout.Application.PostNoteUseCase.FreeTitle", "k": "ref"},
       "k": "result",
       "err": {"name": "Sprout.DomainError", "k": "ref"}},
      "params":
@@ -77,9 +78,9 @@
        {"name": "Sprout.Application.PostNoteUseCase.Command", "k": "ref"},
        "name": "c"},
       {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
-       "name": "_before"}],
+       "name": "before"}],
      "name": "validate",
-     "doc": "始まる前の拒否: 題が空なら書けない。新規追加なので解決の成果物は無い（Unit）。 "},
+     "doc": "始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題が空いている証拠を返す。 "},
     {"ret":
      {"ok": {"k": "unit"},
       "k": "result",
@@ -127,7 +128,16 @@
    "role": "repositoryState",
    "module": "Sprout.Application.RepositoryState",
    "lean": "Sprout.Application.NoteRepositoryState",
-   "kotlin": "NoteRepositoryState"},
+   "kotlin": "NoteRepositoryState",
+   "constraints":
+   [{"name": "uniqueIds",
+     "kind": "unique",
+     "field": "id",
+     "collection": "notes"},
+    {"name": "uniqueTitles",
+     "kind": "unique",
+     "field": "title",
+     "collection": "notes"}]},
   {"shape":
    {"kind": "structure",
     "fields":
@@ -176,6 +186,12 @@
    "module": "Sprout.Application.UseCase.PostNoteUseCase.Command",
    "lean": "Sprout.Application.PostNoteUseCase.Command",
    "kotlin": "PostNoteCommand"},
+  {"shape": {"kind": "structure", "fields": []},
+   "role": "viewDto",
+   "module": "Sprout.Application.UseCase.PostNoteUseCase.UseCase",
+   "lean": "Sprout.Application.PostNoteUseCase.FreeTitle",
+   "kotlin": "PostNoteFreeTitle",
+   "doc": "解決の成果物: 題が空いている証拠（値は運ばない）。 "},
   {"shape":
    {"kind": "structure",
     "fields":
@@ -208,7 +224,8 @@
    "doc": "メモ。書いた本人だけが閉じられる。閉じたメモは消えない（削除は存在しない）。 "},
   {"shape":
    {"kind": "enum",
-    "ctors": ["unknownNote", "notAuthor", "alreadyClosed", "emptyTitle"]},
+    "ctors":
+    ["unknownNote", "notAuthor", "alreadyClosed", "emptyTitle", "titleTaken"]},
    "role": "error",
    "module": "Sprout.Domain.Error",
    "lean": "Sprout.DomainError",
@@ -922,6 +939,60 @@
          "closed": false,
          "author": {"id": 4}}]},
       "noteIds": {"next": 504}}}]},
+  {"useCase": "PostNoteUseCase",
+   "theorem": "execute_title_taken",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "同じ題のメモがもうあれば書けない。 ",
+   "cases":
+   [{"stateType": "Sprout.Application.PostNoteUseCase.State",
+     "kind": "transition",
+     "error": "titleTaken",
+     "before":
+     {"notes":
+      {"notes":
+       [{"title": {"text": "s9"},
+         "id": {"id": 91},
+         "closed": false,
+         "author": {"id": 4}}]},
+      "noteIds": {"next": 500}},
+     "args": {"c": {"title": {"text": "s9"}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"notes":
+      {"notes":
+       [{"title": {"text": "s9"},
+         "id": {"id": 91},
+         "closed": false,
+         "author": {"id": 4}}]},
+      "noteIds": {"next": 500}}},
+    {"stateType": "Sprout.Application.PostNoteUseCase.State",
+     "kind": "transition",
+     "error": "titleTaken",
+     "before":
+     {"notes":
+      {"notes":
+       [{"title": {"text": "s12"},
+         "id": {"id": 91},
+         "closed": false,
+         "author": {"id": 4}},
+        {"title": {"text": "s13"},
+         "id": {"id": 92},
+         "closed": true,
+         "author": {"id": 5}}]},
+      "noteIds": {"next": 503}},
+     "args": {"c": {"title": {"text": "s12"}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"notes":
+      {"notes":
+       [{"title": {"text": "s12"},
+         "id": {"id": 91},
+         "closed": false,
+         "author": {"id": 4}},
+        {"title": {"text": "s13"},
+         "id": {"id": 92},
+         "closed": true,
+         "author": {"id": 5}}]},
+      "noteIds": {"next": 503}}}]},
   {"useCase": "Sprout.Application.NoteRepositoryState",
    "theorem": "noteRows_ids",
    "target": "behaviors",
@@ -1228,13 +1299,19 @@
  [{"subject": "Sprout.Application.NoteRepositoryState",
    "module": "Sprout.Application.RepositoryState",
    "methods":
-   [{"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
+   [{"ret": {"of": {"name": "Sprout.Title", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "titles",
+     "doc": ""},
+    {"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
        "name": "s"},
       {"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
      "name": "add",
-     "doc": "末尾に足す（書かれた順が並びに残る）。 "},
+     "doc": "末尾に足す（書かれた順が並びに残る）。受け付けるのは新鮮な同一性と空いている題だけ。 "},
     {"ret": {"of": {"name": "Sprout.Domain.Note", "k": "ref"}, "k": "option"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
@@ -1242,12 +1319,6 @@
       {"type": {"name": "Sprout.Runtime.NoteId", "k": "ref"}, "name": "id"}],
      "name": "find?",
      "doc": ""},
-    {"ret": {"k": "bool"},
-     "params":
-     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
-       "name": "s"}],
-     "name": "valid",
-     "doc": "同一性は重複しない。 "},
     {"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
@@ -1259,7 +1330,7 @@
         "from": {"name": "Sprout.Domain.Note", "k": "ref"}},
        "name": "f"}],
      "name": "update",
-     "doc": "1 件を差し替える（同一性を変えない操作にのみ使う）。**消す操作は無い**。 "},
+     "doc": "1 件を差し替える（同一性も題も変えない操作にのみ使う）。**消す操作は無い**。 "},
     {"ret": {"of": {"name": "Sprout.Runtime.NoteId", "k": "ref"}, "k": "list"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},

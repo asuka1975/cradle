@@ -104,6 +104,24 @@ sealed interface IrShape {
 
 data class IrCtor(val name: String, val fields: List<IrField>)
 
+/**
+ * 構造体の制約(Lean の Prop フィールド)。kind = "unique": collection の要素の field が重複しない
+ * (`(coll.map (·.f)).Nodup`)、"uniqueSome": 値のある要素だけが対象(`(coll.filterMap (·.f)).Nodup`)。
+ * name は Lean のフィールド名(生成 KDoc に写す)。
+ */
+data class IrConstraint(val kind: String, val name: String, val collection: String, val field: String) {
+	companion object {
+		fun parse(j: JsonElement): IrConstraint {
+			val o = j.jsonObject
+			return IrConstraint(
+				kind = o.getValue("kind").jsonPrimitive.content,
+				name = o.getValue("name").jsonPrimitive.content,
+				collection = o.getValue("collection").jsonPrimitive.content,
+				field = o.getValue("field").jsonPrimitive.content)
+		}
+	}
+}
+
 data class IrTypeDef(
 	val lean: String,
 	val kotlin: String,
@@ -120,6 +138,8 @@ data class IrTypeDef(
 	val wire: String? = null,
 	/** Lean 側の宣言 docstring(生成 KDoc の素材 — 泉ポートの単調性の註記等)。 */
 	val doc: String = "",
+	/** 構造体の制約(Prop フィールドのうち抽出器が読めた一意制約)。fixture はこれを満たすように引く。 */
+	val constraints: List<IrConstraint> = emptyList(),
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrTypeDef {
@@ -140,7 +160,8 @@ data class IrTypeDef(
 				isId = o["isId"]?.jsonPrimitive?.boolean ?: false,
 				module = o["module"]?.jsonPrimitive?.content,
 				wire = wire,
-				doc = o["doc"]?.jsonPrimitive?.content ?: "")
+				doc = o["doc"]?.jsonPrimitive?.content ?: "",
+				constraints = o["constraints"]?.jsonArray?.map(IrConstraint::parse) ?: emptyList())
 		}
 	}
 }
