@@ -43,7 +43,8 @@ description: Use to run or continue domain exploration with the product owner as
    - explorer が `[QUESTIONS]` も `[SESSION_REPORT]` も付けずに終わったら、推測で問いかけファイルを組み立てず explorer に確認する。
 4. **レポート中継**: `[SESSION_REPORT]` をユーザーに日本語で簡潔に伝える（テーマ・更新内容・新規 / 解決した HS・検証した UX / MQ）。
 5. **後片付け（必須。中断でも失敗でも）**: プローブ（Scenarios.lean の一時シナリオと `scenarioByName` の登録・一時の枝・モックアップの「問いを試す」）を消し、`ddd.mjs end` を実行する
-   （questions.md・naming.md と `.session` を消し、`cradle ddd-clean-check --build` で残骸が無いことと `git status lean/` が探索前と同じことを機械で確かめる）。残っていれば消す — モデルを変えるのはフェーズ 2 の仕事。
+   （questions.md・naming.md を消し、`cradle ddd-clean-check --build` で残骸が無いことと `lean/` が `ddd.mjs start` の時点と同じことを機械で確かめ、通れば `.session` を消す）。
+   残っていれば編集を手で戻して `ddd.mjs end` をやり直す — モデルを変えるのはフェーズ 2 の仕事。基準は HEAD ではなく `start` の時点なので、`git checkout` / `git stash` で戻さない（未コミットの形式化まで消える）。検査が通るまで `.session` が残り、その間 hook は `documents/ddd/` の編集を許したまま（片付けは中継役だけが行う）。前の探索が終わらないまま `lean/` を形式化したなら `.session` を消してから `start` する。
    `end` は `ddd.mjs answers` を中継した後でだけ通る。回答を待たずに問いを捨てて終えるのは `--abandon`（ユーザーがそう決めたときだけ）。片付けは中継役の仕事で、explorer にやらせない。
 6. **UX レビュー**: 時系列マップが変わったら `ddd-ux-reviewer` をバックグラウンドで起動し、完了したら起票（ID・種別・要約）を中継する。
 7. **形式化（フェーズ 2）**: 正式ドキュメントが変わったら `lean-domain-modeler` をバックグラウンドで起動し、完了したら反映結果と新規 MQ を中継する。用語集の英語候補が識別子と違う行があれば、形式化役が識別子を改名する。

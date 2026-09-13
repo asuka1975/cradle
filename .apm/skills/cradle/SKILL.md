@@ -16,7 +16,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 | `lean-check [--build]` | 層の壁・sorry・axiom・生成器への言及 | Lean を編集したあと、コミット前 |
 | `regen-impact [--dry-run]` | 再生成 → 生成物の差分 → 参照する手書き実装と契約テスト → golden 回帰 | Lean を変えて backend に追随するとき |
 | `unslop [--diff\|--all]` | コメント規約・腐ったパス・逃げ言葉・握りつぶし | 止まる前（Stop hook が error を差し戻す） |
-| `ddd-clean-check [--build]` | 探索の残骸（questions.md・naming.md・probe-・lean の差分）が無いこと | ddd スキルの終わり |
+| `ddd-clean-check [--build] [--baseline <file>]` | 探索の残骸（questions.md・naming.md・probe-・lean の差分。`ddd.mjs end` は `.session` を baseline に渡し、開始時点と比べる）が無いこと | ddd スキルの終わり |
 | `doctor` | ハーネスの置き場と hooks の配線、Codex の hooks の信頼、AGENTS.md の大きさ（Codex の上限）、道具の有無と版（node / lake / elan / java / pnpm / apm / claude / codex …）、lean2kotlin の解決可否（`LEAN2KOTLIN_HOME`） | 導入時、道具が見つからないと言われたとき、backend の着手前 |
 | `doctor --local` | local スタックのコンテナ（`cradle.json` の `infra.containers`）の鮮度（Created と HEAD のコミット時刻） | local を作り直す前、E2E の前 |
 

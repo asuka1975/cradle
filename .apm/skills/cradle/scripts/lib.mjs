@@ -2,6 +2,7 @@
 // 依存は Node 標準ライブラリだけ（配布先に何も入れさせない）。
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { join, resolve, relative, sep } from "node:path";
 
 /** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd */
@@ -173,6 +174,15 @@ export function walk(dir, { ext = null, skip = [".lake", "node_modules", "build"
 }
 
 export function rel(root, p) { return relative(root, p).split(sep).join("/"); }
+
+/** lean/ の全ファイルの sha256（lean/ からの相対パス → ハッシュ）。lake-manifest.json は lake build が書く（初回のビルドで現れる）ので数えない。 */
+export function leanSnapshot(cfg) {
+  const out = {};
+  for (const f of walk(cfg.lean.rootDir, { skip: [".lake", "node_modules", "build", ".git", "dist", "lake-manifest.json"] })) {
+    out[rel(cfg.lean.rootDir, f)] = createHash("sha256").update(readFileSync(f)).digest("hex");
+  }
+  return out;
+}
 
 /** 素朴な glob → 正規表現（**, *, ? だけ）。 */
 export function globToRegExp(glob) {
