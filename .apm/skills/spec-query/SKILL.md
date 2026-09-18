@@ -12,7 +12,7 @@ description: Use whenever a question is about what the specification says or doe
 
 | 問い | 手順 |
 |---|---|
-| 「どんな操作がある / 無い」「どんな失敗がある」 | `spec-query meta` → commands / errors をそのまま示す。無いものは「モデルに無い（反機能の一覧 `Runtime/Command.lean` を確認）」と答える |
+| 「どんな操作がある / 無い」「どんな失敗がある」「外から何が届く」 | `spec-query meta` → commands / observations（内部入力: 通知・契機。利用者の操作ではない）/ ports / errors をそのまま示す。無いものは「モデルに無い（反機能の一覧 `Runtime/Command.lean` を確認）」と答える |
 | 「このコマンドは何を受け取る」「この型の中身」 | `spec-query print <FullName>`（例: `MonoWa.Application.PostIntentUseCase.Command`） |
 | 「この状況で X が Y したらどうなる」 | 1) `spec-query scenarios` で出発点を選ぶ 2) 必要なら `spec-query init --scenario S --viewer V` で盤面を見る 3) `spec-query run --scenario S --actor A --viewer V --today D --commands '[…]'` で手を打つ 4) 各手の ok / domainError と最後の views を引用 |
 | 「画面に何が見える」「誰に見える」 | `spec-query init` / `run` の `views` を viewer を変えて比べる（`null` = そこに無い、`[]` = 見えたうえで空） |

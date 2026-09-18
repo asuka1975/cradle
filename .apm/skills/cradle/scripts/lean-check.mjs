@@ -14,9 +14,11 @@
 //   actor     : @[actorContext] の structure はフィールドを 1 つ以上持つ（0 だと生成器が不正な Kotlin を出す）
 //   annot     : @[aggregateRoot] は Domain/Entity/ だけ、@[repositoryState] の型名は *RepositoryState / *IdGeneratorState
 //   json      : Domain / Application で ToJson / FromJson を deriving しない（境界の関心）
-//   wiring    : Runtime/Command.lean の構成子が Json.lean（ワイヤ）と Machine.lean（apply の腕）の両方に現れる
-//   usecase   : Application/UseCase/<X>/ は Command+UseCase（更新系）か ReadModel+QueryService+UseCase（参照系）で、validate / execute / query の固定名を持つ
-//               （Port を使う更新系は request を持ち、mkRequest / apply も固定名）
+//   wiring    : Runtime/Command.lean の構成子が Json.lean（ワイヤ）と Machine.lean（applyCommand の腕）の両方に現れる。
+//               Runtime/Observation.lean（内部入力の合併型）も同じで、腕は applyObservation。Observation 形の UseCase があるのに無ければ error
+//   usecase   : Application/UseCase/<X>/ は Command+UseCase（更新系）・Observation+UseCase（内部入力）・ReadModel+QueryService+UseCase（参照系）の
+//               どれか 1 つで、validate / execute / query の固定名を持つ（Port を使う更新系・内部入力は request を持ち、mkRequest / apply も固定名）。
+//               内部入力の UseCase は名義（ActorContext）を受けない
 //   port      : Application/Port/<Port>/<操作>.lean（Domain/Port も同じ）は固定名 Request / Outcome を持ち、関数フィールドを持たない。Port 名は Repository で終えない
 //   --smoke   : CLI に init を流して ok が返ることを確かめる
 //   orphan    : <Root>.lean から import で辿れないモジュール（lake build が検査しないファイル）
@@ -71,7 +73,7 @@ for (const f of allFiles) {
     // CQRS: 読み取り側は Entity を見ない
     const dir = dirname(f);
     const isUseCaseDir = relPath.split("/")[1] === "UseCase" && relPath.split("/").length >= 4;
-    const writeSide = isUseCaseDir && existsSync(join(dir, "Command.lean"));
+    const writeSide = isUseCaseDir && (existsSync(join(dir, "Command.lean")) || existsSync(join(dir, "Observation.lean")));
     const readSide = isUseCaseDir ? existsSync(join(dir, "QueryService.lean")) && !writeSide
       : ["ReadModel.lean", "View.lean", "Ordering.lean"].includes(basename(f));
     const allowed = cfg.lean.entityImportAllow.some(a => relPath === a || relPath.startsWith(a.replace(/\/$/, "") + "/"));
@@ -105,22 +107,35 @@ for (const f of files) {
   }
 }
 
-// wiring: Command の構成子 ↔ Json.lean ↔ Machine.lean
+// wiring: 合併型（Command / Observation）の構成子 ↔ Json.lean ↔ Machine.lean の腕（applyCommand / applyObservation）
 {
-  const cmdFile = join(modelDir, "Runtime", "Command.lean");
   const jsonFile = join(modelDir, "Runtime", "Json.lean");
   const machFile = join(modelDir, "Runtime", "Machine.lean");
-  if (existsSync(cmdFile)) {
-    const code = stripComments(readFileSync(cmdFile, "utf8"));
-    const block = code.match(/inductive\s+Command\b[\s\S]*?(?=\n(?:deriving|end|def|structure|inductive|theorem)\b|$)/);
+  const jsonText = existsSync(jsonFile) ? readFileSync(jsonFile, "utf8") : "";
+  const machText = existsSync(machFile) ? stripComments(readFileSync(machFile, "utf8")) : "";
+  const wire = (file, union, applyName) => {
+    const code = stripComments(readFileSync(file, "utf8"));
+    const block = code.match(new RegExp(`inductive\\s+${union}\\b[\\s\\S]*?(?=\\n(?:deriving|end|def|structure|inductive|theorem)\\b|$)`));
     const ctors = block ? [...block[0].matchAll(/^\s*\|\s*(\w+)/gm)].map(m => m[1]) : [];
-    const jsonText = existsSync(jsonFile) ? readFileSync(jsonFile, "utf8") : "";
-    const machText = existsSync(machFile) ? stripComments(readFileSync(machFile, "utf8")) : "";
+    // 腕は applyCommand / applyObservation のブロックの中だけを見る（同名の構成子を別の腕で数えない）
+    const arms = machText.match(new RegExp(`def\\s+\\S*${applyName}\\b[\\s\\S]*?(?=\\n(?:def|theorem|end|structure|inductive)\\b|$)`))?.[0] ?? "";
     for (const c of ctors) {
       if (jsonText && !jsonText.includes(`"${c}"`)) add("wiring", "error", jsonFile, 1, `構成子 ${c} のワイヤ形式（"${c}"）が Json.lean に無い`);
-      if (machText && !new RegExp(`\\.${c}\\b`).test(machText)) add("wiring", "error", machFile, 1, `構成子 ${c} の腕が Machine.lean の apply に無い`);
+      if (machText && !new RegExp(`\\.${c}\\b`).test(arms)) add("wiring", "error", machFile, 1, `構成子 ${c} の腕が Machine.lean の ${applyName} に無い`);
     }
+  };
+  const cmdFile = join(modelDir, "Runtime", "Command.lean");
+  const obsFile = join(modelDir, "Runtime", "Observation.lean");
+  if (existsSync(cmdFile)) {
+    wire(cmdFile, "Command", "applyCommand");
+    // 利用者の操作の合併型に内部入力を混ぜない（通知・契機は Runtime/Observation.lean）
+    for (const m of stripComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
   }
+  if (existsSync(obsFile)) wire(obsFile, "Observation", "applyObservation");
+  // 内部入力の UseCase があるなら Runtime/Observation.lean が要る（Runtime の境界を持つプロジェクトだけ）
+  const ucDir = join(modelDir, "Application", "UseCase");
+  const hasObservationUseCase = existsSync(ucDir) && readdirSync(ucDir).some(n => existsSync(join(ucDir, n, "Observation.lean")));
+  if (hasObservationUseCase && existsSync(cmdFile) && !existsSync(obsFile)) add("wiring", "error", obsFile, 1, "Observation 形の UseCase があるのに Runtime/Observation.lean（内部入力の合併型。Command とは混ぜない）が無い");
 }
 
 // usecase: ディレクトリの形と固定名
@@ -132,11 +147,13 @@ for (const f of files) {
       if (!statSync(d).isDirectory()) continue;
       const has = (f) => existsSync(join(d, f));
       const read = (f) => stripComments(readFileSync(join(d, f), "utf8"));
-      const write = has("Command.lean"), readSide = has("QueryService.lean");
+      const write = has("Command.lean"), observe = has("Observation.lean"), readSide = has("QueryService.lean");
       if (!has("UseCase.lean")) { add("usecase", "error", d, 1, `${name}/ に UseCase.lean が無い`); continue; }
-      if (!write && !readSide) add("usecase", "error", d, 1, `${name}/ は Command.lean（更新系）か QueryService.lean（参照系）を持つ`);
+      if ([write, observe, readSide].filter(Boolean).length !== 1) add("usecase", "error", d, 1, `${name}/ は Command.lean（更新系）・Observation.lean（内部入力）・QueryService.lean（参照系）のどれか 1 つだけを持つ`);
       if (readSide && !has("ReadModel.lean")) add("usecase", "error", d, 1, `${name}/ は参照系なのに ReadModel.lean が無い`);
       const uc = read("UseCase.lean");
+      if (observe && /\bActorContext\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "内部入力（Observation）の UseCase が名義（ActorContext）を受けている — 通知・worker からの入力に利用者の名義は無い");
+      if (observe && /\bActorContext\b/.test(read("Observation.lean"))) add("usecase", "error", join(d, "Observation.lean"), 1, "内部入力（Observation）が名義（ActorContext）を運んでいる — 通知・worker からの入力に利用者の名義は無い");
       if (!/\bdef\s+validate\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 validate が無い");
       if (!/\bdef\s+execute\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 execute が無い");
       if (/\bdef\s+request\b/.test(uc)) {

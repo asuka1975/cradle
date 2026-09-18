@@ -4,6 +4,7 @@
 -/
 import Lobby.Prelude
 import Lobby.Domain.Entity.Visit
+import Lobby.Domain.Entity.PaymentAttempt
 
 namespace Lobby.Application
 
@@ -71,6 +72,61 @@ abbrev Fountain.Fresh {σ α : Type} (f : Fountain σ α) (s : σ) (used : List 
 /-- 来訪の採番（VisitIdGenerator ポート）のカウンタ具体化の論理状態: 次に配る値。 -/
 @[repositoryState]
 structure VisitIdGeneratorState where
+  next : Nat
+deriving Repr, DecidableEq, Inhabited
+
+/-! ### 決済の試みの観測モデル -/
+
+/-- 決済の試みの Repository の論理状態。同一性（= 冪等キー）は重複しない。 -/
+@[repositoryState]
+structure PaymentAttemptRepositoryState (PaymentAttemptId VisitId : Type) where
+  attempts : List (PaymentAttempt PaymentAttemptId VisitId)
+  /-- 同一性は重複しない。 -/
+  uniqueIds : (attempts.map (·.id)).Nodup
+deriving Repr, DecidableEq
+
+variable {PaymentAttemptId : Type}
+
+def PaymentAttemptRepositoryState.find? [DecidableEq PaymentAttemptId]
+    (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) (id : PaymentAttemptId) :
+    Option (PaymentAttempt PaymentAttemptId VisitId) :=
+  s.attempts.find? (fun a => a.id == id)
+
+def PaymentAttemptRepositoryState.ids (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) :
+    List PaymentAttemptId :=
+  s.attempts.map (·.id)
+
+/-- その来訪に未確定の試み（送る前・通知待ち・結果不明）があるか。 -/
+def PaymentAttemptRepositoryState.hasOpenFor [DecidableEq VisitId]
+    (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) (visit : VisitId) : Bool :=
+  s.attempts.any (fun a => a.visit == visit && !a.isSettled)
+
+/-- 末尾に足す。受け付けるのは新鮮な同一性だけ。 -/
+def PaymentAttemptRepositoryState.add (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId)
+    (a : PaymentAttempt PaymentAttemptId VisitId) (hfresh : a.id ∉ s.ids) :
+    PaymentAttemptRepositoryState PaymentAttemptId VisitId :=
+  ⟨s.attempts ++ [a], by
+    rw [List.map_append, List.map_cons, List.map_nil, nodup_append_one]
+    exact ⟨s.uniqueIds, hfresh⟩⟩
+
+/-- 1 件を差し替える。同一性を変えない操作にのみ使う。**消す操作は無い**。 -/
+def PaymentAttemptRepositoryState.update [DecidableEq PaymentAttemptId]
+    (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) (id : PaymentAttemptId)
+    (f : PaymentAttempt PaymentAttemptId VisitId → PaymentAttempt PaymentAttemptId VisitId)
+    (hf : ∀ a, (f a).id = a.id) : PaymentAttemptRepositoryState PaymentAttemptId VisitId :=
+  ⟨updateWhere (fun a => a.id == id) f s.attempts, by
+    rw [updateWhere_map_of_key (fun a => a.id == id) f (fun a => a.id) hf s.attempts]
+    exact s.uniqueIds⟩
+
+theorem PaymentAttemptRepositoryState.update_ids [DecidableEq PaymentAttemptId]
+    (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) (id : PaymentAttemptId)
+    (f : PaymentAttempt PaymentAttemptId VisitId → PaymentAttempt PaymentAttemptId VisitId)
+    (hf : ∀ a, (f a).id = a.id) : (s.update id f hf).ids = s.ids :=
+  updateWhere_map_of_key _ _ _ hf _
+
+/-- 決済の試みの採番（PaymentAttemptIdGenerator ポート）のカウンタ具体化の論理状態: 次に配る値。 -/
+@[repositoryState]
+structure PaymentAttemptIdGeneratorState where
   next : Nat
 deriving Repr, DecidableEq, Inhabited
 

@@ -2,7 +2,7 @@
 // spec-query — Lean 実行可能仕様への決定論的な問い合わせ。
 // 仕様に関する問いは推測で答えず、この道具で Lean を動かした結果を引用する。
 //
-//   spec-query meta                               シナリオ・コマンド・失敗語彙・画面の口を JSON で
+//   spec-query meta                               シナリオ・コマンド・内部入力（観測）・Port・失敗語彙・画面の口を JSON で
 //   spec-query scenarios | commands | errors | outlets（画面の口） | schemas（コマンドごとの入力の形）
 //   spec-query print <Name>...                    `lake env lean` の #print（型・構成子・フィールド）
 //   spec-query init  --scenario S [--viewer J] [--actor J] [--today D]
@@ -11,10 +11,10 @@
 //   spec-query views --state @file --viewer J [--today D]
 //   spec-query raw   @request.json | -            プロトコルそのままの素通し
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk } from "./lib.mjs";
-import { joinWrapped, payloadHeads, schemasFrom } from "./schema.mjs";
+import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
 const [cmd, ...rest] = opts._;
@@ -50,7 +50,29 @@ function constructorsOf(fullName) {
 }
 
 function commands() { return constructorsOf(`${cfg.lean.root}.Runtime.Command`); }
+/** 内部入力（通知・worker からの観測）の合併型。持たないプロジェクトでは空。 */
+function observations() { return existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }; }
 function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
+
+/** 外部能力の Port: `Application/Port/<Port>/<操作>.lean`（Domain/Port も同じ）の置き場から。操作名は生成器と同じ小文字始まり。 */
+function ports() {
+  const out = [];
+  for (const layer of ["Application", "Domain"]) {
+    const portDir = join(cfg.lean.modelDir, layer, "Port");
+    if (!existsSync(portDir)) continue;
+    for (const name of readdirSync(portDir).sort()) {
+      const d = join(portDir, name);
+      if (!statSync(d).isDirectory()) continue;
+      const operations = readdirSync(d).filter(f => f.endsWith(".lean")).sort().map(f => {
+        const op = f.replace(/\.lean$/, "");
+        const module = `${cfg.lean.root}.${layer}.Port.${name}.${op}`;
+        return { name: op, method: op[0].toLowerCase() + op.slice(1), module, request: `${module}.Request`, outcome: `${module}.Outcome` };
+      });
+      out.push({ name, layer: layer.toLowerCase(), module: `${cfg.lean.root}.${layer}.Port.${name}`, operations });
+    }
+  }
+  return out;
+}
 
 /** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。 */
 function printMany(names) {
@@ -78,6 +100,13 @@ function wireHints() {
 /** コマンドごとの入力の形: 構成子 → ペイロード構造体のフィールド（組み立ては schema.mjs。Lean を呼ぶのはここ）。 */
 function commandSchemas() {
   const ctors = commands().constructors;
+  return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
+}
+
+/** 内部入力ごとの形（コマンドの入力欄とは別に出す — 利用者のフォームに観測を混ぜない）。 */
+function observationSchemas() {
+  const ctors = observations().constructors;
+  if (!ctors.length) return {};
   return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
 }
 
@@ -114,8 +143,15 @@ try {
     case "errors": printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
     case "schemas": printJson(commandSchemas()); break;
-    case "meta": printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, exe: cfg.lean.exe, bin: cfg.lean.bin },
-      scenarios: scenarios(), commands: commands().constructors.map(c => c.name), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas() }); break;
+    case "meta": {
+      const obs = observations().constructors;
+      // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
+      printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
+        scenarios: scenarios(), commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
+        observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
+        ports: ports(), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
+      break;
+    }
     case "print": {
       if (!rest.length) fail("print には名前が要ります（例: MonoWa.Runtime.Command）");
       const src = `import ${cfg.lean.root}\n` + rest.map(n => `#print ${n}`).join("\n") + "\n";

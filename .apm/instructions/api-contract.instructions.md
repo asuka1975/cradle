@@ -6,8 +6,8 @@ applyTo: "documents/codebase/openapi.yaml,backend/src/main/kotlin/**/presentatio
 # API 契約（OpenAPI）
 
 - 正本は `documents/codebase/openapi.yaml`。エンドポイントを足す・変える前にここを直し、backend は `generateApi`、frontend は `pnpm gen:api` で追随する。
-- モデルに無い操作はエンドポイントも作らない。コマンドの構成子とエンドポイントは 1 対 1、閲覧は 1 画面 1 エンドポイント。すべて `/api` 配下。
-- 名義（actor / owner / raiser）はリクエストに現れない。`Authorization` だけが決める。「今日」も受け取らない。
+- モデルに無い操作はエンドポイントも作らない。コマンドの構成子とエンドポイントは 1 対 1（`x-cradle-kind: command`）。観測（内部入力）のエンドポイントは提供元から受ける口が要るときだけ（`x-cradle-kind: observation`。worker だけが受けるものは持たない）で、利用者の入力欄には出さない。GET 以外の操作はすべて `x-cradle-kind` と `x-cradle-model`（構成子の完全名）を宣言する。閲覧は 1 画面 1 エンドポイント。すべて `/api` 配下。
+- 名義（actor / owner / raiser）はリクエストに現れない。`Authorization` だけが決める。観測の受信口にも名義は無い。「今日」も受け取らない。
 - 各操作の失敗語彙は operation の 422 に列挙する。403（立場）と 404（宛先なし）は業務失敗と分ける。共通の 400 / 401 / 405 / 415 / 500 は個々の operation に書かない。
 - 文字列には長さ上限、識別子には形式を書く。入力検証は契約から生成する（`x-field-extra-annotation` 等）。
 - 書くのは「いまどうであるか」だけ。経緯・未決・存在しない操作の一覧・ID・申し送りを書かない。

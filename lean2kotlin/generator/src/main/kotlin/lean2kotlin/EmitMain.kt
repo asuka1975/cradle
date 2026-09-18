@@ -111,7 +111,7 @@ class EmitMain(
 			}
 			// 入力語彙(Command とそのフィールドの自作型)のふるまいは写さない —
 			// その保証は UseCase の validate / execute テストが担う
-			if (td.role == "command") {
+			if (k.isInputRole(td.role)) {
 				log("  note: ${td.kotlin}: 入力語彙のふるまいは本番に出さない" +
 					"(UseCase の validate / execute テストが保証)")
 				continue
@@ -442,6 +442,8 @@ interface ${rootK}Repository {$ops
 	 * ドメイン語彙なので落とさない)。
 	 */
 	private fun isPreciseInput(t: IrType): Boolean {
+		// 内部入力(Observation)は相関 Id だけを運んでも入力 — 署名から落とさない
+		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
 		val refs = t.leafRefs()
 		return refs.isNotEmpty() && refs.all {
 			val td = ir.typeDef(it)

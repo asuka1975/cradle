@@ -308,6 +308,9 @@ inductive Role
   | portOutcome
   /-- Port の操作モジュール在住のそれ以外の純データ(観測が運ぶ自システムの語彙) -/
   | portDto
+  /-- 内部入力(`Application/UseCase/<X>UseCase/Observation` の固定名 `Observation`): worker / timer /
+      提供元からの通知。利用者の Command と同格の入力語彙で本番署名に残る — 名義(ActorContext)は伴わない -/
+  | observation
 deriving BEq, Repr
 
 def Role.str : Role → String
@@ -318,6 +321,7 @@ def Role.str : Role → String
   | .clockPort => "clockPort"
   | .actorPort => "actorPort"
   | .portRequest => "portRequest" | .portOutcome => "portOutcome" | .portDto => "portDto"
+  | .observation => "observation"
 
 /-! ### アノテーション(対象自前の TagAttribute)の読み取り -/
 
@@ -1141,6 +1145,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         -- Port の操作モジュール: 固定名で役割を決める(日時だけの DTO を時計ポートと誤認しない — 置き場が先)
         roles := roles.insert n (if nLast == "Request" then .portRequest
           else if nLast == "Outcome" then .portOutcome else .portDto)
+      else if ucNs.isPrefixOf m && mLast == `Observation then
+        -- 内部入力(Observation): 置き場と固定名で決める。時計ポートの判定より先 —
+        -- 日時だけを運ぶ通知を時計と誤認しない
+        roles := roles.insert n .observation
       else if (← isClockStruct n) then
         -- 時計ポート(Clock): DTO ではなく調達の引数種。
         -- 生成側は署名から落とし、interface も作らない(java.time.Clock を直接注入)
@@ -1398,11 +1406,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     -- 対象: ふるまいモジュール内の def で、親 namespace が分類済みの型と一致するもの。
     -- State(fixture)のふるまいはテスト側に写る(生成側で振り分け)
     let behaviorSubjectRoles : List Role :=
-      [.valueObject, .entity, .aggregateRoot, .command, .repositoryState]
+      [.valueObject, .entity, .aggregateRoot, .command, .observation, .repositoryState]
     let isBehaviorModule (m : Name) : Bool :=
       (domainNs ++ `Entity).isPrefixOf m || m == domainNs ++ `ValueObject ||
         m == appNs ++ `RepositoryState ||
-        (ucNs.isPrefixOf m && m.components.getLast! == `Command)
+        (ucNs.isPrefixOf m && (m.components.getLast! == `Command || m.components.getLast! == `Observation))
     let mut behaviorDefs : Std.HashMap Name Name := {}
     let mut behaviorByType : Std.HashMap Name (Array Json) := {}
     let mut behaviorMods : Std.HashMap Name Name := {}
@@ -1657,6 +1665,27 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         | some dep => j.setObjVal! "ports" (Json.arr #[ucPortsJson dep])
         | none => j
       | _ => j
+    -- 5c. UseCase の入力の種別: command(利用者の操作)/ observation(内部入力)/ query(参照系)。
+    -- 固定形は排他 — Command と Observation の同居は失敗。内部入力の UseCase は名義を受けない
+    let inputOfDir (dir leaf : Name) (role : Role) : Option Name :=
+      (roles.toList.find? fun (n, r) => r == role && modOf n == some (ucNs ++ dir ++ leaf)).map (·.1)
+    let useCaseJs ← useCaseJs.mapM fun j => do
+      match j.getObjVal? "name" with
+      | .ok (.str nm) =>
+        let dir := nm.toName
+        match inputOfDir dir `Command .command, inputOfDir dir `Observation .observation with
+        | some _, some _ =>
+          throwError "lean2kotlin: UseCase {dir} が Command と Observation の両方を持っています(固定形は Command+UseCase / Observation+UseCase / ReadModel+QueryService+UseCase のどれか 1 つ)"
+        | some c, none => pure ((j.setObjVal! "kind" "command").setObjVal! "input" (toString c))
+        | none, some o =>
+          if let some execC := execByDir.get? dir then
+            for (nm, ty) in (← valueBinders execC) do
+              if let .const h _ := (← whnf ty).getAppFn then
+                if roles.get? h == some .actorPort then
+                  throwError "lean2kotlin: UseCase {dir} は Observation 形なのに execute が名義({nm} : ActorContext)を受けています(内部入力は利用者の名義を要求しない)"
+          pure ((j.setObjVal! "kind" "observation").setObjVal! "input" (toString o))
+        | none, none => pure (j.setObjVal! "kind" "query")
+      | _ => pure j
     -- 診断: 宣言した契約が IR に入らない・固定形の署名が写らない理由(生成器はこれを失敗として読む)
     let mut droppedJs : Array Json := #[]
     let dropped (kind name reason : String) : Json :=
@@ -2256,6 +2285,16 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let some execC := execByDir.get? dir
           | throwError "UseCase {dir} の execute が見つかりません"
         let fVals ← valueBinders fName
+        -- 消費位置: Port を使う UseCase の障害契約は、観測(Outcome)を引数に取るかどうかで
+        -- 「外部を呼ぶ前の中断」(0)/「応答を得た後の中断」(1)を宣言する(観測が無い中断点に観測は存在しない)
+        let portCalls : Nat ← match ucPorts.get? dir with
+          | none => pure 0
+          | some _ => do
+            let takesOutcome ← fVals.anyM fun (_, ty) => do
+              match (← whnf ty).getAppFn with
+              | .const h _ => pure (roles.get? h == some .portOutcome)
+              | _ => pure false
+            pure (if takesOutcome then 1 else 0)
         -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
         let strCtrF : IO.Ref Nat ← IO.mkRef 800
         let mut pools : Array (Name × Array (Nat × Expr)) := #[]
@@ -2327,7 +2366,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               pure ()
             else
               let aj ← valueToJson a
-              if roles.get? h == some .command then cmdKey := aj.compress
+              if roles.get? h == some .command || roles.get? h == some .observation then cmdKey := aj.compress
               argJs := argJs ++ [(toString nm, aj)]
           let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
           -- Port の期待値(契約定理のケースと同じ形): 要求は request の評価、観測は execute の観測引数
@@ -2373,6 +2412,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             ("useCase", Json.str (toString dir)),
             ("def", Json.str (toString (fName.updatePrefix Name.anonymous))),
             ("doc", Json.str ((← findDocString? env fName).getD "")),
+            ("portCalls", Json.num portCalls),
             ("cases", Json.arr caseJs)])
       catch e =>
         logInfo m!"lean2kotlin: 障害契約 {fName} を翻訳できません: {← e.toMessageData.toString}"

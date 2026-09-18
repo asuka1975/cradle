@@ -67,4 +67,21 @@ theorem filter_length_updateWhere_le {α : Type} (p q : α → Bool) (f : α →
       · rw [if_neg hx]
         exact ih
 
+/-- 鍵で引く探索は、鍵を変えない点更新を通り抜ける（見つかった要素に f が掛かる）。 -/
+theorem find?_updateWhere_of_key {α β : Type} [BEq β] (key : α → β) (k : β) (f : α → α)
+    (hf : ∀ x, key (f x) = key x) (xs : List α) :
+    (updateWhere (fun x => key x == k) f xs).find? (fun x => key x == k) =
+      (xs.find? (fun x => key x == k)).map f := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    simp only [updateWhere_cons, List.find?_cons]
+    by_cases h : (key x == k) = true
+    · rw [if_pos h]
+      have h' : (key (f x) == k) = true := by rw [hf]; exact h
+      simp [h, h']
+    · rw [if_neg h]
+      simp only [Bool.not_eq_true] at h
+      simp [h, ih]
+
 end Lobby.Prelude

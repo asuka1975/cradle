@@ -69,6 +69,7 @@ export function loadConfig(root = findProjectRoot()) {
       ...(raw.documents ?? {}),
     },
     e2e: { dir: raw.e2e?.dir ?? "e2e", scenarios: `${raw.e2e?.dir ?? "e2e"}/scenarios`, ...(raw.e2e ?? {}) },
+    api: { outletsWithoutEndpoint: [], ...(raw.api ?? {}) },
     infra: { dir: "infra", ...(raw.infra ?? {}) },
     ports: { mockup: 8787, frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
     protected: raw.protected ?? ["documents/developer/**"],
@@ -255,6 +256,7 @@ export function fail(msg, code = 1) {
 export function leanVocabulary(cfg) {
   const targets = [
     { kind: "コマンド", file: "Runtime/Command.lean", decl: /^\s*inductive\s+Command\b/, member: /^\s*\|\s*(\w+)/ },
+    { kind: "内部入力", file: "Runtime/Observation.lean", decl: /^\s*inductive\s+Observation\b/, member: /^\s*\|\s*(\w+)/ },
     { kind: "失敗", file: "Domain/Error.lean", decl: /^\s*inductive\s+DomainError\b/, member: /^\s*\|\s*(\w+)/ },
     { kind: "画面の口", file: "Runtime/Views.lean", decl: /^\s*structure\s+Views\b/, member: /^\s*(\w+)\s*:/ },
   ];

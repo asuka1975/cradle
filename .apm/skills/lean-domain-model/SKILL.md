@@ -39,7 +39,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 ### コマンド（更新系）を増やす
 
 `Application/UseCase/<名前>UseCase/{Command,UseCase}.lean` → 失敗の語彙が要れば `Domain/Error.lean` → 対象 Entity にふるまいと `@[contract]` 定理 →
-`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ（人が打つ表記が違う値は手書き FromJson + docstring）→
+内部入力（通知・契機。`Observation.lean` + `UseCase.lean`）は `Runtime/Observation.lean` の合併型 → `Machine.applyObservation` の腕 → `Json.lean` のワイヤの順で、利用者の `Runtime/Command.lean` には混ぜない。`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ（人が打つ表記が違う値は手書き FromJson + docstring）→
 `Runtime/Reachable.lean` の check 保存に 1 腕 → `Scenarios.lean` に `#guard`。
 
 ### 画面（参照系）を増やす

@@ -84,4 +84,12 @@ instance : FromJson Command where
     | _, some p => (fromJson? p).map Command.closeNote
     | none, none => .error "unknown command (expected one of: postNote, closeNote)"
 
+/-! ### 内部入力のワイヤ形式: コマンドと同じ `{"<構成子名>": <ペイロード>}`（構成子が無い間は何も受けない） -/
+
+instance : ToJson Observation where
+  toJson o := nomatch o
+
+instance : FromJson Observation where
+  fromJson? _ := .error "unknown observation (expected one of: none)"
+
 end Sprout.Runtime

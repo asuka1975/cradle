@@ -301,6 +301,8 @@ data class IrFaultContract(
 	val def: String,
 	val doc: String,
 	val cases: List<IrFaultCase>,
+	/** 消費位置: 中断までに Port を呼んだ回数(0 = 外部を呼ぶ前の中断、1 = 応答を得た後の中断)。Port を使わない UseCase は 0。 */
+	val portCalls: Int = 0,
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrFaultContract {
@@ -309,7 +311,8 @@ data class IrFaultContract(
 				useCase = o.getValue("useCase").jsonPrimitive.content,
 				def = o.getValue("def").jsonPrimitive.content,
 				doc = o["doc"]?.jsonPrimitive?.content ?: "",
-				cases = o.getValue("cases").jsonArray.map(IrFaultCase::parse))
+				cases = o.getValue("cases").jsonArray.map(IrFaultCase::parse),
+				portCalls = o["portCalls"]?.jsonPrimitive?.int ?: 0)
 		}
 	}
 }
@@ -345,6 +348,10 @@ data class IrService(
 	val name: String, val module: String, val methods: List<IrMethod>,
 	/** UseCase のみ: 使う Port(署名から落ちる観測引数と、モックを組む型)。 */
 	val ports: List<IrUseCasePort> = emptyList(),
+	/** UseCase のみ: 入力の種別 — command(利用者の操作)/ observation(内部入力)/ query(参照系)。 */
+	val kind: String = "command",
+	/** UseCase のみ: 入力語彙の型(lean 名)。参照系は null。 */
+	val input: String? = null,
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrService {
@@ -353,7 +360,9 @@ data class IrService(
 				name = o.getValue("name").jsonPrimitive.content,
 				module = o.getValue("module").jsonPrimitive.content,
 				methods = o.getValue("methods").jsonArray.map(IrMethod::parse),
-				ports = o["ports"]?.jsonArray?.map(IrUseCasePort::parse) ?: emptyList())
+				ports = o["ports"]?.jsonArray?.map(IrUseCasePort::parse) ?: emptyList(),
+				kind = o["kind"]?.jsonPrimitive?.content ?: "command",
+				input = o["input"]?.jsonPrimitive?.content)
 		}
 	}
 }
