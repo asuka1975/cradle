@@ -72,4 +72,14 @@ class WriterTest {
 		out.file("b", "Gen", body = "class Gen")
 		assertEquals(listOf(dir.resolve("a/Gen.kt"), dir.resolve("b/Gen.kt")), out.report())
 	}
+
+	@Test
+	fun `大文字小文字だけ違うパスへの書き出しも衝突として失敗する`(@TempDir dir: Path) {
+		val out = Output(dir, "p", "\t")
+		out.file("a", "UrlService", body = "interface UrlService")
+		val e = assertFailsWith<IllegalStateException> { out.file("a", "URLService", body = "interface URLService") }
+		assertTrue("大文字小文字だけ違う" in e.message!!, e.message!!)
+		assertTrue("a/UrlService.kt" in e.message!! && "a/URLService.kt" in e.message!!, e.message!!)
+		assertEquals(listOf(dir.resolve("a/UrlService.kt")), out.report())
+	}
 }
