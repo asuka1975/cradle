@@ -1,5 +1,5 @@
 name: cradle
-version: "0.1.0-alpha.10"
+version: "0.1.0-alpha.11"
 description: Lean 仕様駆動開発のハーネス — 仕様は決定論的なハーネスである。探索から本番投入まで、プロダクトオーナーがゆりかごに身を任せて開発をやりきるための skills / agents / rules / hooks。
 author: asuka1975
 license: GPL-3.0-only
