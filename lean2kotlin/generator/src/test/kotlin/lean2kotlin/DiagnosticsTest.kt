@@ -60,6 +60,28 @@ class DiagnosticsTest {
 	}
 
 	@Test
+	fun `泉の状態に対応する Id 型が無いと生成を失敗にする`(@TempDir out: Path) {
+		val base = Json.parseToJsonElement(testResources.resolve("unique-name/ir.json").readText()).jsonObject
+		val gen = Json.parseToJsonElement("""{"lean":"Mini.Application.FooIdGeneratorState","kotlin":"FooIdGeneratorState","role":"repositoryState","module":"Mini.Application.RepositoryState",
+			"shape":{"kind":"structure","fields":[{"name":"next","type":{"k":"nat"}}]}}""")
+		val ir = JsonObject(base + mapOf("types" to JsonArray(base.getValue("types").jsonArray + gen)))
+		val (e, _) = run(ir.toString(), out)
+		assertTrue("泉の状態 Mini.Application.FooIdGeneratorState に対応する Id 型 FooId がありません" in e.message!!, e.message)
+	}
+
+	@Test
+	fun `内部入力が名義を運ぶと生成を失敗にする`(@TempDir out: Path) {
+		val base = Json.parseToJsonElement(testResources.resolve("unique-name/ir.json").readText()).jsonObject
+		val actor = Json.parseToJsonElement("""{"lean":"Mini.Application.ActorContext","kotlin":"ActorContext","role":"actorPort","module":"Mini.Application.ActorContext",
+			"shape":{"kind":"structure","fields":[{"name":"user","type":{"k":"ref","name":"Mini.Runtime.MemberId"}}]}}""")
+		val observation = Json.parseToJsonElement("""{"lean":"Mini.Application.CloseRoomUseCase.Observation","kotlin":"CloseRoomObservation","role":"observation","module":"Mini.Application.UseCase.CloseRoomUseCase.Observation",
+			"shape":{"kind":"structure","fields":[{"name":"by","type":{"k":"ref","name":"Mini.Application.ActorContext"}}]}}""")
+		val ir = JsonObject(base + mapOf("types" to JsonArray(base.getValue("types").jsonArray + actor + observation)))
+		val (e, _) = run(ir.toString(), out)
+		assertTrue("内部入力 Mini.Application.CloseRoomUseCase.Observation が名義(@[actorContext])を運んでいる" in e.message!!, e.message)
+	}
+
+	@Test
 	fun `Port の観測が構成子の引数や入れ子の中で関数型を運ぶと生成を失敗にする`(@TempDir out: Path) {
 		val base = Json.parseToJsonElement(testResources.resolve("unique-name/ir.json").readText()).jsonObject
 		val request = Json.parseToJsonElement("""{"lean":"Mini.Application.Port.Ledger.Record.Request","kotlin":"LedgerRecordRequest","role":"portRequest","module":"Mini.Application.Port.Ledger.Record",

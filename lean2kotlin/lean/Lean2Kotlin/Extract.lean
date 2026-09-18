@@ -2382,7 +2382,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               let r ← whnf app
               let requestJ ←
                 if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
-                else if r.getAppFn.isConstOf ``Except.error then pure Json.null
+                else if r.getAppFn.isConstOf ``Except.error then
+                  -- execute が成功する入力で request が拒否するのは固定形（request と execute は同じ validate）の破れ
+                  throwError "execute が成功する入力で request が拒否しています(request と execute は同じ validate を通る固定形)"
                 else throwError "request の評価結果が Except の構成子ではありません: {r}"
               pure [("ports", Json.arr #[Json.mkObj [
                 ("port", Json.str (toString dep.portMod.components.getLast!)),

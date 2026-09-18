@@ -1,0 +1,61 @@
+{
+  "ok": {
+    "env": {
+      "cursor": 0,
+      "script": [
+        {
+          "operation": "authorize",
+          "outcome": "authorized",
+          "port": "PaymentGateway",
+          "request": {
+            "amount": 1,
+            "attempt": {
+              "id": 0
+            },
+            "attemptNo": 1
+          }
+        }
+      ]
+    },
+    "state": {
+      "attemptIds": {
+        "next": 0
+      },
+      "attempts": [],
+      "visitIds": {
+        "next": 1
+      },
+      "visits": [
+        {
+          "host": {
+            "id": 10
+          },
+          "hostName": "受入 太郎",
+          "id": {
+            "id": 0
+          },
+          "phase": "left",
+          "visitor": {
+            "text": "来訪 花子"
+          }
+        }
+      ]
+    },
+    "views": {
+      "payments": [],
+      "visits": [
+        {
+          "host": {
+            "id": 10
+          },
+          "hostName": "受入 太郎",
+          "id": {
+            "id": 0
+          },
+          "phase": "left",
+          "visitor": "来訪 花子"
+        }
+      ]
+    }
+  }
+}

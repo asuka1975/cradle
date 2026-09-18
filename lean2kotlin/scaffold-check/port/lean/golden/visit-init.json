@@ -1,0 +1,66 @@
+{
+  "ok": {
+    "env": {
+      "cursor": 0,
+      "script": [
+        {
+          "operation": "findMember",
+          "outcome": {
+            "found": {
+              "member": {
+                "active": true,
+                "name": "受入 太郎"
+              }
+            }
+          },
+          "port": "OrganizationDirectory",
+          "request": {
+            "employee": {
+              "id": 10
+            }
+          }
+        }
+      ]
+    },
+    "state": {
+      "attemptIds": {
+        "next": 0
+      },
+      "attempts": [],
+      "visitIds": {
+        "next": 1
+      },
+      "visits": [
+        {
+          "host": {
+            "id": 10
+          },
+          "hostName": "受入 太郎",
+          "id": {
+            "id": 0
+          },
+          "phase": "left",
+          "visitor": {
+            "text": "来訪 花子"
+          }
+        }
+      ]
+    },
+    "views": {
+      "payments": [],
+      "visits": [
+        {
+          "host": {
+            "id": 10
+          },
+          "hostName": "受入 太郎",
+          "id": {
+            "id": 0
+          },
+          "phase": "left",
+          "visitor": "来訪 花子"
+        }
+      ]
+    }
+  }
+}

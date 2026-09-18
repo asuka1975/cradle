@@ -49,9 +49,12 @@ function constructorsOf(fullName) {
   return { constructors: ctors };
 }
 
-function commands() { return constructorsOf(`${cfg.lean.root}.Runtime.Command`); }
+// 同じ #print を繰り返さない（meta は commands / observations を何度も引く）
+const printed = new Map();
+function once(key, compute) { if (!printed.has(key)) printed.set(key, compute()); return printed.get(key); }
+function commands() { return once("commands", () => constructorsOf(`${cfg.lean.root}.Runtime.Command`)); }
 /** 内部入力（通知・worker からの観測）の合併型。持たないプロジェクトでは空。 */
-function observations() { return existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }; }
+function observations() { return once("observations", () => existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }); }
 function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
 
 /** 外部能力の Port: `Application/Port/<Port>/<操作>.lean`（Domain/Port も同じ）の置き場から。操作名は生成器と同じ小文字始まり。 */

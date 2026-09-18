@@ -84,4 +84,11 @@ theorem find?_updateWhere_of_key {α β : Type} [BEq β] (key : α → β) (k : 
       simp only [Bool.not_eq_true] at h
       simp [h, ih]
 
+/-- 成功した写像の分解（境界のルーティングから UseCase の結果を取り出す）。 -/
+theorem except_map_eq_ok {ε α β : Type} {f : α → β} {x : Except ε α} {y : β}
+    (h : x.map f = .ok y) : ∃ a, x = .ok a ∧ y = f a := by
+  cases x with
+  | error e => simp [Except.map] at h
+  | ok a => exact ⟨a, rfl, by simpa [Except.map] using h.symm⟩
+
 end Lobby.Prelude

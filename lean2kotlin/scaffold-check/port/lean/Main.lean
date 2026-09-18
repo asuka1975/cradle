@@ -29,10 +29,10 @@
   （step に必須）、`today` は境界の時計（省略時はシナリオの基準日）。
   外から受け取った state は `Snapshot.check` で検証してから使う。
 -/
-import Sprout
+import Lobby
 
 open Lean (Json ToJson FromJson toJson fromJson?)
-open Sprout Sprout.Runtime
+open Lobby Lobby.Runtime
 
 structure Request where
   cmd      : String

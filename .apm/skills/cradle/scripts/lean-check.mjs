@@ -131,7 +131,10 @@ for (const f of files) {
     // 利用者の操作の合併型に内部入力を混ぜない（通知・契機は Runtime/Observation.lean）
     for (const m of stripComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
   }
-  if (existsSync(obsFile)) wire(obsFile, "Observation", "applyObservation");
+  if (existsSync(obsFile)) {
+    wire(obsFile, "Observation", "applyObservation");
+    for (const m of stripComments(readFileSync(obsFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bCommand\b/gm)) add("wiring", "error", obsFile, 1, `構成子 ${m[1]} が利用者の操作（Command）を運んでいる — 内部入力の合併型に利用者の操作を混ぜない（Runtime/Command.lean に置く）`);
+  }
   // 内部入力の UseCase があるなら Runtime/Observation.lean が要る（Runtime の境界を持つプロジェクトだけ）
   const ucDir = join(modelDir, "Application", "UseCase");
   const hasObservationUseCase = existsSync(ucDir) && readdirSync(ucDir).some(n => existsSync(join(ucDir, n, "Observation.lean")));

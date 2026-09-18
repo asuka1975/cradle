@@ -1,0 +1,577 @@
+{
+  "ok": {
+    "env": {
+      "cursor": 2,
+      "script": [
+        {
+          "operation": "inquire",
+          "outcome": "notFound",
+          "port": "PaymentGateway",
+          "request": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        {
+          "operation": "authorize",
+          "outcome": "authorized",
+          "port": "PaymentGateway",
+          "request": {
+            "amount": 1,
+            "attempt": {
+              "id": 0
+            },
+            "attemptNo": 2
+          }
+        }
+      ]
+    },
+    "trace": [
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "startPayment": {
+            "visit": {
+              "id": 0
+            }
+          }
+        },
+        "env": {
+          "cursor": 0,
+          "script": [
+            {
+              "operation": "inquire",
+              "outcome": "notFound",
+              "port": "PaymentGateway",
+              "request": {
+                "attempt": {
+                  "id": 0
+                }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
+            }
+          ]
+        },
+        "interactions": [],
+        "result": "applied",
+        "state": {
+          "attemptIds": {
+            "next": 1
+          },
+          "attempts": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "pending",
+              "tries": 0,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visitIds": {
+            "next": 1
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "pending",
+              "tries": 0,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            }
+          ]
+        }
+      },
+      {
+        "env": {
+          "cursor": 0,
+          "script": [
+            {
+              "operation": "inquire",
+              "outcome": "notFound",
+              "port": "PaymentGateway",
+              "request": {
+                "attempt": {
+                  "id": 0
+                }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
+            }
+          ]
+        },
+        "fault": {
+          "contract": "DispatchPaymentUseCase.markedNotSent",
+          "portCalls": 0
+        },
+        "interactions": [],
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        "result": "fault",
+        "state": {
+          "attemptIds": {
+            "next": 1
+          },
+          "attempts": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "sending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visitIds": {
+            "next": 1
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "sending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            }
+          ]
+        }
+      },
+      {
+        "domainError": "attemptNotDispatchable",
+        "env": {
+          "cursor": 0,
+          "script": [
+            {
+              "operation": "inquire",
+              "outcome": "notFound",
+              "port": "PaymentGateway",
+              "request": {
+                "attempt": {
+                  "id": 0
+                }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
+            }
+          ]
+        },
+        "interactions": [],
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        "result": "refused",
+        "state": {
+          "attemptIds": {
+            "next": 1
+          },
+          "attempts": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "sending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visitIds": {
+            "next": 1
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "sending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            }
+          ]
+        }
+      },
+      {
+        "env": {
+          "cursor": 1,
+          "script": [
+            {
+              "operation": "inquire",
+              "outcome": "notFound",
+              "port": "PaymentGateway",
+              "request": {
+                "attempt": {
+                  "id": 0
+                }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
+            }
+          ]
+        },
+        "interactions": [
+          {
+            "operation": "inquire",
+            "outcome": "notFound",
+            "port": "PaymentGateway",
+            "request": {
+              "attempt": {
+                "id": 0
+              }
+            }
+          }
+        ],
+        "observation": {
+          "inquirePayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        "result": "applied",
+        "state": {
+          "attemptIds": {
+            "next": 1
+          },
+          "attempts": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "pending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visitIds": {
+            "next": 1
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "pending",
+              "tries": 1,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            }
+          ]
+        }
+      },
+      {
+        "env": {
+          "cursor": 2,
+          "script": [
+            {
+              "operation": "inquire",
+              "outcome": "notFound",
+              "port": "PaymentGateway",
+              "request": {
+                "attempt": {
+                  "id": 0
+                }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
+            }
+          ]
+        },
+        "interactions": [
+          {
+            "operation": "authorize",
+            "outcome": "authorized",
+            "port": "PaymentGateway",
+            "request": {
+              "amount": 1,
+              "attempt": {
+                "id": 0
+              },
+              "attemptNo": 2
+            }
+          }
+        ],
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        "result": "applied",
+        "state": {
+          "attemptIds": {
+            "next": 1
+          },
+          "attempts": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "authorized",
+              "tries": 2,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visitIds": {
+            "next": 1
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [
+            {
+              "amount": 1,
+              "id": {
+                "id": 0
+              },
+              "phase": "authorized",
+              "tries": 2,
+              "visit": {
+                "id": 0
+              }
+            }
+          ],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
