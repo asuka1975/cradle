@@ -43,7 +43,8 @@ const reads = ops.filter(o => o.method === "get");
 const label = (o) => `${o.method.toUpperCase()} ${o.path}${o.operationId ? ` (${o.operationId})` : ""}`;
 
 // 宣言の解決: kind と model から構成子名を取る。取れなければ理由を返す
-const root = meta.project;
+// 構成子の完全名のルートは Lean のルート名前空間（meta.lean.root。古い meta では project と同じ）
+const root = meta.lean?.root ?? meta.project;
 const kinds = {
   command: { segment: "Command", names: meta.commands ?? [], word: "コマンド" },
   observation: { segment: "Observation", names: meta.observations ?? [], word: "観測" },

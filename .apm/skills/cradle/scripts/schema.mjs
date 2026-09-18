@@ -135,7 +135,7 @@ function payloadOf(ctor) {
   return argTypesOf(ctor)[0] ?? null;
 }
 
-/** 構成子のペイロード型の先頭語（引数の無い構成子は null）— 契約検査が OpenAPI の x-cradle-model と突き合わせる完全名。 */
+/** 構成子のペイロード型の先頭語（引数の無い構成子は null）— meta の commandTypes / observationTypes（構成子 → 入力型）に出す。 */
 export function payloadTypeOf(ctor) {
   const p = payloadOf(ctor);
   return p ? splitTypeApp(p).head : null;

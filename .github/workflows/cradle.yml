@@ -46,6 +46,8 @@ jobs:
           restore-keys: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-
       - name: scaffold check
         run: cd lean2kotlin/scaffold-check && ./gradlew --no-daemon test :port:adapterContractTest
+      - name: lean-check on the port fixture
+        run: cd lean2kotlin/scaffold-check/port && node ../../../.apm/skills/cradle/scripts/lean-check.mjs
       - name: generated is committed
         run: test -z "$(git status --porcelain -- lean2kotlin/scaffold-check/src/generated lean2kotlin/scaffold-check/port/src/generated)" || { git status --porcelain -- lean2kotlin/scaffold-check/src/generated lean2kotlin/scaffold-check/port/src/generated; exit 1; }
 

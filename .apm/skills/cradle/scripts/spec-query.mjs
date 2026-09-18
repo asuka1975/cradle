@@ -146,7 +146,7 @@ try {
     case "meta": {
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
-      printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, exe: cfg.lean.exe, bin: cfg.lean.bin },
+      printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
         scenarios: scenarios(), commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
         ports: ports(), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
