@@ -32,7 +32,7 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin"
 
 val lean2kotlinHome: File by gradle.extra
 
-// 外部能力の Port を持つ最小ドメイン「ロビーの来訪受付」（lean/）。golden は持たない（CLI を持たない回帰素材）
+// 外部能力の Port を持つ最小ドメイン「ロビーの来訪受付」（lean/）。CLI と環境つきの golden は external の回帰素材で、生成には配線しない（goldenDir 無し）。モックアップは持たない
 lean2kotlin {
 	kotlinPackage = "dev.cradle.lobby"
 	leanRootNamespace = "Lobby"

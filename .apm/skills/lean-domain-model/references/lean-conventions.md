@@ -151,7 +151,7 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 - 副作用の要求（金額・冪等キー）は業務の処理状態（集約）に保存してから送る。保存しただけでは成立にしない。送る印（試行番号）は外部を呼ぶ前に保存する — 中断しても印が残り、同じ冪等キーで再開できる。
 - 冪等キー（同じ試みは同じ鍵）と試行番号（送るたびに進む）を分ける。結果不明（送ったが答えが無い）からは新しい決済を作らず、照会（別の Port 操作を使う別の UseCase）で解く。
 - 通知の分類: 重複（同じ結果をもう一度）は適用済みとして通す（状態不変）、無関係（宛先が無い）と矛盾（確定した結果と違う）は拒否、遅延・順序逆転（送れる状態や結果不明のまま届く）はその通知で確定する。どれも 1 分岐 1 定理。
-- Runtime: 合併型 `Runtime/Observation.lean`（`Runtime/Command.lean` には混ぜない — 利用者の操作ではない）と `Machine.applyObservation`（名義が無いので `opened` は通さない）。ワイヤ形式は Command と同じ `{"<構成子名>": <ペイロード>}` を `Json.lean` に。`lean-check` の wiring 規則が構成子ごとに検査する。
+- Runtime: 合併型 `Runtime/Observation.lean`（`Runtime/Command.lean` には混ぜない — 利用者の操作ではない）と `Machine.applyObservation`（名義が無いので `opened` は通さない。障害の指名と環境を受けて `StepResult` を返す — §6）。ワイヤ形式は Command と同じ `{"<構成子名>": <ペイロード>}` を `Json.lean` に。`lean-check` の wiring 規則が構成子ごとに検査する。障害契約の表は `@[faultContract]` の def の部分適用で、消費位置は `FaultSpec` の構成子が写す（Nat を手で書かない）。
 
 ## 5. 参照系 UseCase（CQRS）
 
@@ -165,11 +165,20 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 
 - `Ids.lean`: ID の仮置き（`structure NoteId where id : Nat`）と泉の具体化（連番）。
 - `Command.lean`: 合併型 + `Actor` + **反機能の一覧**（存在しない操作とその理由）。
-- `Machine.lean`: `Snapshot`（ルートごとのコレクション + 泉の残高）・`check`（泉の境界 `bounds`。集約ルートの制約は観測モデルの構造が運ぶ）・`opened`（名義が届いた帰結。既定は何もしない。`opened_check` で検査の保存を示す）・`applyCommand` / `apply`（`check` の証明を受け取り、各腕は UseCase の execute への 1 行。泉から汲む腕には `Snapshot.fresh` を渡す）。
-- `Reachable.lean`: `Snapshot.Reachable`（checked | step）と `Reachable.check`。腕ごとに `check_of_<root>_add` / `check_of_<root>_update` を用意し、`except_map_eq_ok` と `execute_ok_shape` で結果の形を取り出して適用する。
+- `Observation.lean`: 内部入力の合併型（Observation 形の UseCase ごとに 1 構成子。無ければ構成子の無い型）。`Command.lean` には混ぜない。
+- `Environment.lean`: `Interaction`（Port 操作ごとに 1 構成子: 期待する要求と返す観測）・`Environment`（不変の有限 script と cursor）・`check`（cursor は script の範囲内）/ `next` / `consume` / `exhausted`。環境は状態と同じく応答で往復し、プロセス内に持たない。Port を持たない間、`Interaction` の構成子は無い。
+- `Machine.lean`: `Snapshot`（ルートごとのコレクション + 泉の残高）・`check`（泉の境界 `bounds`。集約ルートの制約は観測モデルの構造が運ぶ）・`opened`（名義が届いた帰結。既定は何もしない。`opened_check` で検査の保存を示す）。
+  5 cmd の経路: `applyCommand` / `apply`（`check` の証明を受け取り、各腕は UseCase の execute への 1 行。泉から汲む腕には `Snapshot.fresh` を渡す）— Port を持たない骨格の形。
+  `external` の経路: `Input`（command | observation と障害契約の指名）・`StepResult`（applied | refused | fault | harness）・`FaultSpec`（`beforeCall` | `afterResponse` — 消費位置は構成子が決め、表の値は `@[faultContract]` の def の部分適用。腕で作り直さない）・
+  `direct`（Port を使わない腕の配線）・`viaPort`（request → script の次と照合 → execute の固定配線。要求の不一致・script の不足・別の Port 操作・拒否される入力への指名はハーネスの失敗）・`withFault`（腕ごとの表引き。知らない名前はハーネスの失敗）・
+  `applyCommand` / `applyObservation`（構成子ごとに 1 腕。`lean-check` の wiring 規則はここを見る）・`applyExternal`（2 腕の振り分け）。Port を持たない骨格は `applyCommand` / `apply` を 5 cmd に残し、`external` は `direct` で包む。Port を持つプロジェクトは `applyCommand` / `applyObservation` が障害の指名と環境を受けて `StepResult` を返し、5 cmd は `applyExternal` を空の環境で呼ぶ（Port を使う手は script が要るのでプロトコルエラー）。
+- `Reachable.lean`: `Snapshot.Reachable`（checked | step（5 cmd）| external | faulted）と `Reachable.check`。`StepResult.Sound` / `FaultSpec.Sound`（結果が運ぶ状態は検査を通る）、配線の分解補題 `direct_sound` / `viaPort_sound` / `withFault_sound`、腕ごとの `applyExternal_sound`（`check_of_<root>_add` / `check_of_<root>_update` に `except_map_eq_ok` と `execute_ok_shape` で結果の形を取り出して適用する。fault の腕は障害契約の def の形から）。
+  `flow`: 入力列を順に流す連続する step の定義そのもの — 次の手の検査は `applyExternal_sound` が放電するので検査に失敗する腕は無い。CLI の `flow` / `dump` と `Scenarios.lean` の `runInputs` はその写し。
 - `Views.lean`: 射影と束。`views today s viewer`。口は画面名、`Option`。
-- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` は手書きで平らに固定（変更は golden が検知）。`Snapshot` の `FromJson` は観測モデルの制約を決定して弾く（構築に証明が要る）。人が打つ表記を受ける手書き `FromJson` は、直前の docstring にその表記を書く — `spec-query schemas` が入力欄の注記にする（骨格の `Title`: 文字列 `"買い物"` と `{"text": "買い物"}` の両方を受ける）。
-- `Scenarios.lean`: 名前付き初期状態と `scenarioByName`、`#guard`。
+- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` / `Observation` は手書きで平らに固定（変更は golden が検知）。`Interaction` は `{"port","operation","request","outcome"}`、`Environment` は `{"script","cursor"}`。`port` は `Application/Port/<Port>/`（Domain 所有なら `Domain/Port/<Port>/`）のディレクトリ名そのまま、`operation` は `<操作>.lean` のファイル名の先頭を小文字に（抽出器の `ports[].name` / `operations[].method`、生成 Kotlin の `interface <Port>` / `fun <operation>` と同じ綴り。`lean-check` がこの文字列の有無を検査する）。`Request` / `Outcome` は `deriving instance`。`Snapshot` の `FromJson` は観測モデルの制約を決定して弾く（構築に証明が要る）。人が打つ表記を受ける手書き `FromJson` は、直前の docstring にその表記を書く — `spec-query schemas` が入力欄の注記にする（骨格の `Title`: 文字列 `"買い物"` と `{"text": "買い物"}` の両方を受ける）。
+- `Main.lean`（骨格の持ち物。作り込まず、Cradle の更新で敷き直す）: 5 cmd と `external` の実行器。プロトコルエラーの形（版違い・不明な欄・`environment` と `env` の両方・`views` に `env`・observation に `actor`・command と observation の両方 / どちらも無い・`actor` の無い command）はモデルに依らないので `#guard` で固定され、exe のビルドで検査される。
+- `lakefile.toml`: `defaultTargets` に lib と exe の両方（骨格は `["Sprout", "sprout"]`）— 引数の無い `lake build` だけで CLI ができ、`golden-check` / `spec-query` / モックアップはそれに依る。
+- `Scenarios.lean`: 名前付き初期状態と `scenarioByName`、名前付きの環境と `environmentByName`、`runInputs`（`flow` の写し）、`#guard`（成功の流れ・拒否・ハーネスの失敗の負経路（script の不足・別の Port 操作・知らない指名・拒否される入力への指名・観測後の拒否が cursor を消費すること）・障害契約ごとの消費位置）。
 
 ## 7. 転送（`Laws/Properties.lean`）
 

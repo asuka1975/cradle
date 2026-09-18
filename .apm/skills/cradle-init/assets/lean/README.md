@@ -13,7 +13,7 @@
 
 ```
 lean/
-├── Main.lean                  JSON stdin/stdout CLI（init / step / views / flow / dump）
+├── Main.lean                  JSON stdin/stdout CLI（init / step / views / flow / dump と external。骨格の持ち物 — 作り込まない。プロトコルエラーの形は #guard がビルドで検査）
 ├── golden/                    <name>-init.json / <name>-flow.json / <name>.request.json
 ├── mockup/                    仕様アニメーション（無知なサーバー + 汎用の描画）
 └── <Root>/
@@ -32,12 +32,15 @@ lean/
     │   ├── Port/<Port>/<操作>.lean  外部能力の Port（固定名 Request / Outcome — 要求と観測の語彙だけ。Domain が所有するなら Domain/Port/）
     │   └── UseCase/           1 UseCase 1 ディレクトリ（validate / execute は固定名）
     │       ├── <更新系>UseCase/   Command.lean + UseCase.lean（Port を使うなら request / mkRequest / apply も固定名）
+    │       ├── <内部入力>UseCase/ Observation.lean + UseCase.lean（通知・契機。名義は受けない。固定名は更新系と同じ）
     │       └── <参照系>UseCase/   ReadModel.lean + QueryService.lean（固定名 query）+ UseCase.lean
-    ├── Runtime/               実行系（非規範 — 表現の仮置き・境界）
+    ├── Runtime/               実行系（非規範 — 表現の仮置き・境界。プロジェクトの持ち物）
     │   ├── Ids.lean           同一性の仮置き + 泉の具体化
     │   ├── Command.lean       コマンドの輸送形式 + Actor + 反機能の一覧
-    │   ├── Machine.lean       Snapshot / check（泉の境界）/ apply（today と actor と check の証明を受け取る）
-    │   ├── Reachable.lean     可到達性（apply が check を保つことの証明）
+    │   ├── Observation.lean   内部入力の合併型（Observation 形の UseCase ごとに構成子。無ければ空）
+    │   ├── Environment.lean   外部能力の環境（Interaction = Port 操作ごとの期待する要求と観測、script と cursor）
+    │   ├── Machine.lean       Snapshot / check（泉の境界）/ apply（5 cmd）/ applyCommand・applyObservation・applyExternal（external の固定の配線と障害契約の表）
+    │   ├── Reachable.lean     可到達性（applied / fault の結果が check を保つことの証明）と flow（連続する step の定義）
     │   ├── Views.lean         射影と画面の束（viewer と today を受け取る）
     │   ├── Json.lean          JSON の後付け（ワイヤ形式はここで固定）
     │   └── Scenarios.lean     名前付き初期状態 + #guard
@@ -52,8 +55,15 @@ lean/
 {"cmd":"views","state":…,"viewer":…,"today":…}                               → {"ok":{…}}（状態は動かさず射影し直す）
 {"cmd":"flow","scenario":…,"commands":[…],"actor":…,"viewer":…,"today":…}   → {"ok":{"trace":[…]}}
 {"cmd":"dump", …}                                                             → {"ok":{"initial":{…},"trace":[…]}}
+{"cmd":"external","version":1,"action":"init","scenario":…,"environment":"名前" | "env":{…},…} → {"ok":{"state":…,"views":…,"env":…}}
+{"cmd":"external","version":1,"action":"step","state":…,"env":…,"input":{"command":…,"actor":…} | {"observation":…},…}
+    → {"ok":{"result":"applied"|"refused"|"fault","state":…,"views":…,"env":…,"interactions":[…],…}} | {"harnessError":{"step":null,"message":…}}
+{"cmd":"external","version":1,"action":"flow"|"dump","scenario":…,"inputs":[…],"stopAt":n?,…} → {"ok":{"trace":[…],"env":…}} | {"harnessError":{"step":i,"message":…}}
 ```
 
 コマンドのワイヤ形式は `{"<構成子名>": <ペイロード>}`。**ペイロードに名義は入らない** — `actor` が別に運ぶ。
 `viewer` が無ければどの画面も `null`（そこに無い）。`null` と `[]`（見えたうえで空）は別の事実。
 日付は ISO-8601 `"uuuu-MM-dd"`。暦に無い日付はプロトコルエラー。
+外部能力と内部入力を扱う経路は `external` だけ（cradle スキルの `references/protocol.md` が正本）。環境（script と cursor）は状態と同じく応答で返し、次の step が受け取る。
+script の不一致・不足・拒否される入力への障害の指名はハーネスの失敗（`harnessError`）で、業務の拒否にも外部の観測にも化けない。
+Port を持つモデルでも 5 cmd はそのまま有効: Port を使わない手は変わらず、Port を使う手は要求の前に断られれば `domainError`、要求が通れば script が要るのでプロトコルエラー。

@@ -28,7 +28,7 @@ open の HS / MQ を見て、典型的な 1 件を最初から最後まで歩け
 ## 手順
 
 1. 主体ごとに仕事を列挙し、画面に割る（単位は上の節）。
-2. 画面ごとに使う口（Views）とコマンドを `cradle spec-query meta` から集める。足りない口は Lean に戻す（frontend 規約）。
+2. 画面ごとに使う口（Views）とコマンドを `cradle spec-query meta` から集める（`observations` は内部入力で画面の操作ではないので集めない）。足りない口は Lean に戻す（frontend 規約）。
 3. `frontend/README.md` に「画面 ↔ 仕事（主体）↔ 口・コマンド」の対応表を持つ。
 4. `frontend/` の package（openapi-fetch と `gen:api`）が無ければ先に作り、`pnpm gen:api` で契約クライアントを生成する。口はその生成物 1 枚（frontend 規約）。
 5. 相手は Lean CLI。dev は `node lean/mockup/server.mjs` の `/api/lean` を fetch 注入で使う。

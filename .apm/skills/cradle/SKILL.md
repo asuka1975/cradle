@@ -12,7 +12,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 |---|---|---|
 | `status` | パイプラインの現在地（フェーズごとの事実と次の一手） | 作業の最初。プロダクトオーナーに現在地を説明するとき |
 | `spec-query …` | Lean を動かして仕様に答える（`spec-query` スキル） | 仕様に関する問いすべて |
-| `golden-check [--update]` | golden を再生して突き合わせる | `lake build` が通ったあと、モデルを変えたとき |
+| `golden-check [--update]` | golden を再生して突き合わせる（外部能力の golden は init / flow に加えて step の連鎖（chain）も再生し、応答の port / operation がモデルの Port にあることも見る） | `lake build` が通ったあと、モデルを変えたとき |
 | `lean-check [--build]` | 層の壁・sorry・axiom・生成器への言及 | Lean を編集したあと、コミット前 |
 | `regen-impact [--dry-run]` | 再生成 → 生成物の差分 → 参照する手書き実装と契約テスト → golden 回帰 | Lean を変えて backend に追随するとき |
 | `unslop [--diff\|--all]` | コメント規約・腐ったパス・逃げ言葉・握りつぶし | 止まる前（Stop hook が error を差し戻す） |
@@ -32,4 +32,4 @@ description: Use when you need the current position in the Lean spec-driven pipe
 
 - `Lean CLI がありません` → `cd lean && lake build`。
 - `cradle.json に project が要ります` → ルートに `cradle.json` を置く（cradle-init スキル）。
-- `golden の request.json が無い` → `--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。
+- `golden の request.json が無い` → 5 cmd で採った golden なら `--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。外部能力の経路（`external`）で採った golden は脇書き（版・環境・入力列）が無いと再生できず、manifest からも復元しない — モックアップで採り直す。脇書きの `version` が 1 でないものも同じ。

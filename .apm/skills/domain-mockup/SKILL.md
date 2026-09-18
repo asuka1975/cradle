@@ -14,7 +14,7 @@ description: Use to create, update or run the spec-animation mockup under lean/m
 - 合計・並び替え・フィルタ・可否判定を JS で書かない。表示に必要な加工は Lean の `Runtime/Views.lean` に足す。
 - state は Lean が返した JSON をそのまま持ち、そのまま送り返す。UI で変形しない。
 - シナリオはベタ書きせず `{"cmd":"init"}` で取る。増やすなら `Runtime/Scenarios.lean`。
-- サーバー（`server.mjs`）の役割は 4 つだけ: 静的配信・`/api/lean` の素通し・`/api/golden`（応答をそのまま保存）・`/api/meta`（spec-query の結果と用語集）。判断を書かない。
+- サーバー（`server.mjs`）の役割は 4 つだけ: 静的配信・`/api/lean` の素通し・`/api/golden`（init と flow を Lean に流し、応答をそのまま保存。脇書きは version 1。トップに `ok` の無い応答は保存しない）・`/api/meta`（spec-query の結果と用語集）。判断を書かない。
 - ボタンを段階で隠さない。可否は validate が決め、拒否は domainError としてその場に出す。
 - 「誰として」の切り替えはセッションの切り替え。viewer と actor は必ず同時に動く。
 
@@ -22,6 +22,7 @@ description: Use to create, update or run the spec-animation mockup under lean/m
 
 cradle-init スキルが敷く `public/index.html` は、views の口ごとの表、`/api/meta` の schemas（Lean の Command 構造体の型）から生成した入力欄、用語集（`ubiquitous-language.md` の英語候補 → 用語）による表示名を持つ。判断は持たない。
 人が打つ表記が内部表現と違う値オブジェクトは、`Runtime/Json.lean` の手書き `FromJson`（文字列 1 本を受ける）と docstring の注記で欄になる（schemas の `hint`）。型名の特別扱いを index.html に書かない。
+外部能力を持つモデル（`/api/meta` の `external`）では、環境（`environments` の名前か script そのもの）の選択、`external` の init / step、コマンドと内部入力（`observationSchemas`）のフォーム、障害契約の指名（def 名）、applied / refused / fault / `harnessError` の描き分け、手ごとの外部能力の往復（interactions）と環境の cursor の記録も骨格が持つ。`harnessError` は環境と入力列の不一致で、拒否（domainError）ともプロトコルエラーとも別の見た目。
 これは「動く」が「読める」ではない。集約と操作の関係、誰が何をできるかは、ドメインの語彙で並べて初めて見える。
 
 ## 作り込み（必須）
@@ -32,11 +33,11 @@ cradle-init スキルが敷く `public/index.html` は、views の口ごとの�
 4. 「誰として」は、シナリオに現れる名義（views に出る人・部署など）の一覧から選ぶ。viewer と actor を同時に切り替える。
 5. 置かないもの: Command に無い操作のボタン（反機能）、段階で隠すボタン、documents で却下されたもの。
 6. 拒否（domainError）はその場に Lean の語彙で出す。state は巻き戻さない。
-7. golden 保存と操作ログは骨格のまま残す。
+7. golden 保存と操作ログ（環境・外部能力の往復・障害の指名の記録を含む）は骨格のまま残す。内部入力（通知・契機）のフォームは利用者の操作と並べず、「外から届くもの」として置く。
 
 作り込みは `index.html` の描画を口ごと・コマンドごとに足す形で行う（骨格の `lean()`・`send()`・`renderAll()` の骨は残す）。JS でこしらえるのは描画と入力欄だけ。
 作り込んだら冒頭の注記「Cradle 標準の汎用モックアップ」を、この画面が何を映すかの一文に置き換える（`cradle status` はその注記で「汎用 UI のまま」かを見る）。
-Cradle を更新したあと骨格を敷き直すのは `server.mjs` だけ（`cradle-init` の `--only lean/mockup/server.mjs --force`）。`index.html` は作り込み後のものが正本。
+Cradle を更新したあと骨格を敷き直すのは `server.mjs`（`cradle-init` の `--only lean/mockup/server.mjs --force`）と CLI の `Main.lean`（`--only lean/Main.lean --force`）。`index.html` は作り込み後のものが正本。
 
 ## 起動
 
@@ -48,12 +49,13 @@ cd lean && lake build && node mockup/server.mjs   # → http://localhost:8787（
 
 ## golden の採取
 
-操作ログを「golden として保存」→ `golden/<name>-init.json` / `<name>-flow.json` / `<name>.request.json`。中身を作るのは Lean。
+操作ログを「golden として保存」→ `golden/<name>-init.json` / `<name>-flow.json` / `<name>.request.json`（脇書き `{"version":1,"init","flow"}`）。中身を作るのは Lean。
+外部能力を使う流れは環境を選んで `external` で採る。環境を尽くさなくてよい — 途中で止めた流れは最後の cursor が `stopAt` として脇書きに自動で入る（Cradle の回帰素材では `payment-partial` がその例）。直前の応答が `ok` でなければ保存できない。
 採ったら `cradle golden-check` が通ることを確かめ、名前と流れの一言を PR / コミットに書く（README に表を手で保つのではなく、`<name>.request.json` が正）。
 
 ## 動作確認
 
 - init → 最初の口が用語の名前で映る。「誰として」を変えると見える範囲が変わる（`null` と `[]` の描き分け）。
-- `documents/ddd/event-timeline.md` の出来事を順に、JSON を読まずに一巡できる。断られる手も試し、拒否がその場に出る。
+- `documents/ddd/event-timeline.md` の出来事を順に、JSON を読まずに一巡できる。断られる手も試し、拒否がその場に出る。外部能力を使う手は環境を選んでから打ち、外部の答え・通知・中断（障害契約の指名）の帰結が画面に出る。
 - resolved の HS ごとに 1 項目、その結論が画面で見えることを確かめる。
 - 画面とモデルの食い違いを感じたら、UI にロジックが漏れているか views が仕様とずれているかのどちらか。index.html で辻褄合わせをしない。

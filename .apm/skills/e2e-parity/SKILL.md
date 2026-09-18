@@ -11,8 +11,10 @@ description: Use after the backend follows the model — derive E2E flow scripts
 
 1. **台本を起こす**: このスキルの `scripts/flows-from-golden.mjs --out e2e/scenarios/from-golden.json`。
    golden の trace から人物・手・通った / 断られた・そのとき見えた口を機械で列挙する。手で台本を書かない。
+   外部能力を使う流れでは、内部入力（通知・worker）の手が `kind: "observation"` として、環境（`environment: { name, script }`。script は CLI の応答のもので、途中で止めた流れの「期待したのに呼ばれなかった」尾はここから読む）と外部能力の往復（interactions）とともに台本に付く。
    既に手書きの台本を持つプロジェクトは、台本を from-golden.json と同じ `steps` の形（`command` / `actor` / `outcome`）に寄せ、置き場を `cradle.json` の `e2e.scenarios` に書いて `scripts/flows-from-golden.mjs --check` を回す（受け入れの条件は e2e 規則）。
 2. **画面への写し**: 各手を「どの画面で・どの要素を・どう操作するか」に写す（ここだけが手書き）。ID に頼らず、ラベル + 当事者で紙面を特定する。日付は相対指定。
+   内部入力（`kind: "observation"`）と外部能力の答えは画面の操作に写さない。テスト構成だけのドライバーが、流れの `environment.script` を生成された Port のモックに積み（消費した往復は手ごとの `interactions`、途中で止めた流れの「期待したのに呼ばれなかった」尾は script の残り）、内部入力を検証済みの受信経路へ届ける。DB を直接書き換えない。注入口は本番の構成に無い。障害の指名（`fault`）の手は実装の注入手段で再現し、`contract` が言う観測と突き合わせる（e2e 規則）。
 3. **前提**: local スタック（infra-implement フェーズの成果物。`infra.up` で立て、`cradle doctor --local` が fresh）と Lean CLI サーバ、dev の画面。テスト用 DB は開発ループと分ける。
 4. **播種**: REST 側の初期盤面は golden の init state から REST 経由で作る（DB への直接 INSERT は最小限、test-harness 専用と明記）。
 5. **実行**: 両方をその場で走らせて突き合わせる。`workers: 1`。固定スリープでなく DOM の変化を待つ。
@@ -20,5 +22,5 @@ description: Use after the backend follows the model — derive E2E flow scripts
 
 ## 網羅
 
-golden にある流れはすべて台本にする。拒否の手・自動で起きる帰結（番回しなど）・日付で変わる見え方（時計固定）を落とさない。
+golden にある流れはすべて台本にする。拒否の手・自動で起きる帰結（番回しなど）・日付で変わる見え方（時計固定）・外部能力の答えと通知の順序（遅延・順序逆転・答えの喪失からの再開）を落とさない。実アプリでの通過はこのフェーズの成果で、Cradle 側では確かめない。
 画面に出ない操作（管理専用など）は対象外と明記し、API 直叩きのテストに回す。
