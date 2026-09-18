@@ -116,6 +116,7 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 - 生成器が読める制約の形は `(coll.map (·.f)).Nodup` と `(coll.filterMap (·.f)).Nodup`（coll は同じ構造体の List のフィールド、f はその要素のフィールド）だけ。読めた制約どおりに Repository 契約テストの個体の列を引き、読めない形の Prop フィールドは抽出の note になる（fixture はそれを満たすとは限らない）。Prop フィールドと def の Prop 引数（泉の新鮮性など）は形状・署名から落ち、証拠だけの structure は data object に写る — 証明は実装の義務。
 - 採番はドメイン状態に染み出させない（泉の抽象）。具体表現は NFR を根拠にインフラ設計が決める。
 - 型引数の binder 名は `<Root>.Runtime.<binder>` で解決される（生成器の規約）。解決できないものは生成側の binder 上書きで指定する。
+  型引数で抽象のままにするのは同一性の VO（各 ID）だけで、それ以外の値オブジェクトは具体名で使う（`Command (JoinCode : Type)` は規約の外 — `Command` に `JoinCode` を直に書く）。`Runtime` に表現の無い binder を残すと生成側に `binderOverrides` が要る。
 - validate 面の定理に `@[contract]` を付けない。フィールド 0 の `@[actorContext]` を作らない。
 - **契約面に置ける型の語彙**: `Nat` `String` `Bool` `Unit` `List` `Option` `Prod` `Except` `Std.Time.PlainDate` と `<Root>` 配下の structure / inductive だけ。`Int` `Float` `Array` `HashMap` `Fin` `Subtype`・依存型・関数フィールドは契約面（Command / State / View / DomainError / Row）に置かない。例外は Prop（構造体の Prop フィールド、def の Prop 引数、証拠の structure の値引数）で、生成器が落とす。
 - **生成器が要求する固定名**: 失敗の語彙は `<Root>.DomainError`、観測モデルは `<Root>RepositoryState`（↔ `<Root>Repository`）、泉の状態は `<X>IdGeneratorState`（↔ `<X>IdGenerator`）、Entity の同一性フィールドは `id`。
