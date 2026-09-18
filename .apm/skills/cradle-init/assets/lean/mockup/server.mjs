@@ -5,8 +5,11 @@
 //   2. POST /api/lean   : body を Lean CLI の stdin へ素通しし、stdout をそのまま返す
 //   3. POST /api/golden : {"name", "init": <init リクエスト>, "flow": <flow リクエスト>} を Lean に流し、
 //                         応答をそのまま golden/<name>-init.json / <name>-flow.json に保存する。
-//                         再生用にリクエストも <name>.request.json に残す（golden-check が読む）
-//   4. GET  /api/meta   : シナリオ名・コマンド構成子・失敗語彙・コマンドの入力の形（cradle spec-query meta の結果）+ 用語集（英語候補 → 用語。表示名の解決だけに使う）
+//                         再生用にリクエストも {"version": 1, "init": …, "flow": …} の形で <name>.request.json に残す（golden-check が読む）。
+//                         旧経路（cmd init / flow）でも外部能力の経路（cmd external）でも同じ。どちらかの応答のトップが ok でなければ
+//                         （domainError / error / harnessError）何も書かず、その応答を添えて断る — golden は ok の応答だけ
+//   4. GET  /api/meta   : シナリオ名・環境名・コマンドと内部入力の構成子・失敗語彙・入力の形・external の版（cradle spec-query meta の結果）
+//                         + 用語集（英語候補 → 用語。表示名の解決だけに使う）
 //
 // 起動: node server.mjs   （事前に cd lean && lake build）
 // CLI パス: 環境変数 CRADLE_LEAN_BIN、なければ ../.lake/build/bin/<lakefile の lean_exe 名>
@@ -99,17 +102,26 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && req.url === "/api/golden") {
       const { name, init, flow } = JSON.parse(await readBody(req));
       const safe = String(name || "session").replace(/[^\w.-]/g, "_");
+      // 先に 2 本とも流し、どちらかのトップが ok でなければ何も書かない（golden は ok の応答そのもの）
+      const responses = [];
+      for (const [kind, request] of [["init", init], ["flow", flow]]) {
+        if (!request) { res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: `${kind} リクエストが無い` })); return; }
+        const parsed = JSON.parse(await callLean(JSON.stringify(request)));
+        if (!parsed || typeof parsed !== "object" || !("ok" in parsed)) {
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: `${kind} の応答が ok ではないので保存しない`, kind, response: parsed }));
+          return;
+        }
+        responses.push([kind, parsed]);
+      }
       await mkdir(GOLDEN_DIR, { recursive: true });
       const saved = [];
-      for (const [kind, request] of [["init", init], ["flow", flow]]) {
-        if (!request) continue;
-        const out = await callLean(JSON.stringify(request));
+      for (const [kind, parsed] of responses) {
         const file = join(GOLDEN_DIR, `${safe}-${kind}.json`);
-        await writeFile(file, JSON.stringify(JSON.parse(out), null, 2) + "\n");
+        await writeFile(file, JSON.stringify(parsed, null, 2) + "\n");
         saved.push(file);
       }
       const reqFile = join(GOLDEN_DIR, `${safe}.request.json`);
-      await writeFile(reqFile, JSON.stringify({ init, flow }, null, 2) + "\n");
+      await writeFile(reqFile, JSON.stringify({ version: 1, init, flow }, null, 2) + "\n");
       saved.push(reqFile);
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ saved }));
       return;

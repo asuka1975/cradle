@@ -17,7 +17,7 @@ APMでCodex向けの規約・スキルを配り、その上に追加の統合を
 
 1. `apm install asuka1975/cradle`。既存のスキル / エージェントと名前が衝突するものは Cradle 側に寄せる。プロジェクト固有の事実は `CLAUDE.md` / 手書きの `AGENTS.md` から `.apm/instructions/project.instructions.md` に移す（Codex では `apm compile` がルートの AGENTS.md を書き換える）。
 2. ルートに `cradle.json`（cradle スキルの `references/cradle-json.md`）。既定と違う場所（生成ディレクトリ・ポート・exe 名）だけ書く。
-3. `cradle status` / `cradle lean-check` / `cradle unslop --all` を走らせ、出たものを直す。既存の golden には `<name>.request.json` を足す（`golden-check --manifest` で一度再生してから `--update` で作り直してもよい）。
+3. `cradle status` / `cradle lean-check` / `cradle unslop --all` を走らせ、出たものを直す。既存の golden には `<name>.request.json` を足す（5 cmd で採った golden は `golden-check --manifest` で一度再生してから `--update` で作り直してもよい。外部能力の経路（`external`）で採る golden は脇書きが無いと再生できず、manifest からは復元しない — モックアップで採る）。
 4. `documents/codestyle/` の汎用規約は Cradle の rules に置き換わる。プロジェクト固有の決めごとだけを残す。
 5. 手書きの E2E の台本があるなら、e2e-parity スキルの `flows-from-golden --check` に通す。
 
@@ -39,3 +39,6 @@ APMでCodex向けの規約・スキルを配り、その上に追加の統合を
 ## ハーネスの更新
 
 `apm update` で新しい版を取り、`apm audit` で配布物への手編集が無いことを確かめる。規約を足したいときは Cradle 側に PR を出す（配られた rules を直接編集すると次の install で上書きされる）。Codex は install のあと `apm compile --single-agents` も回す。
+
+骨格の持ち物（`lean/Main.lean`・`lean/mockup/server.mjs`）は cradle-init スキルの `--only <path> --force` で敷き直す（`cradle doctor` が配布物とのずれを出す）。`lean/<Root>/Runtime/` はプロジェクトの持ち物なので敷き直さず、手で足す。
+外部能力の経路（`external`）を持つ版へ上げる順序: (1) `init.mjs --only lean/<Root>/Runtime/Environment.lean` で環境の型を敷き、Port 操作ごとに `Interaction` の構成子を足す（`Runtime/Observation.lean` が無ければ同じく敷く）。(2) `Machine.lean` に `Input` / `StepResult` / `FaultSpec` / `direct` / `viaPort` / `withFault` / `applyCommand` / `applyObservation` / `applyExternal` と構成子ごとの腕、`Json.lean` に `Environment` / `Interaction` のワイヤ、`Scenarios.lean` に `environmentByName`、`Reachable.lean` に `external` / `faulted` と `applyExternal_sound` / `flow`、`<Root>.lean` に import を手で足す（形は骨格の `Sprout` と lean-domain-model スキルの `references/lean-conventions.md` §6）。(3) そのあとで `--only lean/Main.lean --force` と `lake build`（新しい `Main.lean` は `Runtime` の新しい名前を使う）。(4) `--only lean/mockup/server.mjs --force`（脇書きを version 1 で書く）。`index.html` は作り込み後のものが正本なので、環境の選択と内部入力のフォームは domain-mockup スキルの手順で手で足す。

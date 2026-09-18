@@ -92,10 +92,22 @@ object Lean2KotlinGeneration {
 		val error = { e: String -> errors += e; log("error: $e") }
 		val failure = { IllegalStateException("lean2kotlin: 宣言した契約・Port が検査に至らない診断 ${errors.size} 件で生成を失敗にしました:\n" + errors.joinToString("\n")) }
 		for (d in ir.dropped) error("${d.kind} ${d.name}: ${d.reason}")
+		// 再生できない golden(外部能力の golden の脇書き欠落・版違い・ok でない応答、fault のエントリが指名した障害契約と IR の食い違い)も
+		// 抽出器の診断と同じ集め方 — 生成は続き、最後に止まる
+		for (e in golden.errors + Golden.checkFaults(golden, ir)) error(e)
 		val beforePorts = errors.size
 		for (p in ir.ports) for (op in p.operations) for (ty in listOf(op.request, op.outcome)) {
 			if (k.reachesArrow(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が関数型を運ぶ(構成子の引数・入れ子の中も含む)— 要求と観測は値で比較できる閉じたデータ型にし、外部を呼ぶ関数は UseCase に渡さない")
 			else if (k.reachesEntityLike(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が interface 化された語彙(Entity / ふるまい持ちの VO)を運ぶ — 要求と観測は値で比較できる閉じたデータ型にする")
+		}
+		// 内部入力(Observation)が名義(ActorContext)を運ぶ形は固定形の破れ — 通知・契機に利用者はいない
+		for (td in ir.types.filter { it.role == "observation" }) {
+			if (k.reachesRole(IrType.Ref(td.lean), "actorPort")) error("内部入力 ${td.lean} が名義(@[actorContext])を運んでいる — 通知・worker からの入力に利用者の名義は無い")
+		}
+		// 泉の状態 <X>IdGeneratorState には対になる Id 型 <X>Id が要る(無いと泉ポートが黙って導出されず、採番が注入されない)
+		for (st in ir.types.filter { it.role == "repositoryState" && it.kotlin.endsWith("IdGeneratorState") }) {
+			val idName = st.kotlin.removeSuffix("IdGeneratorState") + "Id"
+			if (ir.types.none { it.isId && it.kotlin == idName }) error("泉の状態 ${st.lean} に対応する Id 型 $idName がありません(Runtime/Ids.lean の structure $idName — lean-conventions §9)")
 		}
 		// 閉じていない Port の型は要求の比較・Arb・リテラルの生成が成立しない — 生成に進まず、ここまでの診断で止める
 		if (errors.size > beforePorts) throw failure()

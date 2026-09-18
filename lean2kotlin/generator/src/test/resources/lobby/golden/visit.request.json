@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "init": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "init",
+    "scenario": "basic",
+    "environment": "directoryFound"
+  },
+  "flow": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "flow",
+    "scenario": "basic",
+    "environment": "directoryFound",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "inputs": [
+      {
+        "command": {
+          "bookVisit": {
+            "host": {
+              "id": 10
+            },
+            "visitor": "来訪 次郎"
+          }
+        }
+      },
+      {
+        "command": {
+          "bookVisit": {
+            "host": {
+              "id": 10
+            },
+            "visitor": ""
+          }
+        }
+      },
+      {
+        "command": {
+          "leave": {
+            "visit": {
+              "id": 1
+            }
+          }
+        }
+      }
+    ]
+  }
+}

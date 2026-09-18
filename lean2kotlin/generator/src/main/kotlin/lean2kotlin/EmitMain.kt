@@ -442,7 +442,8 @@ interface ${rootK}Repository {$ops
 	 * ドメイン語彙なので落とさない)。
 	 */
 	private fun isPreciseInput(t: IrType): Boolean {
-		// 内部入力(Observation)は相関 Id だけを運んでも入力 — 署名から落とさない
+		// 内部入力(Observation)は相関 Id だけを運んでも入力。leafRefs は構造体の中へ降りないので今は到達しない —
+		// 降りる変更への防波堤として明示しておく
 		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
 		val refs = t.leafRefs()
 		return refs.isNotEmpty() && refs.all {

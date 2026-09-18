@@ -3,6 +3,8 @@
 
 package dev.cradle.lobby
 
+import dev.cradle.lobby.application.PaymentView
+import dev.cradle.lobby.application.VisitView
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberMember
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberOutcome
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberRequest
@@ -33,6 +35,9 @@ private val suppressUnused = Unit
 internal fun arbBookVisitVacant(): Arb<BookVisitVacant> =
 	Arb.constant(BookVisitVacant)
 
+internal fun arbPaymentView(): Arb<PaymentView> =
+	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.long(0L..4096L), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentView(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
+
 internal fun arbOrganizationDirectoryFindMemberMember(): Arb<OrganizationDirectoryFindMemberMember> =
 	Arb.bind(Arb.string(0..8, Codepoint.alphanumeric()), Arb.boolean()) { p0, p1 -> OrganizationDirectoryFindMemberMember(name = p0, active = p1) }
 
@@ -60,6 +65,9 @@ internal fun arbPaymentGatewayInquireOutcome(): Arb<PaymentGatewayInquireOutcome
 
 internal fun arbPaymentGatewayInquireRequest(): Arb<PaymentGatewayInquireRequest> =
 	arbPaymentAttemptId().map { p0 -> PaymentGatewayInquireRequest(attempt = p0) }
+
+internal fun arbVisitView(): Arb<VisitView> =
+	Arb.bind(arbVisitId(), arbEmployeeId(), Arb.string(0..8, Codepoint.alphanumeric()), Arb.string(0..8, Codepoint.alphanumeric()), arbVisitPhase()) { p0, p1, p2, p3, p4 -> VisitView(id = p0, host = p1, hostName = p2, visitor = p3, phase = p4) }
 
 internal fun arbPaymentAttempt(): Arb<PaymentAttemptFixture> =
 	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.long(0L..4096L), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentAttemptFixture(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }

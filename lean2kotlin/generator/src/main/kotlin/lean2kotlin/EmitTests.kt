@@ -51,10 +51,11 @@ class EmitTests(
 		// <UseCase>ContractTest に束ねる(emitTheoremContractTests が担う)
 		val goldenPlan = linkedMapOf<String, Pair<IrMethod, String?>>()
 		if (goldenSnapshots.isNotEmpty()) {
+			// 計画の基準は views を持つ最初のスナップショット(外部能力の golden では refused / fault が先に来ることがある)
+			val v0 = goldenSnapshots.firstOrNull { it.views.isNotEmpty() }?.views ?: goldenSnapshots.first().views
 			for (s in ir.useCases) {
 				for (m in s.methods.filter { it.name == "execute" }) {
 					val okT = (m.ret as? IrType.Result)?.ok ?: m.ret
-					val v0 = goldenSnapshots.first().views
 					// 対象 1(束): 成功側が「画面束ね」DTO(フィールドが golden views のキーと一致)。
 					// 束が Runtime 在住のプロジェクトでは現れない(Runtime は抽出の対象外)
 					val retTd = (okT as? IrType.Ref)?.let { ir.typeDef(it.lean) }

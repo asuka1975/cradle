@@ -8,13 +8,13 @@ import { spawnSync } from "node:child_process";
 
 const leanCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/lean-check.mjs", import.meta.url));
 
-// 一時プロジェクト: UseCase ディレクトリの形と Runtime の配線だけを持つ Lean モデル（lake build はしない）
+// 一時プロジェクト: UseCase ディレクトリの形と Runtime の配線だけを持つ Lean モデル（lake build はしない）。鍵 Main.lean だけは lean/ 直下（CLI）
 function fixture(t, files) {
   const root = mkdtempSync(join(tmpdir(), "cradle-lean-check-forms-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
   for (const [rel, text] of Object.entries(files)) {
-    const f = join(root, "lean/Example", rel);
+    const f = rel === "Main.lean" ? join(root, "lean", rel) : join(root, "lean/Example", rel);
     mkdirSync(dirname(f), { recursive: true });
     writeFileSync(f, text);
   }
@@ -95,4 +95,91 @@ test("Observation.lean が名義を運ぶ形と、Runtime/Command.lean に内部
   const messages = findings.map(f => f.message);
   assert.ok(messages.some(m => /名義（ActorContext）を運んでいる/.test(m)), messages.join(" / "));
   assert.ok(messages.some(m => /構成子 confirm が内部入力（Observation）を運んでいる/.test(m)), messages.join(" / "));
+});
+
+// 外部能力を持つ Lean モデルの配線（Lobby の形）: 合併型 2 つ、Port、環境、CLI。腕は構成子ごとに withFault の中で viaPort か direct
+const lobbyMachine = `namespace Example.Runtime
+
+/-- 利用者の操作のルーティング表。Port を使う腕は viaPort、使わない腕は direct。 -/
+def Snapshot.applyCommand (_today : Date) (actor : Actor) (cmd : Command) (fault : Option String) (s : Snapshot)
+    (env : Environment) (_h : s.check = true) : StepResult :=
+  match cmd with
+  | .bookVisit c =>
+    withFault fault [("directoryUnavailable", BookVisitUseCase.directoryUnavailable actor.context c s.visitState)] fun f =>
+      viaPort env (BookVisitUseCase.request actor.context c s.visitState) (BookVisitUseCase.apply · actor.context c s.visitState) f
+  | .leave c =>
+    withFault fault [] fun f =>
+      direct env ((LeaveUseCase.execute actor.context c s.visits).map fun v => { s with visits := v }) f
+
+/-- 内部入力のルーティング表。 -/
+def Snapshot.applyObservation (_today : Date) (obs : Observation) (fault : Option String) (s : Snapshot)
+    (env : Environment) (_h : s.check = true) : StepResult :=
+  match obs with
+  | .dispatchPayment o =>
+    withFault fault [("sentNoAnswer", DispatchPaymentUseCase.sentNoAnswer o s.startState)] fun f =>
+      viaPort env (DispatchPaymentUseCase.request o s.startState) (DispatchPaymentUseCase.apply · o s.startState) f
+  | .confirmPayment o =>
+    withFault fault [] fun f =>
+      direct env ((ConfirmPaymentUseCase.execute o s.startState).map s.putAttempts) f
+
+def Snapshot.applyExternal (today : Date) (input : Input) (s : Snapshot) (env : Environment) (h : s.check = true) : StepResult :=
+  match input with
+  | .command actor cmd fault => s.applyCommand today actor cmd fault env h
+  | .observation obs fault => s.applyObservation today obs fault env h
+
+end Example.Runtime
+`;
+const lobbyJson = `namespace Example.Runtime
+instance : FromJson Command where
+  fromJson? j := match (j.getObjVal? "bookVisit").toOption, (j.getObjVal? "leave").toOption with
+    | some p, _ => (fromJson? p).map Command.bookVisit | _, some p => (fromJson? p).map Command.leave | _, _ => .error "unknown command"
+instance : FromJson Observation where
+  fromJson? j := match (j.getObjVal? "dispatchPayment").toOption, (j.getObjVal? "confirmPayment").toOption with
+    | some p, _ => (fromJson? p).map Observation.dispatchPayment | _, some p => (fromJson? p).map Observation.confirmPayment | _, _ => .error "unknown observation"
+instance : ToJson Interaction where
+  toJson
+    | .paymentGatewayAuthorize r o => interaction "PaymentGateway" "authorize" (toJson r) (toJson o)
+end Example.Runtime
+`;
+const lobbyMain = `import Example
+def main : IO Unit := do
+  match req.cmd with
+  | "init" => respond (okResponse today s viewer)
+  | "external" => respond (← runExternal x)
+  | other => respond <| protocolError s!"unknown cmd: {other}"
+`;
+const lobby = {
+  "Runtime/Command.lean": "namespace Example.Runtime\ninductive Command where\n  | bookVisit (c : BookVisitUseCase.Command)\n  | leave (c : LeaveUseCase.Command)\nderiving Repr\nend Example.Runtime\n",
+  "Runtime/Observation.lean": "namespace Example.Runtime\ninductive Observation where\n  | dispatchPayment (o : DispatchPaymentUseCase.Observation)\n  | confirmPayment (o : ConfirmPaymentUseCase.Observation)\nderiving Repr\nend Example.Runtime\n",
+  "Runtime/Json.lean": lobbyJson,
+  "Runtime/Machine.lean": lobbyMachine,
+  "Runtime/Environment.lean": "namespace Example.Runtime\ninductive Interaction where\n  | paymentGatewayAuthorize (r : Authorize.Request) (o : Authorize.Outcome)\nstructure Environment where\n  script : List Interaction\n  cursor : Nat\nend Example.Runtime\n",
+  "Application/Port/PaymentGateway/Authorize.lean": "namespace Example.Application.Port.PaymentGateway.Authorize\nstructure Request where\n  amount : Nat\ninductive Outcome where\n  | authorized\n  | declined\nend Example.Application.Port.PaymentGateway.Authorize\n",
+  "Main.lean": lobbyMain,
+};
+
+test("外部能力を持つ配線（合併型 2 つ・Port・環境・CLI）は、構成子ごとの腕が applyCommand / applyObservation に揃っていれば通る", (t) => {
+  assert.deepEqual(fixture(t, lobby), []);
+  // 腕を `| _ =>` でまとめると、その構成子の腕が無い
+  const collapsed = fixture(t, { ...lobby, "Runtime/Machine.lean": lobbyMachine.replace("  | .confirmPayment o =>", "  | _ =>") });
+  assert.deepEqual(collapsed.map(f => f.message), ["構成子 confirmPayment の腕が Machine.lean の applyObservation に無い"]);
+});
+
+test("外部能力の配線は揃って要る: Port があるのに環境が無い、環境と Main.lean の cmd external が片方だけ、は wiring の error", (t) => {
+  const withoutEnv = { ...lobby };
+  delete withoutEnv["Runtime/Environment.lean"];
+  const messages = (files) => fixture(t, files).map(f => f.message);
+  const noEnv = messages(withoutEnv);
+  assert.ok(noEnv.some(m => /Port の置き場（Application\/Port か Domain\/Port）があるのに Runtime\/Environment\.lean/.test(m)), noEnv.join(" / "));
+  assert.ok(noEnv.some(m => /Main\.lean が cmd external を受けるのに Runtime\/Environment\.lean が無い/.test(m)), noEnv.join(" / "));
+  const legacyMain = messages({ ...lobby, "Main.lean": lobbyMain.replace('  | "external" => respond (← runExternal x)\n', "") });
+  assert.deepEqual(legacyMain, ["Runtime/Environment.lean があるのに Main.lean が cmd external を受けない — 移行が半分（骨格の Main.lean で敷き直す。cradle doctor が差を出す）"]);
+  // Port も環境も持たない骨格は、Main.lean が external を受けるだけなら片方だけ
+  const halfMain = { ...lobby };
+  delete halfMain["Runtime/Environment.lean"];
+  delete halfMain["Application/Port/PaymentGateway/Authorize.lean"];
+  assert.deepEqual(messages(halfMain), ["Main.lean が cmd external を受けるのに Runtime/Environment.lean が無い — 移行が半分"]);
+  // コメントの中の "external" は受けているとは数えない
+  const commentOnly = messages({ ...lobby, "Main.lean": lobbyMain.replace('  | "external" => respond (← runExternal x)\n', '  -- "external" は次の版で\n') });
+  assert.equal(commentOnly.length, 1, commentOnly.join(" / "));
 });

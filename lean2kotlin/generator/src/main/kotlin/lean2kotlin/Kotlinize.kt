@@ -119,6 +119,20 @@ class Kotlinize(private val ir: Ir) {
 		else -> false
 	}
 
+	/** 型が指定の役割の型へ shape を通じて到達するか(内部入力が名義を運んでいないかの検査)。 */
+	fun reachesRole(t: IrType, role: String, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
+		is IrType.Ref -> {
+			val td = ir.typeDef(t.lean)
+			td.role == role || (seen.add(t.lean) && shapeFieldTypes(td).any { reachesRole(it, role, seen) })
+		}
+		is IrType.ListOf -> reachesRole(t.of, role, seen)
+		is IrType.OptionOf -> reachesRole(t.of, role, seen)
+		is IrType.PairOf -> reachesRole(t.fst, role, seen) || reachesRole(t.snd, role, seen)
+		is IrType.WithDefault -> reachesRole(t.of, role, seen)
+		is IrType.Result -> reachesRole(t.err, role, seen) || reachesRole(t.ok, role, seen)
+		else -> false
+	}
+
 	/** 型が関数型へ shape を通じて到達するか(値で比較できない — Port の要求・観測に置けない)。 */
 	fun reachesArrow(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Arrow -> true

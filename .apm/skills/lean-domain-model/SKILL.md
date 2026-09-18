@@ -23,12 +23,12 @@ description: Use to create, update or verify the Lean 4 executable specification
 ### 初回
 
 1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ cradle-init スキル。
-2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格のサンプル（メモ: `Entity/Note`・PostNote / CloseNote / Notes の UseCase・`basic` シナリオ・golden の `basic`）を丸ごと置き換える。サンプルの型や語彙を実ドメインに混ぜない。置き換わると `cradle lean-check` の scaffold 警告と `cradle status` の「骨格のサンプル」が消える。
+2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Observation → Environment → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格のサンプル（メモ: `Entity/Note`・PostNote / CloseNote / Notes の UseCase・`basic` シナリオ・golden の `basic`）を丸ごと置き換える。サンプルの型や語彙を実ドメインに混ぜない。置き換わると `cradle lean-check` の scaffold 警告と `cradle status` の「骨格のサンプル」が消える。
    `Views` は集約ごとに一覧の口を必ず持つ（lean-spec 規則）。口が無いモデルは画面でも golden でも観測できない。
 3. `lake build` が通るまで直す。証明が難航するものは `sorry` + `-- TODO(proof):` で先に進み、全体を成立させてから戻る。
 4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。
 5. `cradle lean-check`、`lake exe <exe> <<< '{"cmd":"init","scenario":"basic","viewer":…}'` で疎通。
-6. golden を採る（モックアップの「golden として保存」か CLI の init / flow の応答をそのまま保存 + `<name>.request.json`）。
+6. golden を採る（モックアップの「golden として保存」— 脇書き `<name>.request.json` も書く — か、`cradle spec-query raw` で流した init / flow の応答をそのまま保存 + 脇書き。外部能力を使う流れは環境つきの `external` で採る）。
 
 ### 差分更新（セッション後）
 
@@ -39,8 +39,16 @@ description: Use to create, update or verify the Lean 4 executable specification
 ### コマンド（更新系）を増やす
 
 `Application/UseCase/<名前>UseCase/{Command,UseCase}.lean` → 失敗の語彙が要れば `Domain/Error.lean` → 対象 Entity にふるまいと `@[contract]` 定理 →
-内部入力（通知・契機。`Observation.lean` + `UseCase.lean`）は `Runtime/Observation.lean` の合併型 → `Machine.applyObservation` の腕 → `Json.lean` のワイヤの順で、利用者の `Runtime/Command.lean` には混ぜない。`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の apply に 1 腕 → `Runtime/Json.lean` にワイヤ（人が打つ表記が違う値は手書き FromJson + docstring）→
-`Runtime/Reachable.lean` の check 保存に 1 腕 → `Scenarios.lean` に `#guard`。
+`Runtime/Command.lean` に構成子（match 非網羅でビルドが落ちて気づく）→ `Runtime/Machine.lean` の `applyCommand` に 1 腕（Port を持たない骨格の形なら apply の腕 — `execute` への 1 行）→ `Runtime/Json.lean` にワイヤ（人が打つ表記が違う値は手書き FromJson + docstring）→
+`Runtime/Reachable.lean` の check 保存に 1 腕（`applyExternal_sound` の腕。`execute_ok_shape` と `check_of_<root>_add` / `_update`）→ `Scenarios.lean` に `#guard`。
+
+### Port を使うコマンド / 内部入力を増やす
+
+Port の語彙 `Application/Port/<Port>/<操作>.lean`（`Request` / `Outcome`）→ UseCase（Port を使う固定形 `validate` / `mkRequest` / `request` / `apply` / `execute`。内部入力なら `Observation.lean` + `UseCase.lean`、名義は受けない）→ 障害契約 `@[faultContract]` の def（中断点ごと。観測を引数に取るかで消費位置）→
+`Runtime/Environment.lean` の `Interaction` に Port 操作ごとの構成子 → `Runtime/Command.lean`（利用者の操作）か `Runtime/Observation.lean`（内部入力。`Command.lean` には混ぜない）に構成子 →
+`Runtime/Machine.lean` の `applyCommand` / `applyObservation` に 1 腕（`withFault` の表は `@[faultContract]` の def の部分適用を `FaultSpec.beforeCall` / `afterResponse` で包む → `viaPort` に `request` / 観測の取り出し / `execute`。Port を使わない腕は `direct`）→
+`Runtime/Json.lean` に `Request` / `Outcome` の `deriving instance` と `Interaction` の腕（port はディレクトリ名、operation はファイル名の先頭小文字）→ `Runtime/Reachable.lean` の `applyExternal_sound` に腕（成功は `execute_ok_shape`、fault は def の形）→
+`Scenarios.lean` に名前付きの環境（`environmentByName`）と `#guard`（成功の流れと障害契約ごとの消費位置）。Port を使うコマンドは 5 cmd の経路（apply）には通せない — 環境が要るので `external` で打つ。
 
 ### 画面（参照系）を増やす
 

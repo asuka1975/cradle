@@ -14,7 +14,7 @@ applyTo: "lean/**/*.lean"
 - `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase）は Runtime を import しない。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
 - 外部能力の Port（自システムが必要とする能力の要求と観測）は `Application/Port/<Port>/<操作>.lean`（Domain が所有するなら `Domain/Port/`）に固定名 `Request` / `Outcome` と自システムの語彙の純データだけを置く（関数フィールドは持たない。詳細は lean-conventions §4b）。
 - 読み取り側（`QueryService.lean` を持つ UseCase・ReadModel・View）は `Domain.Entity` を import しない（CQRS）。Entity を読める読み側は `Projection.lean` と `RepositoryState.lean` だけ。
-- `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。`Laws/` は保証の転送だけ。
+- `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。外部能力の環境（Port 操作の script と cursor）も境界の持ち物（`Runtime/Environment.lean`）で、状態には含めない。Port を使う腕は request → script の照合 → execute の固定の配線で、境界が業務の判断を足さない。`Laws/` は保証の転送だけ。
 - モデルは生成器を知らない（`Lean2Kotlin` 等への言及・依存を書かない）。
 
 ## 形
@@ -38,7 +38,7 @@ applyTo: "lean/**/*.lean"
 - 指名するのは契約面（execute / query）越しに観測できるものだけ。validate 面の定理・他の定理の系・証明の分解装置には付けない。
 - 前提は Decidable、量化変数は生成可能な型、関数は computable。
 - Port を使う UseCase は、validate の拒否（観測に依らない）・観測ごとの拒否・成功をそれぞれ定理にする。生成テストは Lean が評価した要求と定理の観測から Port のモックを組み、要求不一致・余分な呼び出し・呼ばれなかった応答をハーネスの失敗にする（業務の拒否とは別）。
-- `@[faultContract]` は中断点ごとに def を置く。Port を使う UseCase では観測を引数に取らない def = 外部を呼ぶ前の中断、取る def = 応答を得た後の中断で、生成テストは Port の消費位置と中断後の状態を検査する（lean-conventions §8）。
+- `@[faultContract]` は中断点ごとに def を置く。Port を使う UseCase では観測を引数に取らない def = 外部を呼ぶ前の中断、取る def = 応答を得た後の中断で、生成テストは Port の消費位置と中断後の状態を検査する（lean-conventions §8）。境界の表（`Runtime/Machine.lean` の `FaultSpec`）はその def の部分適用で、消費位置は構成子（`beforeCall` / `afterResponse`）が写す。
 
 ## 証明とトレーサビリティ
 
@@ -49,7 +49,7 @@ applyTo: "lean/**/*.lean"
 
 ## 境界と golden
 
-- CLI プロトコル（init / step / views / flow / dump、`viewer` / `actor` / `today`）は Cradle 標準（cradle スキルの `references/protocol.md`）。変えない。
+- CLI プロトコルは Cradle 標準（cradle スキルの `references/protocol.md`）。既存の `init / step / views / flow / dump`（`viewer` / `actor` / `today`）の形と意味は変えない。外部能力と内部入力の経路は `cmd: "external"`（version・action・環境）だけで拡張し、`external` を知らない実行器が未知の cmd として拒否できる形を保つ。`Main.lean` は骨格の持ち物で作り込まず、プロジェクトが書くのは `Runtime/` の配線（腕・ワイヤ・環境・シナリオ）だけ。
 - golden は CLI の応答そのもの。手で書かない。モデルを変えたら `cradle golden-check`。
 - 表現・性能に関わる決定（ID の具体表現など）は `documents/infra-design/` の決定（INFRA-D）の裏付けなしに変えない。
 - 層構成・CLI プロトコル・golden の一覧を変えたら `lean/README.md` を同じ変更で直す（`cradle unslop` の stale-path が腐りを拾う）。

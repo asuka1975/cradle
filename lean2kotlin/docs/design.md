@@ -49,7 +49,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 - 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}`、`∀ x ∈ coll, p x` を `{"kind":"all"}`、`(coll.filter p).length ≤ n` を `{"kind":"atMost","max":n}` として型の `constraints`（name / collection / field。all / atMost は述語 `x.field <op> value` の `op`（eq / ne）と `value`（オラクル値と同じ JSON）も）に出す。読める述語の形は lean-conventions §9。読めない形は note。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
 - 単型化: 型引数の解決は lean-conventions §9 の binder 規約（上書きは `binderOverrides`）。定数の適用形 `C a…` を受理し、Id の表現はモデルの具体化を写す（`Runtime/Ids.lean` の `structure NoteId where id : Nat` → `Long`）。
 - 印の TagAttribute は対象自身の `Domain/Annotations.lean` のものを環境から読む。印の型は普通の structure（opaque / axiom はオラクル評価が止まる）。docstring は主体ポートと IdGenerator ポートの KDoc に全文写す。メソッドの KDoc は先頭行。
-- golden: `goldenDir` の `<name>-init.json` / `<name>-flow.json` の 2 本組（CLI の init / dump 応答。init の無い flow は無視して note）。flow の各エントリの `state` / `views` の対を 1 スナップショットにする（`state` の無いエントリは飛ばす）。`*.request.json` は読み飛ばす。用途は §4。
+- golden: `goldenDir` の `<name>-init.json` / `<name>-flow.json` の 2 本組（CLI の init / flow 応答。init の無い flow は無視して note）と脇書き `<name>.request.json`（採取に使ったリクエスト。`init.cmd` が `external` なら外部能力を使う golden — `version` は 1、init 応答は `ok.env`（script と cursor）を、trace の各エントリは `result`（applied / refused / fault）・`env`・`interactions` を運ぶ。`cmd` が `init` の脇書きは従来の形の印で、読んでも何も変えない）。脇書きの `version` は無ければ旧形式（従来の形の golden にだけ黙って許す）、あれば 1 だけを読む（1 でなければ経路に依らず失敗）— 外部能力かの判定は `init.cmd` で決まり、脇書きが無ければ応答の形（init の `ok.env`、trace の `env` / `result`）で見分ける。外部能力の golden は init / flow 応答がトップに `ok` を持たない（`error` / `harnessError`）と失敗。fault のエントリが運ぶ `faultContract`（`<UseCase>.<def>` と `portCalls`）は IR の障害契約と突き合わせ、無い名前・違う `portCalls` は失敗。flow の各エントリの `state` / `views` の対を 1 スナップショットにする（`state` の無いエントリは飛ばし、refused / fault のエントリも読む）。外部能力の golden に版 1 の外部能力の脇書きが無い、は失敗（§6）。用途は §4。
 
 ## 3. 写像
 
@@ -158,6 +158,10 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 
 - 抽出器の診断 `diagnostics.dropped` が 1 件でもある（主対象に触れない契約定理・ケースを演繹できない定理・翻訳できない障害契約・写像できない固定形の署名）。
 - 生成テストが 0 件の契約定理・障害契約（観測モデルや入力語彙のふるまいの定理・参照系の execute 面でない定理など）。
+- 再生できない golden（外部能力の golden に版 1 の外部能力の脇書き `<name>.request.json` が無い）。
+- 脇書きの `version` があって 1 でない（外部能力かに依らない）。
+- 外部能力の golden の init / flow 応答がトップに `ok` を持たない（`error` / `harnessError` — 採り直す）。
+- golden の fault のエントリが指名した障害契約（`faultContract` の `<UseCase>.<def>` と `portCalls`）が IR の障害契約に無い、または `portCalls` が Lean の署名と違う。
 - Port の要求・観測が interface 化された語彙（Entity・ふるまい持ちの VO）を運ぶ（要求はモックが値で比較する）。
 
 生成が失敗する（衝突の手前まで書いた生成物は残り、次の再生成で消える）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。

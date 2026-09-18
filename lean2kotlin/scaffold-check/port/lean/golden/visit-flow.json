@@ -1,0 +1,359 @@
+{
+  "ok": {
+    "env": {
+      "cursor": 1,
+      "script": [
+        {
+          "operation": "findMember",
+          "outcome": {
+            "found": {
+              "member": {
+                "active": true,
+                "name": "受入 太郎"
+              }
+            }
+          },
+          "port": "OrganizationDirectory",
+          "request": {
+            "employee": {
+              "id": 10
+            }
+          }
+        }
+      ]
+    },
+    "trace": [
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "bookVisit": {
+            "host": {
+              "id": 10
+            },
+            "visitor": {
+              "text": "来訪 次郎"
+            }
+          }
+        },
+        "env": {
+          "cursor": 1,
+          "script": [
+            {
+              "operation": "findMember",
+              "outcome": {
+                "found": {
+                  "member": {
+                    "active": true,
+                    "name": "受入 太郎"
+                  }
+                }
+              },
+              "port": "OrganizationDirectory",
+              "request": {
+                "employee": {
+                  "id": 10
+                }
+              }
+            }
+          ]
+        },
+        "interactions": [
+          {
+            "operation": "findMember",
+            "outcome": {
+              "found": {
+                "member": {
+                  "active": true,
+                  "name": "受入 太郎"
+                }
+              }
+            },
+            "port": "OrganizationDirectory",
+            "request": {
+              "employee": {
+                "id": 10
+              }
+            }
+          }
+        ],
+        "result": "applied",
+        "state": {
+          "attemptIds": {
+            "next": 0
+          },
+          "attempts": [],
+          "visitIds": {
+            "next": 2
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "expected",
+              "visitor": {
+                "text": "来訪 次郎"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "expected",
+              "visitor": "来訪 次郎"
+            }
+          ]
+        }
+      },
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "bookVisit": {
+            "host": {
+              "id": 10
+            },
+            "visitor": {
+              "text": ""
+            }
+          }
+        },
+        "domainError": "emptyVisitor",
+        "env": {
+          "cursor": 1,
+          "script": [
+            {
+              "operation": "findMember",
+              "outcome": {
+                "found": {
+                  "member": {
+                    "active": true,
+                    "name": "受入 太郎"
+                  }
+                }
+              },
+              "port": "OrganizationDirectory",
+              "request": {
+                "employee": {
+                  "id": 10
+                }
+              }
+            }
+          ]
+        },
+        "interactions": [],
+        "result": "refused",
+        "state": {
+          "attemptIds": {
+            "next": 0
+          },
+          "attempts": [],
+          "visitIds": {
+            "next": 2
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "expected",
+              "visitor": {
+                "text": "来訪 次郎"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "expected",
+              "visitor": "来訪 次郎"
+            }
+          ]
+        }
+      },
+      {
+        "actor": {
+          "user": {
+            "id": 1
+          }
+        },
+        "command": {
+          "leave": {
+            "visit": {
+              "id": 1
+            }
+          }
+        },
+        "env": {
+          "cursor": 1,
+          "script": [
+            {
+              "operation": "findMember",
+              "outcome": {
+                "found": {
+                  "member": {
+                    "active": true,
+                    "name": "受入 太郎"
+                  }
+                }
+              },
+              "port": "OrganizationDirectory",
+              "request": {
+                "employee": {
+                  "id": 10
+                }
+              }
+            }
+          ]
+        },
+        "interactions": [],
+        "result": "applied",
+        "state": {
+          "attemptIds": {
+            "next": 0
+          },
+          "attempts": [],
+          "visitIds": {
+            "next": 2
+          },
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 花子"
+              }
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "left",
+              "visitor": {
+                "text": "来訪 次郎"
+              }
+            }
+          ]
+        },
+        "views": {
+          "payments": [],
+          "visits": [
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 0
+              },
+              "phase": "left",
+              "visitor": "来訪 花子"
+            },
+            {
+              "host": {
+                "id": 10
+              },
+              "hostName": "受入 太郎",
+              "id": {
+                "id": 1
+              },
+              "phase": "left",
+              "visitor": "来訪 次郎"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

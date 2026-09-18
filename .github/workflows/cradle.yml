@@ -41,13 +41,20 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - uses: actions/cache@v5
         with:
-          path: lean2kotlin/lean/.lake
-          key: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/**/*.lean', 'lean2kotlin/lean/**/*.lean') }}
+          path: |
+            lean2kotlin/lean/.lake
+            lean2kotlin/scaffold-check/port/lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/**/*.lean', 'lean2kotlin/lean/**/*.lean', 'lean2kotlin/scaffold-check/port/lean/**/*.lean') }}
           restore-keys: lake-${{ runner.os }}-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain') }}-
       - name: scaffold check
         run: cd lean2kotlin/scaffold-check && ./gradlew --no-daemon test :port:adapterContractTest
       - name: lean-check on the port fixture
         run: cd lean2kotlin/scaffold-check/port && node "$GITHUB_WORKSPACE/.apm/skills/cradle/scripts/lean-check.mjs"
+      # port の CLI（lobby）と外部能力の golden の再生 — cmd external の回帰
+      - name: golden-check on the port fixture
+        run: |
+          cd lean2kotlin/scaffold-check/port/lean && lake build lobby
+          cd .. && node "$GITHUB_WORKSPACE/.apm/skills/cradle/scripts/golden-check.mjs" --build never
       - name: generated is committed
         run: test -z "$(git status --porcelain -- lean2kotlin/scaffold-check/src/generated lean2kotlin/scaffold-check/port/src/generated)" || { git status --porcelain -- lean2kotlin/scaffold-check/src/generated lean2kotlin/scaffold-check/port/src/generated; exit 1; }
 

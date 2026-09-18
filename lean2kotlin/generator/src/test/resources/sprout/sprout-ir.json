@@ -30,7 +30,9 @@
       {"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
        "name": "before"}],
      "name": "validate",
-     "doc": "始まる前の拒否: 宛先が無い / 書いた本人でない / もう閉じている。成功なら作用対象を返す。 "}]},
+     "doc": "始まる前の拒否: 宛先が無い / 書いた本人でない / もう閉じている。成功なら作用対象を返す。 "}],
+   "kind": "command",
+   "input": "Sprout.Application.CloseNoteUseCase.Command"},
   {"name": "NotesUseCase",
    "module": "NotesUseCase",
    "methods":
@@ -62,7 +64,8 @@
        {"name": "Sprout.Application.NotesUseCase.ReadModel", "k": "ref"},
        "name": "rm"}],
      "name": "execute",
-     "doc": ""}]},
+     "doc": ""}],
+   "kind": "query"},
   {"name": "PostNoteUseCase",
    "module": "PostNoteUseCase",
    "methods":
@@ -94,7 +97,9 @@
       {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
        "name": "before"}],
      "name": "execute",
-     "doc": "execute は validate を呼ぶ定義（入り口の一致は定義の系）。 "}]}],
+     "doc": "execute は validate を呼ぶ定義（入り口の一致は定義の系）。 "}],
+   "kind": "command",
+   "input": "Sprout.Application.PostNoteUseCase.Command"}],
  "types":
  [{"shape":
    {"kind": "structure",

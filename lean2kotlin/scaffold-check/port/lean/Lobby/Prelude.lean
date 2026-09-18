@@ -84,4 +84,24 @@ theorem find?_updateWhere_of_key {α β : Type} [BEq β] (key : α → β) (k : 
       simp only [Bool.not_eq_true] at h
       simp [h, ih]
 
+theorem all_updateWhere {α : Type} (p : α → Bool) (f : α → α) (q : α → Bool) (xs : List α)
+    (hq : xs.all q = true) (hf : ∀ x, q x = true → q (f x) = true) :
+    (updateWhere p f xs).all q = true := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    rw [updateWhere_cons, List.all_cons]
+    rw [List.all_cons, Bool.and_eq_true] at hq
+    refine Bool.and_eq_true _ _ |>.mpr ⟨?_, ih hq.2⟩
+    by_cases h : p x
+    · simpa [h] using hf x hq.1
+    · simpa [h] using hq.1
+
+/-- 成功した写像の分解（境界のルーティングから UseCase の結果を取り出す）。 -/
+theorem except_map_eq_ok {ε α β : Type} {f : α → β} {x : Except ε α} {y : β}
+    (h : x.map f = .ok y) : ∃ a, x = .ok a ∧ y = f a := by
+  cases x with
+  | error e => simp [Except.map] at h
+  | ok a => exact ⟨a, rfl, by simpa [Except.map] using h.symm⟩
+
 end Lobby.Prelude

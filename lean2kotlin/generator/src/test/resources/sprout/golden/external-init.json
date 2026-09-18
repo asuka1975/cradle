@@ -1,0 +1,53 @@
+{
+  "ok": {
+    "env": {
+      "cursor": 0,
+      "script": []
+    },
+    "state": {
+      "noteIds": {
+        "next": 2
+      },
+      "notes": [
+        {
+          "author": {
+            "id": 1
+          },
+          "closed": false,
+          "id": {
+            "id": 0
+          },
+          "title": {
+            "text": "買い出し"
+          }
+        },
+        {
+          "author": {
+            "id": 2
+          },
+          "closed": true,
+          "id": {
+            "id": 1
+          },
+          "title": {
+            "text": "打合せ"
+          }
+        }
+      ]
+    },
+    "views": {
+      "notes": [
+        {
+          "author": {
+            "id": 1
+          },
+          "closed": false,
+          "id": {
+            "id": 0
+          },
+          "title": "買い出し"
+        }
+      ]
+    }
+  }
+}

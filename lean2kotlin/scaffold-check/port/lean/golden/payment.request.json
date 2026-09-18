@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "init": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "init",
+    "scenario": "basic",
+    "environment": "paymentAuthorized"
+  },
+  "flow": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "flow",
+    "scenario": "basic",
+    "environment": "paymentAuthorized",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "inputs": [
+      {
+        "command": {
+          "startPayment": {
+            "visit": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "confirmPayment": {
+            "attempt": {
+              "id": 0
+            },
+            "result": "authorized"
+          }
+        }
+      },
+      {
+        "observation": {
+          "confirmPayment": {
+            "attempt": {
+              "id": 0
+            },
+            "result": "declined"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -77,4 +77,10 @@ def execute (o : Observation PaymentAttemptId) (before : State PaymentAttemptId 
     execute o before = .ok (act o before a) := by
   simp [execute, validate, h, hp, hs, Except.map]
 
+/-- 成功したら、その結果は act の形（境界の可到達性が使う）。 -/
+theorem execute_ok_shape (o : Observation PaymentAttemptId) (before after : State PaymentAttemptId VisitId)
+    (h : execute o before = .ok after) : ∃ a, after = act o before a := by
+  obtain ⟨a, _, ha⟩ := Lobby.Prelude.except_map_eq_ok h
+  exact ⟨a, ha⟩
+
 end Lobby.Application.ConfirmPaymentUseCase

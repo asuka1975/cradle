@@ -92,4 +92,21 @@ instance : ToJson Observation where
 instance : FromJson Observation where
   fromJson? _ := .error "unknown observation (expected one of: none)"
 
+/-! ### 環境のワイヤ形式: `{"script": [{"port","operation","request","outcome"}…], "cursor": n}`（Port が無い間、やり取りは無い） -/
+
+instance : ToJson Interaction where
+  toJson i := nomatch i
+
+instance : FromJson Interaction where
+  fromJson? _ := .error "unknown interaction (this model has no ports)"
+
+instance : ToJson Environment where
+  toJson e := Json.mkObj [("script", toJson e.script), ("cursor", toJson e.cursor)]
+
+instance : FromJson Environment where
+  fromJson? j := do
+    let script ← (j.getObjVal? "script") >>= fromJson? (α := List Interaction)
+    let cursor ← (j.getObjVal? "cursor") >>= fromJson? (α := Nat)
+    pure ⟨script, cursor⟩
+
 end Sprout.Runtime

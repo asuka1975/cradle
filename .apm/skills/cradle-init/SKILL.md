@@ -17,7 +17,7 @@ node <skills>/cradle-init/scripts/init.mjs --project <Root> [--domain "<一言>"
 `lean/`（動く最小ドメイン「メモ」付き。`lake build` → CLI → モックアップ → golden がその場で通る）。既存ファイルは据え置く。
 ターゲット別の設定例は置き場があるものだけ: Claude Code の許可リストの例（`settings.local.json.example`。`.claude/` に置く）、`.codex/config.toml`（AGENTS.md の上限を上げる）。
 `--backend com.example.notes` を付けると `backend/ktlint-rules/`（設計上の作法を検査する独自ルール 8 本）・`.editorconfig`・`gradle.properties` も敷く（backend フェーズの入口で）。
-`--only <prefix> --force` は、そのパスで始まる骨格由来のファイルだけを敷き直す（例: Cradle を更新したあと `--only lean/mockup/server.mjs --force`。作り込んだ `index.html` は上書きしない。まだ汎用のままなら `--only lean/mockup --force` で UI ごと）。
+`--only <prefix> --force` は、そのパスで始まる骨格由来のファイルだけを敷き直す（例: Cradle を更新したあと `--only lean/Main.lean --force` と `--only lean/mockup/server.mjs --force`。`Main.lean` と `server.mjs` は骨格の持ち物で作り込まない。作り込んだ `index.html` は上書きしない。まだ汎用のままなら `--only lean/mockup --force` で UI ごと。`lean/<Root>/Runtime/` はプロジェクトの持ち物なので敷き直さず、新しいファイルだけ `--only` で足す — 順序は docs の導入手順）。
 
 ## 敷いたあと
 
@@ -29,5 +29,5 @@ node <skills>/cradle-init/scripts/init.mjs --project <Root> [--domain "<一言>"
 ## Lean の骨格に含まれるもの
 
 `Prelude`・`Domain/{Annotations,ValueObject,Error,Entity/Note}`・`Application/{ActorContext,RepositoryState,ReadModel,View,Projection,UseCase/{PostNote,CloseNote,Notes}}`・
-`Runtime/{Ids,Command,Machine,Reachable,Views,Json,Scenarios}`・`Laws/Properties`・`Main.lean`（Cradle 標準プロトコル）・`mockup/`。
+`Runtime/{Ids,Command,Observation,Environment,Machine,Reachable,Views,Json,Scenarios}`・`Laws/Properties`・`Main.lean`（Cradle 標準プロトコル。5 cmd と `external`）・`mockup/`。
 どのファイルもそのまま規約の実例で、`references/lean-conventions.md`（lean-domain-model スキル）が指す。

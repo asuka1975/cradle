@@ -15,7 +15,9 @@
 //   annot     : @[aggregateRoot] は Domain/Entity/ だけ、@[repositoryState] の型名は *RepositoryState / *IdGeneratorState
 //   json      : Domain / Application で ToJson / FromJson を deriving しない（境界の関心）
 //   wiring    : Runtime/Command.lean の構成子が Json.lean（ワイヤ）と Machine.lean（applyCommand の腕）の両方に現れる。
-//               Runtime/Observation.lean（内部入力の合併型）も同じで、腕は applyObservation。Observation 形の UseCase があるのに無ければ error
+//               Runtime/Observation.lean（内部入力の合併型）も同じで、腕は applyObservation。Observation 形の UseCase があるのに無ければ error。
+//               Runtime/Environment.lean を持つなら、Port の操作ごとに "<Port>" と "<操作>"（小文字始まり）の文字列（環境のワイヤ形式）も Json.lean に要る。
+//               外部能力の配線は揃って要る: Port の置き場があるのに Runtime/Environment.lean が無い、Environment.lean と Main.lean の cmd external が片方だけ、は error
 //   usecase   : Application/UseCase/<X>/ は Command+UseCase（更新系）・Observation+UseCase（内部入力）・ReadModel+QueryService+UseCase（参照系）の
 //               どれか 1 つで、validate / execute / query の固定名を持つ（Port を使う更新系・内部入力は request を持ち、mkRequest / apply も固定名）。
 //               内部入力の UseCase は名義（ActorContext）を受けない
@@ -26,7 +28,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { readdirSync, statSync } from "node:fs";
-import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfig();
@@ -131,11 +133,30 @@ for (const f of files) {
     // 利用者の操作の合併型に内部入力を混ぜない（通知・契機は Runtime/Observation.lean）
     for (const m of stripComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
   }
-  if (existsSync(obsFile)) wire(obsFile, "Observation", "applyObservation");
+  if (existsSync(obsFile)) {
+    wire(obsFile, "Observation", "applyObservation");
+    for (const m of stripComments(readFileSync(obsFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bCommand\b/gm)) add("wiring", "error", obsFile, 1, `構成子 ${m[1]} が利用者の操作（Command）を運んでいる — 内部入力の合併型に利用者の操作を混ぜない（Runtime/Command.lean に置く）`);
+  }
   // 内部入力の UseCase があるなら Runtime/Observation.lean が要る（Runtime の境界を持つプロジェクトだけ）
   const ucDir = join(modelDir, "Application", "UseCase");
   const hasObservationUseCase = existsSync(ucDir) && readdirSync(ucDir).some(n => existsSync(join(ucDir, n, "Observation.lean")));
   if (hasObservationUseCase && existsSync(cmdFile) && !existsSync(obsFile)) add("wiring", "error", obsFile, 1, "Observation 形の UseCase があるのに Runtime/Observation.lean（内部入力の合併型。Command とは混ぜない）が無い");
+  // 外部能力の配線は揃って要る — Port の置き場があるなら環境（Runtime/Environment.lean）、環境があるなら CLI（Main.lean）の cmd external、その逆も
+  const envFile = join(modelDir, "Runtime", "Environment.lean");
+  const hasEnv = existsSync(envFile);
+  if (!hasEnv && ["Application", "Domain"].some(l => existsSync(join(modelDir, l, "Port")))) add("wiring", "error", envFile, 1, "Port の置き場（Application/Port か Domain/Port）があるのに Runtime/Environment.lean（外部能力の script と cursor）が無い");
+  if (existsSync(mainFile)) {
+    const mainExternal = stripComments(readFileSync(mainFile, "utf8")).includes('"external"');
+    if (hasEnv && !mainExternal) add("wiring", "error", mainFile, 1, "Runtime/Environment.lean があるのに Main.lean が cmd external を受けない — 移行が半分（骨格の Main.lean で敷き直す。cradle doctor が差を出す）");
+    if (!hasEnv && mainExternal) add("wiring", "error", envFile, 1, "Main.lean が cmd external を受けるのに Runtime/Environment.lean が無い — 移行が半分");
+  }
+  // 環境のワイヤ形式（{"port","operation",…}）: 外部能力の往復を運ぶプロジェクトでは、Port の操作ごとに両方の文字列が Json.lean に要る
+  if (hasEnv) {
+    for (const p of ports(cfg)) for (const o of p.operations) {
+      const missing = [`"${p.name}"`, `"${o.method}"`].filter(lit => !jsonText.includes(lit));
+      if (missing.length) add("wiring", "error", jsonFile, 1, `Port の往復 ${p.name}.${o.method} のワイヤ形式（${missing.join(" と ")}）が Json.lean に無い`);
+    }
+  }
 }
 
 // usecase: ディレクトリの形と固定名
