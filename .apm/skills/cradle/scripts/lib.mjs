@@ -312,15 +312,107 @@ export function tableRows(text) {
   return out;
 }
 
-/** golden の流れ: `<golden>/<name>-flow.json` の trace を手の列 { command, actor, payload, outcome } に写す。
-    outcome は applied（通った）/ refused（domainError）/ protocol-error。payload は command の中身（無いコマンドでは undefined）。 */
+/** 外部能力の Port: `Application/Port/<Port>/<操作>.lean`（Domain/Port も同じ）の置き場から。操作名（method）は生成器と同じ小文字始まりで、
+    CLI の応答（env の script・interactions）の operation もこの名前。 */
+export function ports(cfg) {
+  const out = [];
+  for (const layer of ["Application", "Domain"]) {
+    const portDir = join(cfg.lean.modelDir, layer, "Port");
+    if (!existsSync(portDir)) continue;
+    for (const name of readdirSync(portDir).sort()) {
+      const d = join(portDir, name);
+      if (!statSync(d).isDirectory()) continue;
+      const operations = readdirSync(d).filter(f => f.endsWith(".lean")).sort().map(f => {
+        const op = f.replace(/\.lean$/, "");
+        const module = `${cfg.lean.root}.${layer}.Port.${name}.${op}`;
+        return { name: op, method: op[0].toLowerCase() + op.slice(1), module, request: `${module}.Request`, outcome: `${module}.Outcome` };
+      });
+      out.push({ name, layer: layer.toLowerCase(), module: `${cfg.lean.root}.${layer}.Port.${name}`, operations });
+    }
+  }
+  return out;
+}
+
+/** 外部能力の往復 (port, operation) が Port の一覧（ports の結果）にあるか。 */
+export function hasPortOperation(portList, port, operation) {
+  return portList.some(p => p.name === port && p.operations.some(o => o.method === operation));
+}
+
+/** sidecar の版。モックアップはこの版で書き、golden-check はこの版だけを読む。 */
+export const SIDECAR_VERSION = 1;
+
+/** golden の再生リクエスト（sidecar）: `<golden>/<name>.request.json` = {"version":1,"init":{…},"flow":{…}}。無ければ null。
+    version の無い旧形式は旧経路（cmd init / flow）の golden にだけ許す（黙って受ける）— 外部能力の経路（cmd external）のリクエストを持つなら壊れている。
+    version があって 1 でなければ経路に依らず読めない。読めなければ投げる（無いのと壊れているのは別の事故）。 */
+export function readSidecar(goldenDir, name) {
+  const file = join(goldenDir, `${name}.request.json`);
+  if (!existsSync(file)) return null;
+  let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new Error(`${name}.request.json を読めません: ${e.message}`); }
+  if (!j || typeof j !== "object" || Array.isArray(j)) throw new Error(`${name}.request.json が {"version":1,"init":…,"flow":…} の形ではない`);
+  const versioned = Object.hasOwn(j, "version");
+  if (versioned && j.version !== SIDECAR_VERSION) throw new Error(`${name}.request.json の version ${JSON.stringify(j.version)} は読めない（読める版: ${SIDECAR_VERSION}）— モックアップで採り直す`);
+  const sidecar = { version: versioned ? j.version : null, init: j.init ?? null, flow: j.flow ?? null };
+  if (!versioned && sidecarIsExternal(sidecar)) throw new Error(`${name}.request.json が version 無しで外部能力の経路（cmd external）のリクエストを持つ（読める形は {"version":${SIDECAR_VERSION},…}）— モックアップで採り直す`);
+  return sidecar;
+}
+
+const sidecarIsExternal = (sidecar) => (sidecar.init ?? sidecar.flow)?.cmd === "external";
+
+/** 外部能力の経路（cmd external）で採った golden か。sidecar があればその init（無ければ flow）の cmd で決まる（version は見ない）。
+    sidecar が無ければ応答の形で見分ける — init の応答に env があるか、flow の trace の要素に env か result があるか（旧経路の応答にはどれも無い）。 */
+export function isExternalGolden(goldenDir, name) {
+  const sidecar = readSidecar(goldenDir, name);
+  if (sidecar) return sidecarIsExternal(sidecar);
+  const initFile = join(goldenDir, `${name}-init.json`);
+  if (existsSync(initFile) && readJson(initFile)?.ok?.env !== undefined) return true;
+  const flowFile = join(goldenDir, `${name}-flow.json`);
+  return existsSync(flowFile) && (readJson(flowFile)?.ok?.trace ?? []).some(t => t && (t.env !== undefined || t.result !== undefined));
+}
+
+/** golden の環境: { name, script }。name は sidecar の環境名（script を直に渡した golden や sidecar 無しでは null）、
+    script は応答の env のもの（init の応答、無ければ flow の応答の env）— E2E の駆動側が stopAt の golden で「期待したのに呼ばれなかった」尾を知るのに要る。
+    どちらの応答にも env が無ければ（旧経路）null。 */
+export function goldenEnvironment(goldenDir, name, sidecar) {
+  const envOf = (file) => existsSync(file) ? readJson(file)?.ok?.env : undefined;
+  const env = envOf(join(goldenDir, `${name}-init.json`)) ?? envOf(join(goldenDir, `${name}-flow.json`));
+  if (!env || typeof env !== "object") return null;
+  const named = [sidecar?.init?.environment, sidecar?.flow?.environment].find(n => typeof n === "string") ?? null;
+  return { name: named, script: env.script };
+}
+
+/** trace の要素（か入力）に写された入力: 利用者の操作（kind command）か内部入力（kind observation）。name は構成子名、payload はその中身。 */
+export function traceInputOf(t) {
+  const kind = t?.observation !== undefined && t?.command === undefined ? "observation" : "command";
+  const input = t?.[kind];
+  const name = input === undefined ? undefined : commandNameOf(input);
+  return { kind, name, payload: input && typeof input === "object" ? input[name] : undefined };
+}
+
+/** golden の流れ: `<golden>/<name>-flow.json` の trace を手の列に写す。
+    手は { kind: command | observation, command か observation（構成子名）, actor（observation では null）, payload, outcome, fault? }。
+    outcome は外部能力の経路の応答なら要素の result（applied / refused / fault）、旧経路なら outcomeOf の判定（applied / refused / protocol-error）。
+    fault は入力が指名した障害契約の名前（trace の写し。結果が fault なら faultContract に止まった契約と portCalls が別に載る）。
+    流れは external（外部能力の経路で採ったか）と environment（goldenEnvironment の { name, script }。旧経路では null）を持つ。 */
 export function goldenFlows(cfg) {
   const dir = join(cfg.root, cfg.lean.golden);
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => f.endsWith("-flow.json")).sort().map(f => {
+    const id = f.replace(/-flow\.json$/, "");
     const trace = JSON.parse(readFileSync(join(dir, f), "utf8")).ok?.trace ?? [];
-    return { id: f.replace(/-flow\.json$/, ""), steps: trace.map(t => { const command = commandNameOf(t.command); return { command, actor: t.actor ?? null, payload: t.command?.[command], outcome: outcomeOf(t) }; }) };
+    // 壊れた sidecar は golden-check が報告する。ここでは流れ自体は数え、sidecar の情報だけ無いものとして扱う
+    let sidecar = null, external = false;
+    try { sidecar = readSidecar(dir, id); external = isExternalGolden(dir, id); } catch {}
+    return { id, external, environment: goldenEnvironment(dir, id, sidecar), steps: trace.map((t, i) => goldenStep(t, sidecar?.flow?.inputs?.[i])) };
   });
+}
+
+function goldenStep(t, input) {
+  const { kind, name, payload } = traceInputOf(t);
+  const step = { kind, [kind]: name, actor: kind === "command" ? t.actor ?? null : null, payload, outcome: typeof t.result === "string" ? t.result : outcomeOf(t) };
+  // step の応答は入力の写しを持たないので、trace に無ければ sidecar の入力から
+  const fault = typeof t.fault === "string" ? t.fault : typeof input?.fault === "string" ? input.fault : undefined;
+  if (fault !== undefined) step.fault = fault;
+  return step;
 }
 
 export function commandNameOf(command) {
@@ -334,7 +426,8 @@ export function outcomeOf(traceEntry) {
 }
 
 /** 台本の置き場（ファイルかディレクトリ）から台本を読む。形は from-golden.json と同じ `steps`（`{ flows: [{ id?, steps }] }` か `{ id?, steps }` 1 本）。
-    手の列の要素は command（構成子名）・actor・outcome と、書いてあれば payload。形の合わないファイルは台本ではないので数えない。 */
+    手の列の要素は kind（省略時 command）と outcome、command なら command（構成子名）・actor、observation なら observation（構成子名。当事者は無い）、
+    書いてあれば payload。形の合わないファイルは台本ではないので数えない。 */
 export function scenarioScripts(cfg, place) {
   const root = resolve(cfg.root, place);
   if (!existsSync(root)) return [];
@@ -344,21 +437,33 @@ export function scenarioScripts(cfg, place) {
     let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }
     const flows = Array.isArray(j?.flows) ? j.flows : [j];
     for (const fl of flows) {
-      if (!Array.isArray(fl?.steps) || !fl.steps.every(s => s && typeof s.command === "string" && typeof s.outcome === "string")) continue;
-      out.push({ id: fl.id ?? null, file: rel(cfg.root, file), steps: fl.steps.map(s => ({ command: s.command, actor: s.actor ?? null, outcome: s.outcome, ...(s.payload !== undefined ? { payload: s.payload } : {}) })) });
+      if (!Array.isArray(fl?.steps) || !fl.steps.every(scriptStepOk)) continue;
+      out.push({ id: fl.id ?? null, file: rel(cfg.root, file), steps: fl.steps.map(scriptStep) });
     }
   }
   return out;
 }
 
-/** golden の流れが台本に対応しているか: 手の列（command・actor・outcome）が同じ順で台本にあれば対応。
-    台本の手に payload が書いてあれば golden の command の中身とも一致を要る（無ければ手の列だけで合う）。
+const scriptKindOf = (s) => s.kind ?? "command";
+function scriptStepOk(s) {
+  if (!s || typeof s !== "object" || typeof s.outcome !== "string") return false;
+  const kind = scriptKindOf(s);
+  return kind === "command" ? typeof s.command === "string" : kind === "observation" && typeof s.observation === "string";
+}
+function scriptStep(s) {
+  const kind = scriptKindOf(s);
+  return { kind, [kind]: s[kind], actor: kind === "command" ? s.actor ?? null : null, outcome: s.outcome, ...(s.payload !== undefined ? { payload: s.payload } : {}) };
+}
+
+/** golden の流れが台本に対応しているか: 手の列（kind と構成子名・command なら actor・outcome）が同じ順で台本にあれば対応。
+    台本の手に payload が書いてあれば golden の入力の中身とも一致を要る（無ければ手の列だけで合う）。
     台本 1 本が対応する流れは 1 本 — 手の列が同じ流れが複数あっても、台本の本数を超えては数えない。 */
 export function e2eCoverage(cfg, place = cfg.e2e.scenarios) {
   const golden = goldenFlows(cfg);
   const scripts = scenarioScripts(cfg, place);
   const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
-  const stepMatches = (g, s) => g.command === s.command && g.outcome === s.outcome && same(g.actor, s.actor) && (s.payload === undefined || same(g.payload, s.payload));
+  const stepMatches = (g, s) => g.kind === s.kind && g[g.kind] === s[s.kind] && g.outcome === s.outcome
+    && (g.kind !== "command" || same(g.actor, s.actor)) && (s.payload === undefined || same(g.payload, s.payload));
   const matches = (flow, script) => flow.steps.length === script.steps.length && flow.steps.every((g, i) => stepMatches(g, script.steps[i]));
   const specificity = (script) => script.steps.filter(s => s.payload !== undefined).length;
   const free = new Set(scripts);

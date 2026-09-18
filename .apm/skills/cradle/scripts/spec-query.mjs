@@ -2,18 +2,28 @@
 // spec-query — Lean 実行可能仕様への決定論的な問い合わせ。
 // 仕様に関する問いは推測で答えず、この道具で Lean を動かした結果を引用する。
 //
-//   spec-query meta                               シナリオ・コマンド・内部入力（観測）・Port・失敗語彙・画面の口を JSON で
-//   spec-query scenarios | commands | errors | outlets（画面の口） | schemas（コマンドごとの入力の形）
+//   spec-query meta                               シナリオ・環境・コマンド・内部入力（観測）・Port・失敗語彙・画面の口・external の版を JSON で
+//   spec-query scenarios | environments           出発点（scenarioByName の腕）と名前付きの環境（environmentByName の腕）を、名前の配列で
+//   spec-query commands | errors | outlets（画面の口） | schemas（コマンドごとの入力の形）
 //   spec-query print <Name>...                    `lake env lean` の #print（型・構成子・フィールド）
 //   spec-query init  --scenario S [--viewer J] [--actor J] [--today D]
 //   spec-query run   --scenario S --commands J|@file [--actor J] [--viewer J] [--today D] [--full]
 //   spec-query step  --state @file --command J --actor J [--viewer J] [--today D]
 //   spec-query views --state @file --viewer J [--today D]
+//     init / run / step / views は旧経路（cmd init / flow / step / views）のまま。環境を持たないので、Port を使う手（外部能力の往復が要る手）は
+//     旧経路では通らず、spec-query external で打つ
+//   spec-query external <action> …              外部能力と内部入力を扱う経路（cmd external、version 1）。action ごとの選択肢は実行器の許可欄と同じ:
+//     init        --scenario S [--environment N | --env @file]      環境は名前か script そのもののどちらか一方（両方は不正。どちらも無ければ空の環境）
+//     step        --state @file --env @file --input J|@file        input は {"command":…,"actor":…} か {"observation":…}（障害の指名は "fault"）
+//     views       --state @file
+//     flow | dump --scenario S --inputs J|@file [--environment N | --env @file] [--stop-at n]
+//     共通        [--viewer J] [--actor J] [--today D] [--full]
+//     env は init の応答の env（script と cursor）をそのまま渡す。--full 無しなら手ごとに入力の名前・result・環境の cursor を 1 行で出す
 //   spec-query raw   @request.json | -            プロトコルそのままの素通し
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk } from "./lib.mjs";
+import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk, traceInputOf, ports } from "./lib.mjs";
 import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
@@ -33,6 +43,26 @@ function scenarios() {
     for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
   }
   return [...names];
+}
+
+/** 名前付きの環境（外部能力の script）: Runtime/Scenarios.lean の environmentByName の腕。持たないプロジェクトでは空。 */
+function environments() {
+  const file = join(cfg.lean.modelDir, "Runtime", "Scenarios.lean");
+  if (!existsSync(file)) return [];
+  const m = readFileSync(file, "utf8").match(/def\s+environmentByName[\s\S]*?(?=\n\S|$)/);
+  if (!m) return [];
+  const names = new Set();
+  for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
+  return [...names];
+}
+
+/** 外部能力の経路（cmd external）の版。CLI に views を 1 回流して決める（ファイルの有無では決めない）—
+    旧実行器は未知の cmd として拒否し（null）、新しい実行器は state が無いというプロトコルエラーで応じる（版 1 を持つ）。 */
+const EXTERNAL_VERSION = 1;
+const EXTERNAL_ACTIONS = ["init", "step", "views", "flow", "dump"];
+async function externalProtocol() {
+  const res = await callLean(cfg, { cmd: "external", version: EXTERNAL_VERSION, action: "views" }, { build });
+  return typeof res?.error === "string" && /unknown cmd/.test(res.error) ? null : { version: EXTERNAL_VERSION };
 }
 
 /** #print の出力から構成子名と型を抜く。 */
@@ -56,26 +86,6 @@ function commands() { return once("commands", () => constructorsOf(`${cfg.lean.r
 /** 内部入力（通知・worker からの観測）の合併型。持たないプロジェクトでは空。 */
 function observations() { return once("observations", () => existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }); }
 function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
-
-/** 外部能力の Port: `Application/Port/<Port>/<操作>.lean`（Domain/Port も同じ）の置き場から。操作名は生成器と同じ小文字始まり。 */
-function ports() {
-  const out = [];
-  for (const layer of ["Application", "Domain"]) {
-    const portDir = join(cfg.lean.modelDir, layer, "Port");
-    if (!existsSync(portDir)) continue;
-    for (const name of readdirSync(portDir).sort()) {
-      const d = join(portDir, name);
-      if (!statSync(d).isDirectory()) continue;
-      const operations = readdirSync(d).filter(f => f.endsWith(".lean")).sort().map(f => {
-        const op = f.replace(/\.lean$/, "");
-        const module = `${cfg.lean.root}.${layer}.Port.${name}.${op}`;
-        return { name: op, method: op[0].toLowerCase() + op.slice(1), module, request: `${module}.Request`, outcome: `${module}.Outcome` };
-      });
-      out.push({ name, layer: layer.toLowerCase(), module: `${cfg.lean.root}.${layer}.Port.${name}`, operations });
-    }
-  }
-  return out;
-}
 
 /** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。 */
 function printMany(names) {
@@ -139,9 +149,52 @@ function summarizeTrace(trace) {
   });
 }
 
+/** external の 1 手の要約: 入力の名前（command は当事者も）と result、refused なら domainError、fault なら契約、環境の cursor。 */
+function summarizeExternalResult(t, i) {
+  const { kind, name } = traceInputOf(t);
+  const who = kind === "command" ? ` by ${t.actor ? JSON.stringify(t.actor) : "-"}` : "";
+  const head = `#${i} ${kind === "observation" ? "observation " : ""}${name ?? "?"}${who}${typeof t.fault === "string" ? ` (fault ${t.fault})` : ""}`;
+  const env = t.env ? `  [env cursor ${t.env.cursor}/${(t.env.script ?? []).length}]` : "";
+  if (t.result === "refused") return `${head} → refused: ${JSON.stringify(t.domainError)}${env}`;
+  if (t.result === "fault") return `${head} → fault: ${t.faultContract?.name} (portCalls ${t.faultContract?.portCalls})${env}`;
+  return `${head} → ${t.result ?? "?"}${env}`;
+}
+
+/** external のリクエストを選択肢から組む。環境は名前（--environment）か script そのもの（--env）のどちらか一方。 */
+function externalRequest(action) {
+  const req = { cmd: "external", version: EXTERNAL_VERSION, action, ...commonFields() };
+  const scenario = () => { if (!opts.scenario) fail("--scenario が要ります"); req.scenario = opts.scenario; };
+  const state = () => { req.state = jsonArg(opts.state); if (!req.state) fail("--state @file が要ります"); };
+  const environment = () => {
+    if (opts.environment !== undefined && opts.env !== undefined) fail("--environment（名前）と --env（script そのもの）はどちらか一方");
+    if (opts.environment !== undefined) { if (typeof opts.environment !== "string") fail("--environment には名前が要ります"); req.environment = opts.environment; }
+    if (opts.env !== undefined) req.env = jsonArg(opts.env);
+  };
+  switch (action) {
+    case "init": scenario(); environment(); break;
+    case "views": state(); break;
+    case "step":
+      state(); req.env = jsonArg(opts.env); req.input = jsonArg(opts.input);
+      if (!req.env || !req.input) fail("--env J|@file（init の応答の env）と --input J|@file（{command,actor} か {observation}）が要ります");
+      break;
+    default: {
+      scenario(); req.inputs = jsonArg(opts.inputs);
+      if (!Array.isArray(req.inputs)) fail("--inputs は配列（JSON か @file）");
+      environment();
+      if (opts["stop-at"] !== undefined) {
+        const n = Number(opts["stop-at"]);
+        if (!Number.isInteger(n) || n < 0) fail("--stop-at は 0 以上の整数（流れを止めた時点の cursor）");
+        req.stopAt = n;
+      }
+    }
+  }
+  return req;
+}
+
 try {
   switch (cmd) {
     case "scenarios": printJson(scenarios()); break;
+    case "environments": printJson(environments()); break;
     case "commands": printJson(commands()); break;
     case "errors": printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
@@ -150,9 +203,30 @@ try {
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
       printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
-        scenarios: scenarios(), commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
+        scenarios: scenarios(), environments: environments(), external: await externalProtocol(),
+        commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
-        ports: ports(), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
+        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
+      break;
+    }
+    case "external": {
+      const action = rest[0];
+      if (!EXTERNAL_ACTIONS.includes(action)) fail(`external には ${EXTERNAL_ACTIONS.join(" | ")} のどれかが要ります`);
+      const req = externalRequest(action);
+      const res = await callLean(cfg, req, { build });
+      if (!res.ok) { printJson(res); process.exit(1); }
+      if (opts.full || opts.json || action === "init" || action === "views") { printJson(res); break; }
+      if (action === "step") {
+        // step の応答は入力の写しを持たないので、名前と当事者はリクエスト（入力の actor が無ければ既定の actor）から補う
+        console.log(summarizeExternalResult({ actor: req.actor, ...req.input, ...res.ok }, 1));
+        if (res.ok.views) { console.log("--- views ---"); printJson(res.ok.views); }
+        break;
+      }
+      const trace = res.ok.trace ?? [];
+      trace.forEach((t, i) => console.log(summarizeExternalResult(t, i + 1)));
+      const last = [...trace].reverse().find(t => t.views);
+      if (last) { console.log("--- final views ---"); printJson(last.views); }
+      if (res.ok.env) console.log(`--- env --- cursor ${res.ok.env.cursor}/${(res.ok.env.script ?? []).length}`);
       break;
     }
     case "print": {

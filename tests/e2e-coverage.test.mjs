@@ -127,3 +127,90 @@ test("status は対応が揃えば pnpm test を次の一手にする", (t) => {
   assert.deepEqual(e2e.facts, ["golden の流れ 2 本 / 台本が対応 2 本（e2e/scenarios）", "台本 2 本"]);
   assert.match(e2e.next, /pnpm test/);
 });
+
+// 外部能力の経路（cmd external）で採った golden: trace の要素は result・環境・外部能力の往復を持ち、内部入力（observation）の手に当事者は無い
+const env0 = { cursor: 0, script: [] };
+const external = (input, result, extra = {}) => ({ ...input, result, state: {}, views: { notes: [] }, env: env0, interactions: [], ...extra });
+const authorize = { port: "PaymentGateway", operation: "authorize", request: { attempt: { id: 0 } }, outcome: "authorized" };
+const payTrace = [
+  external({ actor: alice, command: { startPayment: { visit: { id: 0 } } } }, "applied"),
+  external({ observation: { dispatchPayment: { attempt: { id: 0 } } } }, "applied", { interactions: [authorize] }),
+  external({ actor: bob, command: { startPayment: { visit: { id: 0 } } } }, "refused", { domainError: "alreadyPaying" }),
+  // 障害で止まった手: 指名した名前の写し（fault）と、止まった契約（faultContract）
+  external({ observation: { confirmPayment: { attempt: { id: 0 } } }, fault: "sentNoAnswer" }, "fault", { faultContract: { name: "ConfirmPaymentUseCase.sentNoAnswer", portCalls: 1 } }),
+];
+const payInputs = [
+  { command: { startPayment: { visit: { id: 0 } } } },
+  { observation: { dispatchPayment: { attempt: { id: 0 } } } },
+  { command: { startPayment: { visit: { id: 0 } } }, actor: bob },
+  { observation: { confirmPayment: { attempt: { id: 0 } } }, fault: "sentNoAnswer" },
+];
+function putExternalGolden(put) {
+  put("lean/golden/pay-flow.json", { ok: { trace: payTrace, env: env0 } });
+  put("lean/golden/pay-init.json", { ok: { state: {}, views: { notes: [] }, env: env0 } });
+  put("lean/golden/pay.request.json", { version: 1,
+    init: { cmd: "external", version: 1, action: "init", scenario: "basic", environment: "paymentAuthorized", viewer: { id: 1 } },
+    flow: { cmd: "external", version: 1, action: "flow", scenario: "basic", environment: "paymentAuthorized", viewer: { id: 1 }, actor: alice, inputs: payInputs } });
+}
+const observation = (n, name, outcome) => ({ n, kind: "observation", observation: name, outcome });
+const payCommands = [step(1, alice, "startPayment", "applied"), step(3, bob, "startPayment", "refused"), { ...observation(4, "confirmPayment", "fault") }];
+// 途中で止めた流れ（stopAt）: 名前で環境を渡し、-init.json は無く、script の尾（inquire）は呼ばれていない
+const inquire = { port: "PaymentGateway", operation: "inquire", request: { attempt: { id: 0 } }, outcome: "notFound" };
+const stopEnv = { cursor: 1, script: [authorize, inquire] };
+function putStoppedGolden(put) {
+  put("lean/golden/stop-flow.json", { ok: { env: stopEnv, trace: [external({ observation: { dispatchPayment: { attempt: { id: 0 } } } }, "applied", { interactions: [authorize], env: stopEnv })] } });
+  put("lean/golden/stop.request.json", { version: 1,
+    init: { cmd: "external", version: 1, action: "init", scenario: "basic", environment: "paymentAuthorized" },
+    flow: { cmd: "external", version: 1, action: "flow", scenario: "basic", environment: "paymentAuthorized", inputs: [payInputs[1]], stopAt: 1 } });
+}
+
+test("外部能力の流れは内部入力の手も台本に要り、kind: observation の手として同じ順に無ければ対応しない", (t) => {
+  const { run, put } = fixture(t);
+  putExternalGolden(put);
+  // 操作の手だけの台本（内部入力を落としている）
+  put("e2e/scenarios/pay.json", { steps: [payCommands[0], payCommands[1], payCommands[2]] });
+  const r = run(flowsFromGolden, "--check");
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /対応する台本が無い: pay（external, environment=paymentAuthorized \(script 0 件\)）/);
+  assert.match(r.stdout, /2\. observation dispatchPayment → applied/);
+  assert.match(r.stdout, /4\. observation confirmPayment → fault/);
+  const j = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual(j.uncovered, ["basic", "other", "pay"]);
+  const pay = j.flows.find(f => f.id === "pay");
+  assert.deepEqual({ external: pay.external, environment: pay.environment }, { external: true, environment: { name: "paymentAuthorized", script: [] } });
+  assert.deepEqual(pay.steps[1], { kind: "observation", observation: "dispatchPayment", actor: null, payload: { attempt: { id: 0 } }, outcome: "applied" });
+  assert.deepEqual(pay.steps[3], { kind: "observation", observation: "confirmPayment", actor: null, payload: { attempt: { id: 0 } }, outcome: "fault", fault: "sentNoAnswer" });
+  const basic = j.flows.find(f => f.id === "basic");
+  assert.deepEqual({ external: basic.external, environment: basic.environment, kind: basic.steps[0].kind }, { external: false, environment: null, kind: "command" });
+  // 内部入力を操作の手（kind command）として書いた台本は対応しない
+  put("e2e/scenarios/pay.json", { steps: [payCommands[0], step(2, null, "dispatchPayment", "applied"), payCommands[1], payCommands[2]] });
+  assert.deepEqual(JSON.parse(run(flowsFromGolden, "--check", "--json").stdout).covered, []);
+  // kind: observation の手を同じ位置に書けば対応する（内部入力に当事者は無い）
+  put("e2e/scenarios/pay.json", { steps: [payCommands[0], observation(2, "dispatchPayment", "applied"), payCommands[1], payCommands[2]] });
+  const ok = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: ok.covered, uncovered: ok.uncovered }, { covered: ["pay"], uncovered: ["basic", "other"] });
+});
+
+test("flows-from-golden は外部能力の流れに external・environment・interactions・fault・contract を付け、人物は操作の当事者だけ。起こした台本は --check に通る", (t) => {
+  const { run, put } = fixture(t);
+  putExternalGolden(put);
+  putStoppedGolden(put);
+  const out = JSON.parse(run(flowsFromGolden, "--json").stdout);
+  const pay = out.flows.find(f => f.id === "pay");
+  assert.deepEqual({ external: pay.external, environment: pay.environment, scenario: pay.scenario, personas: pay.personas }, { external: true, environment: { name: "paymentAuthorized", script: [] }, scenario: "basic", personas: [alice, bob] });
+  // 環境の script は sidecar の名前ではなく CLI の応答（-init.json が無ければ -flow.json の env）から — 呼ばれなかった尾（inquire）が読める
+  const stop = out.flows.find(f => f.id === "stop");
+  assert.deepEqual({ external: stop.external, environment: stop.environment, personas: stop.personas }, { external: true, environment: { name: "paymentAuthorized", script: [authorize, inquire] }, personas: [] });
+  assert.deepEqual(stop.steps, [{ n: 1, kind: "observation", observation: "dispatchPayment", payload: { attempt: { id: 0 } }, outcome: "applied", interactions: [authorize], observe: { notes: "0 rows" } }]);
+  assert.match(run(flowsFromGolden).stdout, /# stop {2}scenario=basic viewer=null today=null external environment=paymentAuthorized \(script 2 件\)/);
+  assert.deepEqual(pay.steps[1], { n: 2, kind: "observation", observation: "dispatchPayment", payload: { attempt: { id: 0 } }, outcome: "applied", interactions: [authorize], observe: { notes: "0 rows" } });
+  assert.deepEqual(pay.steps[2], { n: 3, kind: "command", command: "startPayment", actor: bob, payload: { visit: { id: 0 } }, outcome: "refused", interactions: [], refusal: "alreadyPaying" });
+  assert.deepEqual(pay.steps[3], { n: 4, kind: "observation", observation: "confirmPayment", payload: { attempt: { id: 0 } }, outcome: "fault", interactions: [], fault: "sentNoAnswer", contract: "ConfirmPaymentUseCase.sentNoAnswer", observe: { notes: "0 rows" } });
+  const basic = out.flows.find(f => f.id === "basic");
+  assert.deepEqual({ external: basic.external, environment: basic.environment, keys: Object.keys(basic.steps[0]) }, { external: false, environment: null, keys: ["n", "kind", "command", "actor", "payload", "outcome", "observe"] });
+  const wrote = run(flowsFromGolden, "--out", "e2e/scenarios/from-golden.json");
+  assert.equal(wrote.status, 0, wrote.stdout + wrote.stderr);
+  const c = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: c.covered, uncovered: c.uncovered, scripts: c.scripts }, { covered: ["basic", "other", "pay", "stop"], uncovered: [], scripts: 4 });
+  assert.deepEqual(c.flows.find(f => f.id === "stop").environment, { name: "paymentAuthorized", script: [authorize, inquire] });
+});

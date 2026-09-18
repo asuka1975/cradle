@@ -78,14 +78,16 @@ if (cmd === "doctor") {
     console.log(`${trusted ? "ok     " : "STALE  "} hooks-trust codex: ${trusted}/${expected} 件を信頼済み${trusted ? "" : "（Codex の起動時レビューで信頼するまで hook は動かない。codex exec なら --dangerously-bypass-hook-trust）"}`);
   }
   {
-    // モックアップのサーバーは骨格の持ち物。Cradle を更新したら --only lean/mockup/server.mjs --force で敷き直す（index.html は作り込みの正本なので触らない）
+    // モックアップのサーバーと CLI（Main.lean）は骨格の持ち物。Cradle を更新したら --only <path> --force で敷き直す（index.html は作り込みの正本なので触らない）
     const { loadConfig: lc } = await import("./lib.mjs");
     let cfg = null; try { cfg = lc(root); } catch {}
-    const cur = cfg && join(root, cfg.lean.mockup, "server.mjs");
-    const shipped = join(import.meta.dirname, "..", "..", "cradle-init", "assets", "lean", "mockup", "server.mjs");
-    if (cur && existsSync(cur) && existsSync(shipped)) {
+    const assets = join(import.meta.dirname, "..", "..", "cradle-init", "assets", "lean");
+    const owned = cfg ? [["mockup", `${cfg.lean.mockup}/server.mjs`, join(assets, "mockup", "server.mjs")], ["lean-main", `${cfg.lean.dir}/Main.lean`, join(assets, "Main.lean")]] : [];
+    for (const [label, relPath, shipped] of owned) {
+      const cur = join(root, relPath);
+      if (!existsSync(cur) || !existsSync(shipped)) continue;
       const same = readFileSync(cur, "utf8") === readFileSync(shipped, "utf8").replace(/Sprout/g, cfg.project).replace(/sprout/g, cfg.project.toLowerCase());
-      console.log(`${same ? "ok     " : "STALE  "} mockup     ${cfg.lean.mockup}/server.mjs${same ? "" : ` が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project ${cfg.project} --only ${cfg.lean.mockup}/server.mjs --force）`}`);
+      console.log(`${same ? "ok     " : "STALE  "} ${label.padEnd(10)} ${relPath}${same ? "" : ` が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project ${cfg.project} --only ${relPath} --force）`}`);
     }
   }
   if (existsSync(join(root, "AGENTS.md"))) {
