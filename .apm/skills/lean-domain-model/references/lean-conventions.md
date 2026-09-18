@@ -125,6 +125,34 @@ def execute (actor) (fountain) (outcome) (c) (before) (hfresh) := (validate acto
 - 契約定理: validate の拒否ごと・観測ごとの拒否・成功（`execute_ok`）。`request_ok`（validate が通れば要求がある）は置くが指名しない。`execute_ok_shape` は「成功なら結果は apply の形」。
 - Port 名は `Repository` で終えない（Repository は自システムの集約の取得・保存）。外部の Aggregate を写した Repository を作らない。
 
+## 4c. 内部入力（`Application/UseCase/<X>UseCase/Observation.lean` + `UseCase.lean`）
+
+提供元からの通知（決済の確定など）や worker / timer からの契機は利用者の操作ではない。第 3 の固定形として `Observation.lean`（入力語彙 `Observation`。名義は入れない）+ `UseCase.lean` に書く。`Command.lean` は持たない（同居は `lean-check` と抽出が止める）。名義（`ActorContext`）は受けない — 通知に利用者はいない。受信の認証・署名検証は境界（Adapter）の責務で、型だけで検証済みとみなさない。固定名は更新系と同じ（Port を使わない適用形は `validate` / `act` / `execute`、Port を使う配送形は `validate` / `mkRequest` / `request` / `apply` / `execute`）。validate は相関する処理の存在と現在状態を確かめる。例は回帰素材の決済（来訪の精算）。
+
+```lean
+-- Application/UseCase/ConfirmPaymentUseCase/Observation.lean（提供元の確定の通知。相関は冪等キー）
+structure Observation (PaymentAttemptId : Type) where attempt : PaymentAttemptId; result : PaymentResult
+-- UseCase.lean（適用形）
+def validate (o) (before) : Except DomainError (PaymentAttempt …) :=
+  match before.attempts.find? o.attempt with
+  | none   => .error .unknownAttempt                                                                 -- 無関係な通知
+  | some a => if a.isSettled && !a.settledAs o.result then .error .contradictingResult else .ok a   -- 矛盾は上書きしない
+def act (o) (before) (_a) : State … := ⟨before.attempts.update o.attempt (fun a => a.settle o.result) (fun _ => rfl)⟩   -- 同じ結果の重複は変化なし
+def execute (o) (before) := (validate o before).map (act o before)
+
+-- Application/UseCase/DispatchPaymentUseCase/UseCase.lean（配送形。契機は「この試みを送れ」— 送れるのは pending だけ）
+def validate (o) (before) : Except DomainError (PaymentAttempt …) := …   -- 結果不明・確定済みからは送り直さない（.attemptNotDispatchable）
+def mkRequest (_o) (_before) (a) : Authorize.Request PaymentAttemptId := ⟨a.id, a.amount, a.tries + 1⟩   -- 冪等キー = id、試行番号 = tries
+def request (o) (before) := (validate o before).map (mkRequest o before)
+def apply (outcome) (o) (before) (_a) : Except DomainError (State …) := .ok ⟨before.attempts.update o.attempt (reflect outcome) (reflect_id outcome)⟩
+def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o before
+```
+
+- 副作用の要求（金額・冪等キー）は業務の処理状態（集約）に保存してから送る。保存しただけでは成立にしない。送る印（試行番号）は外部を呼ぶ前に保存する — 中断しても印が残り、同じ冪等キーで再開できる。
+- 冪等キー（同じ試みは同じ鍵）と試行番号（送るたびに進む）を分ける。結果不明（送ったが答えが無い）からは新しい決済を作らず、照会（別の Port 操作を使う別の UseCase）で解く。
+- 通知の分類: 重複（同じ結果をもう一度）は適用済みとして通す（状態不変）、無関係（宛先が無い）と矛盾（確定した結果と違う）は拒否、遅延・順序逆転（送れる状態や結果不明のまま届く）はその通知で確定する。どれも 1 分岐 1 定理。
+- Runtime: 合併型 `Runtime/Observation.lean`（`Runtime/Command.lean` には混ぜない — 利用者の操作ではない）と `Machine.applyObservation`（名義が無いので `opened` は通さない）。ワイヤ形式は Command と同じ `{"<構成子名>": <ペイロード>}` を `Json.lean` に。`lean-check` の wiring 規則が構成子ごとに検査する。
+
 ## 5. 参照系 UseCase（CQRS）
 
 `ReadModel.lean`（観測の Set: この画面が読む Row の複合）+ `QueryService.lean`（Query 型 + 判断 + 固定名 `query : Query → ReadModel → List View` + 判断の保証）+ `UseCase.lean`（validate / execute + 入り口の保証）。

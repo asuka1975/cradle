@@ -14,4 +14,10 @@ enum class DomainError {
 	LobbyOccupied,
 	UnknownVisit,
 	AlreadyLeft,
+	NotYetLeft,
+	PaymentInProgress,
+	UnknownAttempt,
+	AttemptNotDispatchable,
+	ContradictingResult,
+	AttemptNotInquirable,
 }

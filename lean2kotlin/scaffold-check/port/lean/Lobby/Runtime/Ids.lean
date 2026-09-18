@@ -24,4 +24,12 @@ deriving Repr, DecidableEq, Inhabited
 def visitFountain : Application.Fountain Application.VisitIdGeneratorState VisitId :=
   { step := fun s => (⟨s.next⟩, ⟨s.next + 1⟩) }
 
+/-- 決済の試みの同一性（= 決済ゲートウェイへの冪等キー）。 -/
+structure PaymentAttemptId where id : Nat
+deriving Repr, DecidableEq, Inhabited
+
+/-- 決済の試みの泉の具体化（連番）。 -/
+def paymentAttemptFountain : Application.Fountain Application.PaymentAttemptIdGeneratorState PaymentAttemptId :=
+  { step := fun s => (⟨s.next⟩, ⟨s.next + 1⟩) }
+
 end Lobby.Runtime

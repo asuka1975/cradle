@@ -6,9 +6,17 @@ package dev.cradle.lobby
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberMember
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberOutcome
 import dev.cradle.lobby.application.port.organizationdirectory.OrganizationDirectoryFindMemberRequest
+import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeOutcome
+import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeRequest
+import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayInquireOutcome
+import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayInquireRequest
 import dev.cradle.lobby.application.usecase.bookvisitusecase.BookVisitVacant
 import dev.cradle.lobby.domain.DomainError
+import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.entity.Visit
+import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
+import dev.cradle.lobby.domain.valueobject.PaymentPhase
+import dev.cradle.lobby.domain.valueobject.PaymentResult
 import dev.cradle.lobby.domain.valueobject.VisitId
 import dev.cradle.lobby.domain.valueobject.VisitPhase
 import dev.cradle.lobby.domain.valueobject.VisitorName
@@ -38,13 +46,38 @@ internal fun arbOrganizationDirectoryFindMemberOutcome(): Arb<OrganizationDirect
 internal fun arbOrganizationDirectoryFindMemberRequest(): Arb<OrganizationDirectoryFindMemberRequest> =
 	arbEmployeeId().map { p0 -> OrganizationDirectoryFindMemberRequest(employee = p0) }
 
+internal fun arbPaymentGatewayAuthorizeOutcome(): Arb<PaymentGatewayAuthorizeOutcome> = Arb.enum<PaymentGatewayAuthorizeOutcome>()
+
+internal fun arbPaymentGatewayAuthorizeRequest(): Arb<PaymentGatewayAuthorizeRequest> =
+	Arb.bind(arbPaymentAttemptId(), Arb.long(0L..4096L), Arb.long(0L..4096L)) { p0, p1, p2 -> PaymentGatewayAuthorizeRequest(attempt = p0, amount = p1, attemptNo = p2) }
+
+internal fun arbPaymentGatewayInquireOutcome(): Arb<PaymentGatewayInquireOutcome> {
+	val c0: Arb<PaymentGatewayInquireOutcome> = arbPaymentResult().map { p0 -> PaymentGatewayInquireOutcome.Settled(result = p0) }
+	val c1: Arb<PaymentGatewayInquireOutcome> = Arb.constant(PaymentGatewayInquireOutcome.NotFound)
+	val c2: Arb<PaymentGatewayInquireOutcome> = Arb.constant(PaymentGatewayInquireOutcome.Unavailable)
+	return Arb.choice(c0, c1, c2)
+}
+
+internal fun arbPaymentGatewayInquireRequest(): Arb<PaymentGatewayInquireRequest> =
+	arbPaymentAttemptId().map { p0 -> PaymentGatewayInquireRequest(attempt = p0) }
+
+internal fun arbPaymentAttempt(): Arb<PaymentAttemptFixture> =
+	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.long(0L..4096L), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentAttemptFixture(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
+
 internal fun arbVisit(): Arb<VisitFixture> =
 	Arb.bind(arbVisitId(), arbEmployeeId(), Arb.string(0..8, Codepoint.alphanumeric()), arbVisitorName(), arbVisitPhase()) { p0, p1, p2, p3, p4 -> VisitFixture(id = p0, host = p1, hostName = p2, visitor = p3, phase = p4) }
 
 internal fun arbDomainError(): Arb<DomainError> = Arb.enum<DomainError>()
 
+internal fun arbPaymentPhase(): Arb<PaymentPhase> = Arb.enum<PaymentPhase>()
+
+internal fun arbPaymentResult(): Arb<PaymentResult> = Arb.enum<PaymentResult>()
+
 internal fun arbEmployeeId(): Arb<EmployeeId> =
 	Arb.long(0L..4096L).map { p0 -> EmployeeId(id = p0) }
+
+internal fun arbPaymentAttemptId(): Arb<PaymentAttemptId> =
+	Arb.long(0L..4096L).map { p0 -> PaymentAttemptId(id = p0) }
 
 internal fun arbUserId(): Arb<UserId> =
 	Arb.long(0L..4096L).map { p0 -> UserId(id = p0) }
@@ -56,6 +89,10 @@ internal fun arbVisitPhase(): Arb<VisitPhase> = Arb.enum<VisitPhase>()
 
 internal fun arbVisitorName(): Arb<VisitorNameFixture> =
 	Arb.string(0..8, Codepoint.alphanumeric()).map { p0 -> VisitorNameFixture(text = p0) }
+
+/** `Lobby.Application.PaymentAttemptRepositoryState` の制約(uniqueIds: id)と同一性を満たす個体の列。間引きで size を割った列は引き直す。 */
+internal fun arbPaymentAttemptRepository(size: IntRange = 0..5): Arb<List<PaymentAttemptFixture>> =
+	Arb.list(arbPaymentAttempt(), size).map { xs -> xs.distinctBy { x -> x.id } }.filter { it.size in size }
 
 /** `Lobby.Application.VisitRepositoryState` の制約(uniqueIds: id・atMostOneExpected: phase ≠ "left" は高々 1 件)と同一性を満たす個体の列。間引きで size を割った列は引き直す。 */
 internal fun arbVisitRepository(size: IntRange = 0..5): Arb<List<VisitFixture>> =

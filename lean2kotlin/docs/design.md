@@ -34,6 +34,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `Application/RepositoryState` の structure | repositoryState | 写さない。Repository / IdGenerator の導出元。Prop フィールドは `constraints`（§4 の Arb） |
 | `Application/ReadModel` の structure | readModelRow | テスト側の data class（Row） |
 | `UseCase/<X>/Command` | command | data class |
+| `UseCase/<X>/Observation`（内部入力: 通知・worker からの契機。時計ポートの判定より先に決まる） | observation | data class（相関 Id だけを運んでも本番署名に残る。ふるまい・Arb は出さない） |
 | `UseCase/<X>/ReadModel` の structure | readModel | テスト側の data class（Retrieve テストの契約面） |
 | `UseCase/<X>/QueryService` の structure | viewDto | data class（Query） |
 | `UseCase/<X>/UseCase` の structure | `State` → repositoryState / `Result` → 写像外 / 他 → viewDto（validate の成果物である証拠 = Prop フィールドだけの structure は data object） | |
@@ -41,10 +42,10 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `Application/Port/<Port>/<操作>`（`Domain/Port` も同じ）の固定名 `Request` / `Outcome` | portRequest / portOutcome | data class / sealed / enum（Kotlin 名は `<Port><操作>Request` / `<Port><操作>Outcome`。`Outcome` は `execute` の観測引数として本番署名から落ちる） |
 | 同じ操作モジュールのそれ以外の純データ | portDto | data class / sealed / enum（`<Port><操作><名前>`） |
 
-- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。
+- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。`useCases[]` は入力の種別 `kind`（`command` = 利用者の操作 / `observation` = 内部入力 / `query` = 参照系）と入力型 `input` を持つ。Command と Observation の同居、Observation 形の `execute` が名義（`@[actorContext]`）を受ける形は抽出の失敗。
 - Port: IR の `ports`（Port ごとに操作と要求・観測の型）。UseCase の `request`（戻りは `Except E Request`）と `execute` の観測引数（`Outcome`）の組で Port・操作を決め、`useCases[].ports` に置く（対応が無い・片方だけ・複数・別の操作・参照系での使用は失敗。型名の末尾で推測しない）。契約ケース（transition）と障害契約のケースには `ports`（Lean が同じ引数で評価した `request` の値と、定理の観測）を焼き込む。validate の拒否では要求は無い（= 呼ばれない）。
 - 診断: `diagnostics.dropped` に、IR に入らなかった契約定理・障害契約（主対象に触れない・ケースを演繹できない・翻訳できない）と写像できない固定形の署名を理由つきで残す。生成器はこれを失敗にする（§6）。
-- ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState のふるまいは写さない）。
+- ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command / Observation の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState と入力語彙のふるまいは写さない）。
 - 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}`、`∀ x ∈ coll, p x` を `{"kind":"all"}`、`(coll.filter p).length ≤ n` を `{"kind":"atMost","max":n}` として型の `constraints`（name / collection / field。all / atMost は述語 `x.field <op> value` の `op`（eq / ne）と `value`（オラクル値と同じ JSON）も）に出す。読める述語の形は lean-conventions §9。読めない形は note。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
 - 単型化: 型引数の解決は lean-conventions §9 の binder 規約（上書きは `binderOverrides`）。定数の適用形 `C a…` を受理し、Id の表現はモデルの具体化を写す（`Runtime/Ids.lean` の `structure NoteId where id : Nat` → `Long`）。
 - 印の TagAttribute は対象自身の `Domain/Annotations.lean` のものを環境から読む。印の型は普通の structure（opaque / axiom はオラクル評価が止まる）。docstring は主体ポートと IdGenerator ポートの KDoc に全文写す。メソッドの KDoc は先頭行。
@@ -69,7 +70,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 - Entity と fixture: 本番 interface `Note` と平行に、テスト側へ観測レコード `NoteFixture`（data class）と `Note.toFixture()` を出す。interface 化された語彙へ到達する sealed / structure にも平行 fixture が付く（fixture・Row は本番 interface を運ばない）。テストは実体化フック `note(fixture: NoteFixture): Note` で実装の値を作り、比較は `toFixture()` で行う — 実装の表現は自由。
   ふるまいの無い VO を interface にしないのは、実装内部の等値比較が同一性比較に化け、値の構築が fixture 語彙に化けて本番語彙に埋め込めないため。
 - Factory: 自分自身を取らず自分自身を返す def（`Note.post`）は、それを指名する契約定理があるときだけ `<X>Factory` interface（テスト側。採番は呼び出し側の関心）。使い手のない interface は出さない。
-- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` / 単体で直接運ぶ形は生成が理由付きで止まる（§6）。
+- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command か Observation が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` / 単体で直接運ぶ形は生成が理由付きで止まる（§6）。
 - 泉: `<X>IdGeneratorState` ↔ `<X>IdGenerator { nextId(): <X>Id }`（`application`）。供給値の型は泉の値型の写し。
 - UseCase: `validate` / `execute` の署名の写し。State・泉・時計・主体は署名から落ち、効果は Repository 経由で観測する。validate は本番では execute の内部第一段、公開メンバとしてはテストシーム。QueryService は `query` だけ（Row を運ぶメソッドは本番に写さない）。
 - 写さないもの: 観測モデル（RepositoryState）、State のふるまい、契約指名のない静的語彙、入力語彙のふるまい。

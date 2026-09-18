@@ -11,7 +11,7 @@ applyTo: "lean/**/*.lean"
 ## 層と壁
 
 - `Domain/`（ValueObject / Error / Entity / DomainService）は Application も Runtime も import しない。
-- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase）は Runtime を import しない。
+- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase）は Runtime を import しない。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
 - 外部能力の Port（自システムが必要とする能力の要求と観測）は `Application/Port/<Port>/<操作>.lean`（Domain が所有するなら `Domain/Port/`）に固定名 `Request` / `Outcome` と自システムの語彙の純データだけを置く（関数フィールドは持たない。詳細は lean-conventions §4b）。
 - 読み取り側（`QueryService.lean` を持つ UseCase・ReadModel・View）は `Domain.Entity` を import しない（CQRS）。Entity を読める読み側は `Projection.lean` と `RepositoryState.lean` だけ。
 - `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。`Laws/` は保証の転送だけ。
@@ -25,6 +25,7 @@ applyTo: "lean/**/*.lean"
   validate に置けるのは「業務が始まる前の拒否」だけ。既存集約を変える UseCase の validate は解決の成果物（集約ルート）を返す。
 - Port を使う更新系 UseCase = `Command.lean` + `UseCase.lean`（`validate` / `mkRequest` / `request` / `apply` / `execute` 固定名。`request = (validate …).map (mkRequest …)`、`execute = (validate …) >>= apply outcome …`）。
   観測（`Outcome`）は名義・時計と同格の調達の引数種で、`execute` がポート位置で受け、本番署名からは落ちる（観測の回数・拒否の区別・`request_ok` の扱いは lean-conventions §4b）。
+- 内部入力（提供元の通知・worker / timer の契機）= `Observation.lean` + `UseCase.lean`（第 3 の固定形。固定名は更新系と同じで、名義は受けない）。合併型は `Runtime/Observation.lean` で `Machine.applyObservation` に配線し、利用者の `Runtime/Command.lean` には混ぜない（詳細は lean-conventions §4c）。
 - 参照系 UseCase = `ReadModel.lean`（観測の Set）+ `QueryService.lean`（Query 型 + 判断 + 固定名 `query : Query → ReadModel → List View`）+ `UseCase.lean`（validate / execute）。
 - 名義（`ActorContext`）と時計（`today`）は状態でも入力でもない引数種で、UseCase はポート位置（先頭）で受け取る。コマンドに名義を混ぜない。
 - 集約ルートが大域的に満たす制約（同一性・題の一意性）は `<Root>RepositoryState` の Prop フィールドに書き、`add` / `update` はその保存に要る証明（新鮮な同一性・変えない射影）を引数に取る。泉の新鮮性は UseCase が Prop 引数で受け、入力に依る証拠は validate が解決の成果物として返す（形と生成器の読み方は lean-conventions §4 / §9）。大域遷移は書かず、境界の検査（泉の境界）は `Snapshot.check` と `Reachable.check` が運ぶ。

@@ -21,6 +21,18 @@ inductive DomainError where
   | unknownVisit
   /-- もう退出している。 -/
   | alreadyLeft
+  /-- まだ退出していない（精算は退出の後）。 -/
+  | notYetLeft
+  /-- その来訪には未確定の決済の試みがある。 -/
+  | paymentInProgress
+  /-- 宛先の決済の試みが無い（無関係な通知・契機）。 -/
+  | unknownAttempt
+  /-- 送れる状態ではない（受付済み・確定済み・結果不明からは送り直さない）。 -/
+  | attemptNotDispatchable
+  /-- 確定した結果と矛盾する通知（上書きしない）。 -/
+  | contradictingResult
+  /-- 結果不明ではないので照会しない。 -/
+  | attemptNotInquirable
 deriving Repr, DecidableEq
 
 end Lobby

@@ -21,4 +21,20 @@ inductive VisitPhase where
   | left
 deriving Repr, DecidableEq
 
+/-- 決済の試みの段階。送れる（pending）・承認（authorized）・送ったが答えが無い（unknown。送り直さず照会する）・
+    拒否（declined）・受け付けられて確定の通知待ち（awaitingConfirmation）。 -/
+inductive PaymentPhase where
+  | pending
+  | authorized
+  | unknown
+  | declined
+  | awaitingConfirmation
+deriving Repr, DecidableEq
+
+/-- 決済の確定結果（提供元の通知と照会が運ぶ）。 -/
+inductive PaymentResult where
+  | authorized
+  | declined
+deriving Repr, DecidableEq
+
 end Lobby

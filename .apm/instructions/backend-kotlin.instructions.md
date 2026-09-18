@@ -21,6 +21,8 @@ applyTo: "backend/**/*.kt,backend/**/*.kts,backend/**/*.sql"
 - 「今日」は `java.time.Clock` を注入して取る。リクエストから受け取らない。「誰として」も受け取らない（名義は認証が決める）。
 - 生成された名義（`ActorContext`）は final な data class なのでクラスプロキシ（CGLIB）を被せられない。リクエストスコープの配線はインタフェースプロキシか明示スコープで行い、受け手も同じスコープにする。
 - モデルの横断不変条件（「二重に〜しない」類）の直列化点を DB に一本化する（一意制約・`FOR UPDATE`・version 列）。アプリ内ロックで代用しない。集約の update は楽観ロックか行ロックを持つ。
+- 内部入力（`Observation`。Lean の第 3 の固定形）の UseCase は名義を受けない。渡すのは検証済みの受信境界（提供元の署名・相関を確かめた Adapter）と内部の worker / timer だけで、利用者の HTTP から直接は呼ばない。
+- 配送（Port を呼ぶ内部入力）は、Lean の `apply` が言う「送る印」（試行番号）を外部を呼ぶ前に commit してから Port を呼び、観測を反映して commit する。印の commit と外部呼び出しを 1 つのトランザクションに包まない（外部の効果は rollback できない）。
 
 ## QueryService
 
