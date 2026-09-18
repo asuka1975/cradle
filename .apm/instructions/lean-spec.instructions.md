@@ -11,7 +11,8 @@ applyTo: "lean/**/*.lean"
 ## 層と壁
 
 - `Domain/`（ValueObject / Error / Entity / DomainService）は Application も Runtime も import しない。
-- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / UseCase）は Runtime を import しない。
+- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase）は Runtime を import しない。
+- 外部能力の Port（自システムが必要とする能力の要求と観測）は `Application/Port/<Port>/<操作>.lean`（Domain が所有するなら `Domain/Port/`）に固定名 `Request` / `Outcome` と自システムの語彙の純データだけを置く（関数フィールドは持たない。詳細は lean-conventions §4b）。
 - 読み取り側（`QueryService.lean` を持つ UseCase・ReadModel・View）は `Domain.Entity` を import しない（CQRS）。Entity を読める読み側は `Projection.lean` と `RepositoryState.lean` だけ。
 - `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。`Laws/` は保証の転送だけ。
 - モデルは生成器を知らない（`Lean2Kotlin` 等への言及・依存を書かない）。
@@ -22,6 +23,8 @@ applyTo: "lean/**/*.lean"
 - 印はアノテーション: `@[aggregateRoot]`（ルートの選択）・`@[valueObject]`（場所ずれの例外）・`@[repositoryState]`・`@[contract]`・`@[actorContext]`・`@[faultContract]`。
 - 更新系 UseCase = `Command.lean`（入力語彙。名義は入れない）+ `UseCase.lean`（`validate` / `act` / `execute` 固定名。`execute = (validate …).map (act …)`）。
   validate に置けるのは「業務が始まる前の拒否」だけ。既存集約を変える UseCase の validate は解決の成果物（集約ルート）を返す。
+- Port を使う更新系 UseCase = `Command.lean` + `UseCase.lean`（`validate` / `mkRequest` / `request` / `apply` / `execute` 固定名。`request = (validate …).map (mkRequest …)`、`execute = (validate …) >>= apply outcome …`）。
+  観測（`Outcome`）は名義・時計と同格の調達の引数種で、`execute` がポート位置で受け、本番署名からは落ちる（観測の回数・拒否の区別・`request_ok` の扱いは lean-conventions §4b）。
 - 参照系 UseCase = `ReadModel.lean`（観測の Set）+ `QueryService.lean`（Query 型 + 判断 + 固定名 `query : Query → ReadModel → List View`）+ `UseCase.lean`（validate / execute）。
 - 名義（`ActorContext`）と時計（`today`）は状態でも入力でもない引数種で、UseCase はポート位置（先頭）で受け取る。コマンドに名義を混ぜない。
 - 集約ルートが大域的に満たす制約（同一性・題の一意性）は `<Root>RepositoryState` の Prop フィールドに書き、`add` / `update` はその保存に要る証明（新鮮な同一性・変えない射影）を引数に取る。泉の新鮮性は UseCase が Prop 引数で受け、入力に依る証拠は validate が解決の成果物として返す（形と生成器の読み方は lean-conventions §4 / §9）。大域遷移は書かず、境界の検査（泉の境界）は `Snapshot.check` と `Reachable.check` が運ぶ。
@@ -30,9 +33,10 @@ applyTo: "lean/**/*.lean"
 
 ## 契約定理
 
-- `@[contract]` = 生成テスト 1 ファミリ。エラー枝 1 本 = 定理 1 本、効果と非効果（フレーム）の両方、冪等性、採番の消費。
+- `@[contract]` = 生成テスト 1 ファミリ。UseCase はエラー枝 1 本 = 定理 1 本と `execute_ok`（作用後の状態全体がオラクル。フレーム・泉の消費・追加 / 更新の等式はその系なので指名しない）。Entity / VO のふるまいは効果・非効果・冪等・同一性を指名する。
 - 指名するのは契約面（execute / query）越しに観測できるものだけ。validate 面の定理・他の定理の系・証明の分解装置には付けない。
 - 前提は Decidable、量化変数は生成可能な型、関数は computable。
+- Port を使う UseCase は、validate の拒否（観測に依らない）・観測ごとの拒否・成功をそれぞれ定理にする。生成テストは Lean が評価した要求と定理の観測から Port のモックを組み、要求不一致・余分な呼び出し・呼ばれなかった応答をハーネスの失敗にする（業務の拒否とは別）。
 
 ## 証明とトレーサビリティ
 

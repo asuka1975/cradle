@@ -9,6 +9,7 @@ import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
+import org.gradle.api.tasks.testing.Test
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.process.ExecOperations
@@ -22,9 +23,12 @@ abstract class Lean2KotlinExtension {
 	abstract val kotlinPackage: Property<String>
 	/** golden ディレクトリ(参照系の golden 回帰と Retrieve テストの源。省略時はその分のケースを生成しない)。 */
 	abstract val goldenDir: DirectoryProperty
-	/** 生成先(既定: src/generated/kotlin-main / kotlin-test)。 */
+	/** 生成先(既定: src/generated/kotlin-main / kotlin-test / kotlin-adapter-test)。 */
 	abstract val mainOut: DirectoryProperty
 	abstract val testOut: DirectoryProperty
+	/** Port の Adapter の適合テストの生成先。source set `adapterTest` とタスク `adapterContractTest` に
+	    配線され、`check` / `build` の門には入らない(Adapter の検査は外部の stub / sandbox 相手 — backend-kotlin 規則)。 */
+	abstract val adapterTestOut: DirectoryProperty
 	/** インデント(既定: タブ)。 */
 	abstract val indent: Property<String>
 	/** 生成ディレクトリを sourceSets に自動配線するか(既定: true)。 */
@@ -153,6 +157,9 @@ abstract class GenerateKotlinFromLeanTask : DefaultTask() {
 	@get:OutputDirectory
 	abstract val testOut: DirectoryProperty
 
+	@get:OutputDirectory
+	abstract val adapterTestOut: DirectoryProperty
+
 	@TaskAction
 	fun run() {
 		Lean2KotlinGeneration.run(
@@ -160,6 +167,7 @@ abstract class GenerateKotlinFromLeanTask : DefaultTask() {
 			kotlinPackage = kotlinPackage.get(),
 			mainOut = mainOut.get().asFile.toPath(),
 			testOut = testOut.get().asFile.toPath(),
+			adapterTestOut = adapterTestOut.get().asFile.toPath(),
 			indent = indent.get(),
 			goldenDir = goldenDir.orNull?.asFile?.toPath(),
 			log = { logger.lifecycle("lean2kotlin: $it") })
@@ -171,6 +179,7 @@ class Lean2KotlinPlugin : Plugin<Project> {
 		val ext = project.extensions.create("lean2kotlin", Lean2KotlinExtension::class.java)
 		ext.mainOut.convention(project.layout.projectDirectory.dir("src/generated/kotlin-main"))
 		ext.testOut.convention(project.layout.projectDirectory.dir("src/generated/kotlin-test"))
+		ext.adapterTestOut.convention(project.layout.projectDirectory.dir("src/generated/kotlin-adapter-test"))
 		ext.indent.convention("\t")
 		ext.wireSourceSets.convention(true)
 		// 抽出を plugin が担う場合、IR は build ディレクトリ管理の中間成果物
@@ -186,6 +195,7 @@ class Lean2KotlinPlugin : Plugin<Project> {
 			t.indent.set(ext.indent)
 			t.mainOut.set(ext.mainOut)
 			t.testOut.set(ext.testOut)
+			t.adapterTestOut.set(ext.adapterTestOut)
 		}
 
 		val extract = project.tasks.register(
@@ -219,7 +229,9 @@ class Lean2KotlinPlugin : Plugin<Project> {
 			}
 		}
 
-		// Kotlin JVM プロジェクトへ自動配線(生成ディレクトリの登録とコンパイル依存)
+		// Kotlin JVM プロジェクトへ自動配線(生成ディレクトリの登録とコンパイル依存)。
+		// Port の Adapter の適合テストは source set adapterTest(生成物 + src/adapterTest/kotlin の手書き配線)と
+		// タスク adapterContractTest に載せ、check / build には繋がない
 		project.plugins.withId("org.jetbrains.kotlin.jvm") {
 			project.afterEvaluate {
 				if (ext.wireSourceSets.get()) {
@@ -229,9 +241,27 @@ class Lean2KotlinPlugin : Plugin<Project> {
 							.getByName("kotlin") as SourceDirectorySet)
 					kotlinSrc("main").srcDir(ext.mainOut)
 					kotlinSrc("test").srcDir(ext.testOut)
+					val main = sourceSets.getByName("main")
+					val test = sourceSets.getByName("test")
+					val adapterTest = sourceSets.create("adapterTest") { ss ->
+						ss.compileClasspath += main.output + test.output
+						ss.runtimeClasspath += main.output + test.output
+					}
+					project.configurations.getByName("adapterTestImplementation")
+						.extendsFrom(project.configurations.getByName("testImplementation"))
+					project.configurations.getByName("adapterTestRuntimeOnly")
+						.extendsFrom(project.configurations.getByName("testRuntimeOnly"))
+					kotlinSrc("adapterTest").srcDir(ext.adapterTestOut)
+					project.tasks.register("adapterContractTest", Test::class.java) { t ->
+						t.group = "verification"
+						t.description = "Port の Adapter の適合テスト(外部の stub / sandbox 相手。build の門には入らない)"
+						t.testClassesDirs = adapterTest.output.classesDirs
+						t.classpath = adapterTest.runtimeClasspath
+						t.useJUnitPlatform()
+					}
 				}
 			}
-			project.tasks.matching { it.name == "compileKotlin" || it.name == "compileTestKotlin" }
+			project.tasks.matching { it.name == "compileKotlin" || it.name == "compileTestKotlin" || it.name == "compileAdapterTestKotlin" }
 				.configureEach { it.dependsOn(gen) }
 		}
 	}

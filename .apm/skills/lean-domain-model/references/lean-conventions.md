@@ -91,9 +91,39 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 ```
 
 - validate の戻り値: 既存集約を変える UseCase = 解決の成果物（集約ルート）、新規追加 = `Unit` か証拠（Prop フィールドだけの structure。`: Type` を明記する）、参照系 = `Unit`。
-- 契約定理: エラー枝 1 本 = 定理 1 本（`execute_<error>`）、成功（`execute_ok`）、追加 / 更新の状態の等式（`act_appends` 等）、泉の消費、フレーム（触らないコレクション）。
+- 契約定理: エラー枝 1 本 = 定理 1 本（`execute_<error>`）と成功（`execute_ok`）。作用後の状態全体がオラクルになるので、追加 / 更新の等式（`act_appends` 等）・泉の消費・フレームは置いてもその系として指名しない。
   境界の可到達性が使う `execute_ok_shape`（成功なら結果は act の形）も置く。
 - 名義（`ActorContext`）・時計・泉はポート位置（先頭）。ペイロードに混ぜない。証明の引数はポートと入力の後、validate の成果物の前（execute では末尾）。
+
+## 4b. 外部能力の Port（`Application/Port/<Port>/<操作>.lean`）
+
+外部能力（社員ディレクトリ・決済・通知など、自システムの外にある能力）は Port として書く。Lean に書くのは要求（`Request`）・観測（`Outcome`）・自システムの語彙の純データと、要求を決める def・観測を受けて確定する def だけ。外部の呼び方（HTTP・SDK・認証・再試行）は書かない — Adapter（実装）の持ち物。Port を関数フィールドの structure にして UseCase に渡す形は取らない（外部の応答は実行ごとに違ってよく、Lean は観測を量化する）。Domain が所有する能力は `Domain/Port/` に置く。例は生成器の回帰素材（`lean2kotlin/scaffold-check/port/lean`、来訪受付）の語彙。
+
+```lean
+-- Application/Port/OrganizationDirectory/FindMember.lean（Port 名はディレクトリ、操作名はファイル）
+structure Request (EmployeeId : Type) where employee : EmployeeId
+structure Member where name : String; active : Bool
+inductive Outcome where | found (member : Member) | missing | unavailable   -- 「いない」と「答えない」は別の観測
+```
+
+Port を使う更新系 UseCase の固定形（`Command.lean` + `UseCase.lean`。固定名 `validate` / `mkRequest` / `request` / `apply` / `execute`）:
+
+```lean
+def validate (actor) (c) (before) : Except DomainError (Vacant before) := …                       -- 始まる前の拒否だけ
+def mkRequest (c) (before) (_v : Vacant before) : FindMember.Request EmployeeId := ⟨c.host⟩
+def request (actor) (c) (before) := (validate actor c before).map (mkRequest c before)             -- 要求は validate が通ったときだけ
+def apply (actor) (fountain) (outcome : FindMember.Outcome) (c) (before) (hfresh) (v : Vacant before) : Except DomainError (State …) :=
+  match outcome with
+  | .missing => .error .hostMissing | .unavailable => .error .directoryUnavailable
+  | .found m => if m.active then .ok { … before.visits.add (Visit.book … m.name …) hfresh v.vacant … } else .error .hostInactive
+def execute (actor) (fountain) (outcome) (c) (before) (hfresh) := (validate actor c before) >>= apply actor fountain outcome c before hfresh
+```
+
+- 観測（`Outcome`）は名義・時計・泉と同格の調達の引数種で、execute がポート位置で受ける。本番では実装が Port から調達する（署名から落ちる）。
+- 1 回の execute で観測する外部操作は 1 種 1 回。複数件は `Request` / `Outcome` の `List` に束ね、観測で次の要求が変わるなら遷移を分ける（束ねられない形はモデルの再検討シグナル）。
+- request と execute は同じ validate を通る。request が拒否するなら、どの観測に対しても execute は同じ拒否（validate の拒否の定理は観測を量化する）。外部の情報を読んだ結果の拒否は apply の `Except` で言い、「いない」と「答えない」を同じ拒否に丸めない。
+- 契約定理: validate の拒否ごと・観測ごとの拒否・成功（`execute_ok`）。`request_ok`（validate が通れば要求がある）は置くが指名しない。`execute_ok_shape` は「成功なら結果は apply の形」。
+- Port 名は `Repository` で終えない（Repository は自システムの集約の取得・保存）。外部の Aggregate を写した Repository を作らない。
 
 ## 5. 参照系 UseCase（CQRS）
 
@@ -123,6 +153,7 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 - 指名しない: 内部関数への言及・他の指名定理の系・証明の分解装置。迷った跡は docstring に「@[contract] は付けない — ◯◯の系」。
 - Entity・VO のふるまいの定理群も漏れなく指名（効果・非効果・冪等・同一性）。
 - `@[faultContract]` は def に付ける: 技術的障害で中断されたとき観測されるべき状態の定義（証明対象ではない）。
+- 指名して検査に至らない契約は生成の失敗になる（観測モデルのふるまい・入力語彙のふるまい・`act` の状態の等式・Port の `request` の定理は Kotlin に面が無い — 指名しない）。
 
 ## 9. 生成器との折衝
 
@@ -137,4 +168,6 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 - **生成器が要求する固定名**: 失敗の語彙は `<Root>.DomainError`、観測モデルは `<Root>RepositoryState`（↔ `<Root>Repository`）、泉の状態は `<X>IdGeneratorState`（↔ `<X>IdGenerator`）、Entity の同一性フィールドは `id`。
 - **Kotlin の名前は Lean の名前から機械的に決まる**（宣言名の末尾要素。`UseCase/<X>UseCase/` の型は `<X>` を前置）。衝突・不正な識別子は Lean 側の改名で解く（生成側の上書きに逃げない）。
 - **`<X>UseCase/UseCase.lean` の structure 名は生成区分になる**: `State` = 観測モデル（fixture）、`Result` = 写像対象外、それ以外 = View の DTO。関数フィールドを持つ structure（泉の抽象など）は本番署名から落ちる。
+- **Port の生成区分は置き場と固定名で決まる**: `Application/Port/<Port>/<操作>` の `Request` / `Outcome`、同じモジュールのそれ以外の純データは Port の DTO。Kotlin 名は `<Port><操作>Request` / `<Port><操作>Outcome` / `<Port><操作><名前>`、interface は `<Port>`（`application.port.<port>`。Adapter は手書き）。`execute` の観測引数は本番署名から落ち、契約テストは生成モック（`<Port>Mock`）に Lean が評価した要求と定理の観測を積んで注入する。要求・観測は値で比較できる閉じたデータ型にする（Entity・ふるまい持ちの VO を運ばない）。
+- **宣言したのに検査に至らない契約は生成の失敗**（主対象に触れない定理・ケースを演繹できない定理・生成テストが 0 件の契約・写像できない固定形の署名）。note は生成が続いた情報で、失敗とは別。
 - **同一性のワイヤ**: `Std.Time` の日付は ISO-8601 文字列、ID は数値なら `Long`、canonical UUID 文字列なら value class に写る。表現の決定はインフラ設計（INFRA-D）。

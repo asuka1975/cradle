@@ -8,7 +8,7 @@ applyTo: "backend/**/*.kt,backend/**/*.kts,backend/**/*.sql"
 ## 構成
 
 - `domain/`（生成 interface の実装: entity / valueobject / domainservice）、`application/usecase/<usecase>/`（UseCaseImpl・QueryServiceImpl・画面に閉じた中間型・バイパスの宣言）、
-  `infrastructure/`（Repository 実装・採番・バイパス実装）、`presentation/<feature>/`（Controller・View→Response 変換）、`presentation/common/`（モデルが共有と定めた語彙の変換だけ）、`presentation/error/`、`config/`。
+  `infrastructure/`（Repository 実装・採番・バイパス実装・Port の Adapter は `infrastructure/<port>/`）、`presentation/<feature>/`（Controller・View→Response 変換）、`presentation/common/`（モデルが共有と定めた語彙の変換だけ）、`presentation/error/`、`config/`。
 - 層のパッケージ直下にトップレベル宣言を置かない。1 ファイル 1 型（sealed とその直接のサブタイプは同居可）。
 - 字面では破れる作法は ktlint の独自ルール（`cradle:single-class-per-file` / `java-config-bean` / `jooq-access-site` / `package-root-declaration` / `bypass-site` / `presentation-calls-execute-only` / `no-repository-fake` / `actor-context-site`）が検査する。例外は `@Suppress("ktlint:cradle:<rule>")` に理由コメントを添える。
 
@@ -36,6 +36,7 @@ applyTo: "backend/**/*.kt,backend/**/*.kts,backend/**/*.sql"
 ## テスト
 
 - Repository の InMemory fake を作らない。本番実装を実 DB（test プロファイル）にそのまま配線する。生成された抽象契約テストは全部を具象で繋ぐ（`cradle status` が配線数を出す）。
+- 外部能力の Port には生成モック（`<Port>Mock`。契約テストが要求と観測を積んで渡す）を配線する。fake 禁止は Repository の話で、Port の Adapter を契約テストに繋がない。Adapter の検査（HTTP stub や提供元の sandbox 相手）は独立したタスクにし、`./gradlew build` の門に入れない。
 - 採番の決定的実装（`Sequential*IdGenerator`）の注入は認められたシーム。障害注入も泉の差し替えで行う。
 - 生成 `*Factory` の実装はテスト側に置く。テストは並列化しない（共有 DB + DELETE 隔離）。
 - 具象の契約テストは `<抽象クラス名>Impl`（例: `RaiseHandUseCaseContractTestImpl`）。骨格は `cradle contract-skeleton <生成ファイル>` が吐く。

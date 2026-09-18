@@ -112,7 +112,7 @@ class IrParseTest {
 	}
 
 	@Test
-	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 19 と behaviors 3 を持つ`() {
+	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 17 と behaviors 3 を持つ`() {
 		val ir = sproutIr()
 		assertEquals("Sprout", ir.rootNamespace)
 		assertEquals(17, ir.types.size)
@@ -123,8 +123,11 @@ class IrParseTest {
 			ir.types.groupingBy { it.role }.eachCount())
 		assertEquals(3, ir.useCases.size)
 		assertEquals(1, ir.queryServices.size)
-		assertEquals(19, ir.contracts.size)
+		assertEquals(17, ir.contracts.size)
 		assertEquals(3, ir.behaviors.size)
+		assertTrue(ir.ports.isEmpty())
+		assertTrue(ir.dropped.isEmpty())
+		assertEquals(listOf("projection"), ir.contracts.filter { it.theorem == "noteRows_ids" }.map { it.target })
 		assertTrue(ir.domainServices.isEmpty())
 		assertTrue(ir.faultContracts.isEmpty())
 	}
@@ -135,5 +138,40 @@ class IrParseTest {
 		assertEquals(listOf("DomainService", "PricingService", "TaxService"), ir.domainServices.map { it.name })
 		assertEquals(listOf("DomainService", "Pricing", "Tax"), ir.domainServices.map { it.module })
 		assertEquals(listOf("cheaper", "decidePricing", "tax"), ir.domainServices.flatMap { s -> s.methods.map { it.name } })
+	}
+
+	@Test
+	fun `Lobby の IR は Port と UseCase の対応と契約ケースの要求・観測を持つ`() {
+		val ir = lobbyIr()
+		assertEquals("Lobby", ir.rootNamespace)
+		val port = ir.port("OrganizationDirectory")
+		assertEquals("Lobby.Application.Port.OrganizationDirectory", port.module)
+		assertEquals(listOf("findMember"), port.operations.map { it.method })
+		assertEquals("Lobby.Application.Port.OrganizationDirectory.FindMember.Request", port.operations.single().request)
+		assertEquals(
+			mapOf("portRequest" to 1, "portOutcome" to 1, "portDto" to 1),
+			ir.types.filter { it.role.startsWith("port") }.groupingBy { it.role }.eachCount())
+		assertEquals("OrganizationDirectoryFindMemberRequest", ir.typeDef(port.operations.single().request).kotlin)
+		val book = ir.useCases.single { it.name == "BookVisitUseCase" }
+		assertEquals(listOf(IrUseCasePort("OrganizationDirectory", "findMember")), book.ports)
+		assertTrue(ir.useCases.single { it.name == "LeaveUseCase" }.ports.isEmpty())
+		val rejected = ir.contracts.single { it.theorem == "execute_empty_visitor" }.cases.first().ports.single()
+		assertEquals(null, rejected.request)
+		val missing = ir.contracts.single { it.theorem == "execute_host_missing" }.cases.first().ports.single()
+		assertEquals(json("""{"employee":{"id":4}}"""), missing.request)
+		assertEquals(JsonPrimitive("missing"), missing.outcome)
+		assertEquals(listOf("DomainService", "PricingService", "TaxService"), ir.domainServices.map { it.name })
+		val fault = ir.faultContracts.single()
+		assertEquals("BookVisitUseCase" to "savingFailed", fault.useCase to fault.def)
+		assertTrue(fault.cases.all { c -> c.ports.single().request != null && c.before == c.after }, fault.cases.toString())
+		assertEquals("atMost", ir.typeDef("Lobby.Application.VisitRepositoryState").constraints.single { it.name == "atMostOneExpected" }.kind)
+		assertTrue(ir.dropped.isEmpty())
+	}
+
+	@Test
+	fun `diagnostics の dropped と ports は無ければ空`() {
+		val ir = Ir.parse("""{"version":1,"rootNamespace":"T","types":[],"diagnostics":{"dropped":[{"kind":"contract","name":"T.x","reason":"r"}]}}""")
+		assertEquals(listOf(IrDropped("contract", "T.x", "r")), ir.dropped)
+		assertTrue(ir.ports.isEmpty())
 	}
 }

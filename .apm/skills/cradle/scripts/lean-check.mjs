@@ -16,6 +16,8 @@
 //   json      : Domain / Application で ToJson / FromJson を deriving しない（境界の関心）
 //   wiring    : Runtime/Command.lean の構成子が Json.lean（ワイヤ）と Machine.lean（apply の腕）の両方に現れる
 //   usecase   : Application/UseCase/<X>/ は Command+UseCase（更新系）か ReadModel+QueryService+UseCase（参照系）で、validate / execute / query の固定名を持つ
+//               （Port を使う更新系は request を持ち、mkRequest / apply も固定名）
+//   port      : Application/Port/<Port>/<操作>.lean（Domain/Port も同じ）は固定名 Request / Outcome を持ち、関数フィールドを持たない。Port 名は Repository で終えない
 //   --smoke   : CLI に init を流して ok が返ることを確かめる
 //   orphan    : <Root>.lean から import で辿れないモジュール（lake build が検査しないファイル）
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
@@ -137,7 +139,31 @@ for (const f of files) {
       const uc = read("UseCase.lean");
       if (!/\bdef\s+validate\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 validate が無い");
       if (!/\bdef\s+execute\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 execute が無い");
+      if (/\bdef\s+request\b/.test(uc)) {
+        for (const n of ["mkRequest", "apply"]) if (!new RegExp(`\\bdef\\s+${n}\\b`).test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, `Port を使う UseCase（request がある）なのに固定名 ${n} が無い`);
+      }
       if (readSide && !/\bdef\s+query\b/.test(read("QueryService.lean"))) add("usecase", "error", join(d, "QueryService.lean"), 1, "固定名 query が無い");
+    }
+  }
+}
+
+// port: 外部能力の Port は要求と観測の純データだけ（関数フィールドは持たない）。Repository は自システムの集約の取得・保存なので、Port 名にしない
+{
+  for (const layer of ["Application", "Domain"]) {
+    const portDir = join(modelDir, layer, "Port");
+    if (!existsSync(portDir)) continue;
+    for (const name of readdirSync(portDir)) {
+      const d = join(portDir, name);
+      if (!statSync(d).isDirectory()) { add("port", "error", d, 1, `${layer}/Port/ の直下は Port 名のディレクトリだけ（${name} は <Port>/<操作>.lean の形にする）`); continue; }
+      if (/Repository$/.test(name)) add("port", "error", d, 1, `Port 名 ${name} は Repository で終えない（Repository は自システムの集約の取得・保存）`);
+      for (const f of readdirSync(d).filter(f => f.endsWith(".lean"))) {
+        const file = join(d, f);
+        const code = stripComments(readFileSync(file, "utf8"));
+        if (!/\b(structure|inductive)\s+Request\b/.test(code)) add("port", "error", file, 1, "固定名 Request（要求）が無い");
+        if (!/\b(structure|inductive)\s+Outcome\b/.test(code)) add("port", "error", file, 1, "固定名 Outcome（観測）が無い");
+        for (const m of code.matchAll(/^\s+\w+\s*:\s*[^\n]*→[^\n]*$/gm)) add("port", "error", file, 1, `関数フィールドを持つ（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
+        for (const m of code.matchAll(/^\s*\|\s*\w+\b[^\n]*?\(\s*\w+\s*:[^)\n]*→[^)\n]*\)/gm)) add("port", "error", file, 1, `関数を引数に取る構成子がある（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
+      }
     }
   }
 }

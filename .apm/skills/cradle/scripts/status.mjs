@@ -99,13 +99,29 @@ else {
 if (!existsSync(R(cfg.backend.dir))) phase("バックエンド", "未着手", [], "モデルの画面確認が済んでから着手（順序）");
 else {
   const gen = cfg.backend.generated.map(g => R(g)).filter(existsSync);
-  const genTests = gen.flatMap(g => walk(g, { ext: [".kt"] })).filter(f => /ContractTest\.kt$/.test(f));
-  const abstractNames = genTests.map(f => f.replace(/.*\//, "").replace(/\.kt$/, ""));
-  const handTests = walk(R(`${cfg.backend.dir}/src/test`), { ext: [".kt"] }).map(f => readFileSync(f, "utf8")).join("\n");
-  const wired = abstractNames.filter(n => new RegExp(`:\\s*${n}\\s*\\(`).test(handTests)).length;
-  const impls = walk(R(`${cfg.backend.dir}/src/main`), { ext: [".kt"] }).length;
-  phase("バックエンド", gen.length ? "着手済" : "生成前", [`生成物 ${gen.length ? "あり" : "なし"}`, `契約テスト 配線 ${wired}/${abstractNames.length}`, `手書き ${impls} ファイル`],
-    !gen.length ? `${cfg.backend.regenerate} で生成` : wired < abstractNames.length ? `未配線の契約テスト ${abstractNames.length - wired} 件を具象クラスで繋ぐ` : "cradle regen-impact で追随漏れを確かめる");
+  const genKt = gen.flatMap(g => walk(g, { ext: [".kt"] }));
+  const nameOf = (f) => f.replace(/.*\//, "").replace(/\.kt$/, "");
+  // Adapter の適合テスト（<Port>AdapterContractTest）は build の門の外で、配線の置き場も src/adapterTest — 契約テストとは別に数える
+  const abstractNames = genKt.filter(f => /ContractTest\.kt$/.test(f) && !/AdapterContractTest\.kt$/.test(f)).map(nameOf);
+  const adapterTestNames = genKt.filter(f => /AdapterContractTest\.kt$/.test(f)).map(nameOf);
+  const wiredIn = (dir, names) => { const text = walk(R(`${cfg.backend.dir}/src/${dir}`), { ext: [".kt"] }).map(f => readFileSync(f, "utf8")).join("\n"); return names.filter(n => new RegExp(`:\\s*${n}\\s*\\(`).test(text)).length; };
+  const wired = wiredIn("test", abstractNames);
+  const adapterTestsWired = wiredIn("adapterTest", adapterTestNames);
+  const handMain = walk(R(`${cfg.backend.dir}/src/main`), { ext: [".kt"] });
+  const impls = handMain.length;
+  // 外部能力の Port: 生成 interface（KDoc の「Lean: Port」）と、それを実装する手書きの Adapter。
+  // Adapter は infrastructure/ 配下で Port を supertype に持つ型だけ（Port をコンストラクタで受ける UseCase 実装は数えない）
+  const ports = genKt.flatMap(f => { const m = readFileSync(f, "utf8").match(/^ \* Lean: Port `[^`]+`[\s\S]*?^interface (\w+)/m); return m ? [m[1]] : []; });
+  const withoutParens = (s) => { let out = "", depth = 0; for (const ch of s) { if (ch === "(") depth++; else if (ch === ")") depth--; else if (depth === 0) out += ch; } return out; };
+  const supertypes = handMain.filter(f => /\/infrastructure\//.test(rel(cfg.root, f))).map(f => readFileSync(f, "utf8"))
+    .flatMap(text => [...text.matchAll(/\b(?:class|object)\s+\w+([^{]*)\{/g)].map(m => withoutParens(m[1]).split(":").slice(1).join(":")));
+  const adapters = ports.filter(p => supertypes.some(s => new RegExp(`\\b${p}\\b`).test(s)));
+  const portFact = ports.length ? `Port ${ports.length} 件（Adapter ${adapters.length}${adapterTestNames.length ? `、適合テスト 配線 ${adapterTestsWired}/${adapterTestNames.length}` : ""}）` : null;
+  phase("バックエンド", gen.length ? "着手済" : "生成前", [`生成物 ${gen.length ? "あり" : "なし"}`, `契約テスト 配線 ${wired}/${abstractNames.length}`, portFact, `手書き ${impls} ファイル`].filter(Boolean),
+    !gen.length ? `${cfg.backend.regenerate} で生成` : wired < abstractNames.length ? `未配線の契約テスト ${abstractNames.length - wired} 件を具象クラスで繋ぐ`
+      : adapters.length < ports.length ? `Adapter の無い Port ${ports.filter(p => !adapters.includes(p)).join(", ")} を infrastructure/<port>/ に書く`
+      : adapterTestsWired < adapterTestNames.length ? `未配線の Adapter 適合テスト ${adapterTestNames.length - adapterTestsWired} 件を src/adapterTest/kotlin の具象クラスで繋ぎ、./gradlew adapterContractTest で回す`
+      : "cradle regen-impact で追随漏れを確かめる");
 }
 
 // 7. インフラ実装（local スタック。E2E の前提）

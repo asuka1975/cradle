@@ -5,6 +5,11 @@
 採り直し: `cd lean2kotlin/scaffold-check && ./gradlew --no-daemon extractLeanIr` のあと
 `build/lean2kotlin/lean2kotlin-ir.json` をここへ写す（`GenerationTest` が `scaffold-check/src/generated` と突き合わせるので、両方を同じ生成器で採る）。
 
+## lobby/lobby-ir.json
+外部能力の Port を持つ最小ドメイン（`lean2kotlin/scaffold-check/port/lean`、名前空間 `Lobby`）を抽出器に通した IR。
+採り直し: `cd lean2kotlin/scaffold-check && ./gradlew --no-daemon :port:extractLeanIr` のあと
+`port/build/lean2kotlin/lean2kotlin-ir.json` をここへ写す（`LobbyGenerationTest` が `scaffold-check/port/src/generated` と突き合わせる）。
+
 ## sprout/golden/
 骨格の golden（`.apm/skills/cradle-init/assets/lean/golden/` の 3 ファイル）の写し。
 採り直し: 骨格の golden を更新したら同じ 3 ファイルをここへ写す。

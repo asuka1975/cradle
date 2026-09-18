@@ -10,7 +10,7 @@ import dev.cradle.scaffold.application.QueryError
 /**
  * Lean: モジュール `NotesUseCase` の interface 面(署名は Lean の def の写し)。
  * アプリケーション層の UseCase(固定形 validate / execute)。
- * 取得(読み取りストア)・乱択の鍵・調達ポート(時計・主体)・precise な入力
+ * 取得(読み取りストア)・乱択の鍵・調達ポート(時計・主体・外部能力の観測)・precise な入力
  * (lookup 結果・採番列)は**実装の配線**(注入ポート)— 署名には現れない
  * (証明装置を本番界面に写さない)。効果はリポジトリ経由で観測する。
  * 実装は AI が別ファイルに書く。default 禁止。

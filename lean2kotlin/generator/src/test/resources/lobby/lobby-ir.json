@@ -1,0 +1,1518 @@
+{"version": 1,
+ "useCases":
+ [{"ports":
+   [{"request":
+     "Lobby.Application.Port.OrganizationDirectory.FindMember.Request",
+     "port": "OrganizationDirectory",
+     "param": "outcome",
+     "outcome":
+     "Lobby.Application.Port.OrganizationDirectory.FindMember.Outcome",
+     "operation": "findMember"}],
+   "name": "BookVisitUseCase",
+   "module": "BookVisitUseCase",
+   "methods":
+   [{"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
+       "name": "actor"},
+      {"type":
+       {"name":
+        "Lobby.Application.Port.OrganizationDirectory.FindMember.Outcome",
+        "k": "ref"},
+       "name": "outcome"},
+      {"type":
+       {"name": "Lobby.Application.BookVisitUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Lobby.Application.BookVisitUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "execute",
+     "doc": "execute は validate を通してから観測を適用する。 "},
+    {"ret":
+     {"ok": {"name": "Lobby.Application.BookVisitUseCase.Vacant", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
+       "name": "_actor"},
+      {"type":
+       {"name": "Lobby.Application.BookVisitUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Lobby.Application.BookVisitUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "validate",
+     "doc": "始まる前の拒否: 来訪者の名前が空なら受け付けない、受付中の来訪があれば受け付けない。 "}]},
+  {"name": "LeaveUseCase",
+   "module": "LeaveUseCase",
+   "methods":
+   [{"ret":
+     {"ok": {"name": "Lobby.Domain.Visit", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
+       "name": "_actor"},
+      {"type": {"name": "Lobby.Application.LeaveUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "before"}],
+     "name": "validate",
+     "doc": "始まる前の拒否: 宛先が無い / もう退出している。 "},
+    {"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
+       "name": "actor"},
+      {"type": {"name": "Lobby.Application.LeaveUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "before"}],
+     "name": "execute",
+     "doc": ""}]}],
+ "types":
+ [{"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.UserId", "k": "ref"}, "name": "user"}]},
+   "role": "actorPort",
+   "module": "Lobby.Application.ActorContext",
+   "lean": "Lobby.Application.ActorContext",
+   "kotlin": "ActorContext",
+   "doc": "いま受付に立っている担当者。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"}, "name": "host"},
+     {"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "visitor"}]},
+   "role": "command",
+   "module": "Lobby.Application.UseCase.BookVisitUseCase.Command",
+   "lean": "Lobby.Application.BookVisitUseCase.Command",
+   "kotlin": "BookVisitCommand"},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+      "name": "visits"},
+     {"type": {"name": "Lobby.Application.VisitIdGeneratorState", "k": "ref"},
+      "name": "visitIds"}]},
+   "role": "repositoryState",
+   "module": "Lobby.Application.UseCase.BookVisitUseCase.UseCase",
+   "lean": "Lobby.Application.BookVisitUseCase.State",
+   "kotlin": "BookVisitState"},
+  {"shape": {"kind": "structure", "fields": []},
+   "role": "viewDto",
+   "module": "Lobby.Application.UseCase.BookVisitUseCase.UseCase",
+   "lean": "Lobby.Application.BookVisitUseCase.Vacant",
+   "kotlin": "BookVisitVacant",
+   "doc": "解決の成果物: ロビーが空いている証拠（値は運ばない）。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "visit"}]},
+   "role": "command",
+   "module": "Lobby.Application.UseCase.LeaveUseCase.Command",
+   "lean": "Lobby.Application.LeaveUseCase.Command",
+   "kotlin": "LeaveCommand"},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"k": "string"}, "name": "name"},
+     {"type": {"k": "bool"}, "name": "active"}]},
+   "role": "portDto",
+   "module": "Lobby.Application.Port.OrganizationDirectory.FindMember",
+   "lean": "Lobby.Application.Port.OrganizationDirectory.FindMember.Member",
+   "kotlin": "OrganizationDirectoryFindMemberMember",
+   "doc": "ディレクトリが答えた社員（自システムの語彙に写したもの）。 "},
+  {"shape":
+   {"kind": "sealed",
+    "ctors":
+    [{"name": "found",
+      "fields":
+      [{"type":
+        {"name":
+         "Lobby.Application.Port.OrganizationDirectory.FindMember.Member",
+         "k": "ref"},
+        "name": "member"}]},
+     {"name": "missing", "fields": []},
+     {"name": "unavailable", "fields": []}]},
+   "role": "portOutcome",
+   "module": "Lobby.Application.Port.OrganizationDirectory.FindMember",
+   "lean": "Lobby.Application.Port.OrganizationDirectory.FindMember.Outcome",
+   "kotlin": "OrganizationDirectoryFindMemberOutcome",
+   "doc": "観測: 見つかった / いない / ディレクトリが答えない。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"},
+      "name": "employee"}]},
+   "role": "portRequest",
+   "module": "Lobby.Application.Port.OrganizationDirectory.FindMember",
+   "lean": "Lobby.Application.Port.OrganizationDirectory.FindMember.Request",
+   "kotlin": "OrganizationDirectoryFindMemberRequest",
+   "doc": "要求: 誰を引くか。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "next"}]},
+   "role": "repositoryState",
+   "module": "Lobby.Application.RepositoryState",
+   "lean": "Lobby.Application.VisitIdGeneratorState",
+   "kotlin": "VisitIdGeneratorState",
+   "doc": "来訪の採番（VisitIdGenerator ポート）のカウンタ具体化の論理状態: 次に配る値。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"of": {"name": "Lobby.Domain.Visit", "k": "ref"}, "k": "list"},
+      "name": "visits"}]},
+   "role": "repositoryState",
+   "module": "Lobby.Application.RepositoryState",
+   "lean": "Lobby.Application.VisitRepositoryState",
+   "kotlin": "VisitRepositoryState",
+   "constraints":
+   [{"name": "uniqueIds",
+     "kind": "unique",
+     "field": "id",
+     "collection": "visits"},
+    {"value": "left",
+     "op": "ne",
+     "name": "atMostOneExpected",
+     "max": 1,
+     "kind": "atMost",
+     "field": "phase",
+     "collection": "visits"}]},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
+     {"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"}, "name": "host"},
+     {"type": {"k": "string"}, "name": "hostName"},
+     {"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "visitor"},
+     {"type": {"name": "Lobby.VisitPhase", "k": "ref"}, "name": "phase"}]},
+   "role": "aggregateRoot",
+   "module": "Lobby.Domain.Entity.Visit",
+   "lean": "Lobby.Domain.Visit",
+   "kotlin": "Visit",
+   "id": {"name": "Lobby.Runtime.VisitId", "k": "ref"},
+   "doc": "来訪。受入担当者の名前はディレクトリで確認した時点の写し。 "},
+  {"shape":
+   {"kind": "enum",
+    "ctors":
+    ["emptyVisitor",
+     "hostMissing",
+     "directoryUnavailable",
+     "hostInactive",
+     "lobbyOccupied",
+     "unknownVisit",
+     "alreadyLeft"]},
+   "role": "error",
+   "module": "Lobby.Domain.Error",
+   "lean": "Lobby.DomainError",
+   "kotlin": "DomainError",
+   "doc": "業務としての失敗。技術的障害はこの語彙に含めない。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "id"}]},
+   "role": "valueObject",
+   "module": "Lobby.Runtime.Ids",
+   "lean": "Lobby.Runtime.EmployeeId",
+   "kotlin": "EmployeeId",
+   "doc": "社員の同一性（発行者はディレクトリ側 — 泉を持たない）。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "id"}]},
+   "role": "valueObject",
+   "module": "Lobby.Runtime.Ids",
+   "lean": "Lobby.Runtime.UserId",
+   "kotlin": "UserId",
+   "doc": "受付担当者の同一性（発行者は認証基盤 — 泉を持たない）。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "id"}]},
+   "role": "valueObject",
+   "module": "Lobby.Runtime.Ids",
+   "lean": "Lobby.Runtime.VisitId",
+   "kotlin": "VisitId",
+   "isId": true},
+  {"shape": {"kind": "enum", "ctors": ["expected", "left"]},
+   "role": "valueObject",
+   "module": "Lobby.Domain.ValueObject",
+   "lean": "Lobby.VisitPhase",
+   "kotlin": "VisitPhase",
+   "doc": "来訪の段階。受付中（expected）か退出済み（left）か。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "string"}, "name": "text"}]},
+   "role": "valueObject",
+   "module": "Lobby.Domain.ValueObject",
+   "lean": "Lobby.VisitorName",
+   "kotlin": "VisitorName",
+   "doc": "来訪者の名前。制約: 空でないこと。 "}],
+ "rootNamespace": "Lobby",
+ "queryServices": [],
+ "ports":
+ [{"operations":
+   [{"request":
+     "Lobby.Application.Port.OrganizationDirectory.FindMember.Request",
+     "outcome":
+     "Lobby.Application.Port.OrganizationDirectory.FindMember.Outcome",
+     "name": "FindMember",
+     "method": "findMember",
+     "doc": "要求: 誰を引くか。 "}],
+   "name": "OrganizationDirectory",
+   "module": "Lobby.Application.Port.OrganizationDirectory",
+   "layer": "application"}],
+ "faultContracts":
+ [{"useCase": "BookVisitUseCase",
+   "doc": "受入担当者を確認した後、来訪の保存で技術的障害が起きたら、来訪も採番も残らない（観測される状態は作用前のまま）。 ",
+   "def": "savingFailed",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 10}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s828", "active": true}}},
+       "operation": "findMember"}],
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s828", "active": true}}},
+      "c": {"visitor": {"text": "s829"}, "host": {"id": 10}},
+      "actor": {"user": {"id": 10}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 10}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s836", "active": true}}},
+       "operation": "findMember"}],
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s836", "active": true}}},
+      "c": {"visitor": {"text": "s837"}, "host": {"id": 10}},
+      "actor": {"user": {"id": 10}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 10}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s844", "active": true}}},
+       "operation": "findMember"}],
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s844", "active": true}}},
+      "c": {"visitor": {"text": "s845"}, "host": {"id": 10}},
+      "actor": {"user": {"id": 10}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 10}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s852", "active": true}}},
+       "operation": "findMember"}],
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s852", "active": true}}},
+      "c": {"visitor": {"text": "s853"}, "host": {"id": 10}},
+      "actor": {"user": {"id": 10}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}}]}],
+ "domainServices":
+ [{"name": "DomainService",
+   "module": "DomainService",
+   "methods":
+   [{"ret": {"k": "nat"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "receiptLines",
+     "doc": "領収の行数: 退出済みなら 1 行、受付中なら 0 行。 "}]},
+  {"name": "PricingService",
+   "module": "Pricing",
+   "methods":
+   [{"ret": {"k": "nat"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "fee",
+     "doc": "受付中の来訪は無料、退出済みは 1。 "}]},
+  {"name": "TaxService",
+   "module": "Tax",
+   "methods":
+   [{"ret": {"k": "bool"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "taxable",
+     "doc": "退出済みの来訪だけが課税の対象になる。 "}]}],
+ "diagnostics": {"dropped": []},
+ "contracts":
+ [{"useCase": "BookVisitUseCase",
+   "theorem": "execute_directory_unavailable",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "ディレクトリが答えなければ受け付けない（いないのとは別の拒否）。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "unavailable",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "directoryUnavailable",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": "unavailable",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "unavailable",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "directoryUnavailable",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s12"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s11",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}},
+     "args":
+     {"outcome": "unavailable",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s12"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s11",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "unavailable",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "directoryUnavailable",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": "unavailable",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 5}},
+       "port": "OrganizationDirectory",
+       "outcome": "unavailable",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "directoryUnavailable",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": "unavailable",
+      "c": {"visitor": {"text": "s7"}, "host": {"id": 5}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}}]},
+  {"useCase": "BookVisitUseCase",
+   "theorem": "execute_empty_visitor",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "来訪者の名前が空なら、どの観測でも受け付けない（外部は呼ばれない）。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "emptyVisitor",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s13"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s12",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 500}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": ""}, "host": {"id": 9}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s13"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s12",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 500}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "emptyVisitor",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": ""}, "host": {"id": 9}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "emptyVisitor",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": ""}, "host": {"id": 9}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "emptyVisitor",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s16"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s15",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s18"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s17",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 503}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": ""}, "host": {"id": 9}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s16"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s15",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s18"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s17",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 503}}}]},
+  {"useCase": "BookVisitUseCase",
+   "theorem": "execute_host_inactive",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "在籍していない受入担当者では受け付けない。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostInactive",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostInactive",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostInactive",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 5}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostInactive",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s10"}, "host": {"id": 5}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}}]},
+  {"useCase": "BookVisitUseCase",
+   "theorem": "execute_host_missing",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "受入担当者がいなければ受け付けない。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "missing",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostMissing",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": "missing",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "missing",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostMissing",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s12"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s11",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}},
+     "args":
+     {"outcome": "missing",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s12"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s11",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": "missing",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostMissing",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": "missing",
+      "c": {"visitor": {"text": "s6"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 506}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 5}},
+       "port": "OrganizationDirectory",
+       "outcome": "missing",
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "hostMissing",
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": "missing",
+      "c": {"visitor": {"text": "s7"}, "host": {"id": 5}},
+      "actor": {"user": {"id": 4}}},
+     "after": {"visits": {"visits": []}, "visitIds": {"next": 501}}}]},
+  {"useCase": "BookVisitUseCase",
+   "theorem": "execute_occupied",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "受付中の来訪があれば、どの観測でも受け付けない。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "lobbyOccupied",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s13"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s12",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 500}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s13"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s12",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 500}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "lobbyOccupied",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s16"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s15",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s18"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s17",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 503}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s16"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s15",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s18"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s17",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 503}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "lobbyOccupied",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s17"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s16",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s19"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s18",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 504}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s17"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s16",
+         "host": {"id": 4}},
+        {"visitor": {"text": "s19"},
+         "phase": "left",
+         "id": {"id": 92},
+         "hostName": "s18",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 504}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": null,
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s6", "active": false}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": "lobbyOccupied",
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s18"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s17",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 505}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s6", "active": false}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s18"},
+         "phase": "expected",
+         "id": {"id": 91},
+         "hostName": "s17",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 505}}}]},
+  {"useCase": "BookVisitUseCase",
+   "theorem": "execute_ok",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "見つかって在籍なら受け付ける。 ",
+   "cases":
+   [{"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s7", "active": true}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": null,
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s7", "active": true}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s9"},
+         "phase": "expected",
+         "id": {"id": 501},
+         "hostName": "s7",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 502}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s7", "active": true}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": null,
+     "before":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}}]},
+      "visitIds": {"next": 502}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s7", "active": true}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s15"},
+         "phase": "left",
+         "id": {"id": 93},
+         "hostName": "s14",
+         "host": {"id": 6}},
+        {"visitor": {"text": "s9"},
+         "phase": "expected",
+         "id": {"id": 502},
+         "hostName": "s7",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 503}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 4}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s7", "active": true}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": null,
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 506}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s7", "active": true}}},
+      "c": {"visitor": {"text": "s9"}, "host": {"id": 4}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s9"},
+         "phase": "expected",
+         "id": {"id": 506},
+         "hostName": "s7",
+         "host": {"id": 4}}]},
+      "visitIds": {"next": 507}}},
+    {"stateType": "Lobby.Application.BookVisitUseCase.State",
+     "ports":
+     [{"request": {"employee": {"id": 5}},
+       "port": "OrganizationDirectory",
+       "outcome": {"found": {"member": {"name": "s7", "active": true}}},
+       "operation": "findMember"}],
+     "kind": "transition",
+     "error": null,
+     "before": {"visits": {"visits": []}, "visitIds": {"next": 501}},
+     "args":
+     {"outcome": {"found": {"member": {"name": "s7", "active": true}}},
+      "c": {"visitor": {"text": "s10"}, "host": {"id": 5}},
+      "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      {"visits":
+       [{"visitor": {"text": "s10"},
+         "phase": "expected",
+         "id": {"id": 501},
+         "hostName": "s7",
+         "host": {"id": 5}}]},
+      "visitIds": {"next": 502}}}]},
+  {"useCase": "LeaveUseCase",
+   "theorem": "execute_already_left",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "",
+   "cases":
+   [{"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "alreadyLeft",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]},
+     "args": {"c": {"visit": {"id": 92}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "alreadyLeft",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s11"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s10",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s13"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s12",
+        "host": {"id": 5}}]},
+     "args": {"c": {"visit": {"id": 92}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s11"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s10",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s13"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s12",
+        "host": {"id": 5}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "alreadyLeft",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s9"},
+        "phase": "left",
+        "id": {"id": 93},
+        "hostName": "s8",
+        "host": {"id": 6}}]},
+     "args": {"c": {"visit": {"id": 93}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s9"},
+        "phase": "left",
+        "id": {"id": 93},
+        "hostName": "s8",
+        "host": {"id": 6}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "alreadyLeft",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]},
+     "args": {"c": {"visit": {"id": 92}}, "actor": {"user": {"id": 5}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]}}]},
+  {"useCase": "LeaveUseCase",
+   "theorem": "execute_ok",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "",
+   "cases":
+   [{"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": null,
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s7"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s6",
+        "host": {"id": 4}}]},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s7"},
+        "phase": "left",
+        "id": {"id": 91},
+        "hostName": "s6",
+        "host": {"id": 4}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": null,
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s10"},
+        "phase": "left",
+        "id": {"id": 91},
+        "hostName": "s9",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s11",
+        "host": {"id": 5}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": null,
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s11"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s10",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s13"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s12",
+        "host": {"id": 5}}]},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s11"},
+        "phase": "left",
+        "id": {"id": 91},
+        "hostName": "s10",
+        "host": {"id": 4}},
+       {"visitor": {"text": "s13"},
+        "phase": "left",
+        "id": {"id": 92},
+        "hostName": "s12",
+        "host": {"id": 5}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": null,
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s12"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s11",
+        "host": {"id": 4}}]},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s12"},
+        "phase": "left",
+        "id": {"id": 91},
+        "hostName": "s11",
+        "host": {"id": 4}}]}}]},
+  {"useCase": "LeaveUseCase",
+   "theorem": "execute_unknown",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "",
+   "cases":
+   [{"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "unknownVisit",
+     "before": {"visits": []},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after": {"visits": []}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "unknownVisit",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s9"},
+        "phase": "left",
+        "id": {"id": 93},
+        "hostName": "s8",
+        "host": {"id": 6}}]},
+     "args": {"c": {"visit": {"id": 91}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s9"},
+        "phase": "left",
+        "id": {"id": 93},
+        "hostName": "s8",
+        "host": {"id": 6}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "unknownVisit",
+     "before":
+     {"visits":
+      [{"visitor": {"text": "s7"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s6",
+        "host": {"id": 4}}]},
+     "args": {"c": {"visit": {"id": 92}}, "actor": {"user": {"id": 4}}},
+     "after":
+     {"visits":
+      [{"visitor": {"text": "s7"},
+        "phase": "expected",
+        "id": {"id": 91},
+        "hostName": "s6",
+        "host": {"id": 4}}]}},
+    {"stateType": "Lobby.Application.VisitRepositoryState",
+     "kind": "transition",
+     "error": "unknownVisit",
+     "before": {"visits": []},
+     "args": {"c": {"visit": {"id": 92}}, "actor": {"user": {"id": 4}}},
+     "after": {"visits": []}}]},
+  {"useCase": "Lobby.Domain.Visit",
+   "theorem": "book_expected",
+   "target": "behaviors",
+   "method": "isExpected",
+   "doc": "受け付けた直後は受付中。 ",
+   "cases":
+   [{"ok": true,
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s9"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s6",
+       "host": {"id": 4}}}},
+    {"ok": true,
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s10"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s6",
+       "host": {"id": 4}}}},
+    {"ok": true,
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s11"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s6",
+       "host": {"id": 4}}}},
+    {"ok": true,
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s12"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s6",
+       "host": {"id": 4}}}}]},
+  {"useCase": "Lobby.Domain.Visit",
+   "theorem": "leave_id",
+   "target": "behaviors",
+   "method": "leave",
+   "doc": "退出しても同一性は変わらない。 ",
+   "cases":
+   [{"ok":
+     {"visitor": {"text": "s1"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s0",
+      "host": {"id": 4}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s1"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s0",
+       "host": {"id": 4}}}},
+    {"ok":
+     {"visitor": {"text": "s2"},
+      "phase": "left",
+      "id": {"id": 92},
+      "hostName": "s1",
+      "host": {"id": 5}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s2"},
+       "phase": "left",
+       "id": {"id": 92},
+       "hostName": "s1",
+       "host": {"id": 5}}}},
+    {"ok":
+     {"visitor": {"text": "s3"},
+      "phase": "left",
+      "id": {"id": 93},
+      "hostName": "s2",
+      "host": {"id": 6}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s3"},
+       "phase": "left",
+       "id": {"id": 93},
+       "hostName": "s2",
+       "host": {"id": 6}}}},
+    {"ok":
+     {"visitor": {"text": "s4"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s3",
+      "host": {"id": 7}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s4"},
+       "phase": "left",
+       "id": {"id": 91},
+       "hostName": "s3",
+       "host": {"id": 7}}}}]},
+  {"useCase": "Lobby.Domain.Visit",
+   "theorem": "leave_idem",
+   "target": "behaviors",
+   "method": "leave",
+   "doc": "退出は冪等。 ",
+   "cases":
+   [{"ok":
+     {"visitor": {"text": "s1"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s0",
+      "host": {"id": 4}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s1"},
+       "phase": "left",
+       "id": {"id": 91},
+       "hostName": "s0",
+       "host": {"id": 4}}}},
+    {"ok":
+     {"visitor": {"text": "s2"},
+      "phase": "left",
+      "id": {"id": 92},
+      "hostName": "s1",
+      "host": {"id": 5}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s2"},
+       "phase": "left",
+       "id": {"id": 92},
+       "hostName": "s1",
+       "host": {"id": 5}}}},
+    {"ok":
+     {"visitor": {"text": "s3"},
+      "phase": "left",
+      "id": {"id": 93},
+      "hostName": "s2",
+      "host": {"id": 6}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s3"},
+       "phase": "left",
+       "id": {"id": 93},
+       "hostName": "s2",
+       "host": {"id": 6}}}},
+    {"ok":
+     {"visitor": {"text": "s4"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s3",
+      "host": {"id": 7}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s4"},
+       "phase": "left",
+       "id": {"id": 91},
+       "hostName": "s3",
+       "host": {"id": 7}}}}]},
+  {"useCase": "Lobby.Domain.Visit",
+   "theorem": "leave_phase",
+   "target": "behaviors",
+   "method": "leave",
+   "doc": "退出したら退出済み。 ",
+   "cases":
+   [{"ok":
+     {"visitor": {"text": "s1"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s0",
+      "host": {"id": 4}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s1"},
+       "phase": "expected",
+       "id": {"id": 91},
+       "hostName": "s0",
+       "host": {"id": 4}}}},
+    {"ok":
+     {"visitor": {"text": "s2"},
+      "phase": "left",
+      "id": {"id": 92},
+      "hostName": "s1",
+      "host": {"id": 5}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s2"},
+       "phase": "left",
+       "id": {"id": 92},
+       "hostName": "s1",
+       "host": {"id": 5}}}},
+    {"ok":
+     {"visitor": {"text": "s3"},
+      "phase": "left",
+      "id": {"id": 93},
+      "hostName": "s2",
+      "host": {"id": 6}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s3"},
+       "phase": "left",
+       "id": {"id": 93},
+       "hostName": "s2",
+       "host": {"id": 6}}}},
+    {"ok":
+     {"visitor": {"text": "s4"},
+      "phase": "left",
+      "id": {"id": 91},
+      "hostName": "s3",
+      "host": {"id": 7}},
+     "kind": "pure",
+     "args":
+     {"v":
+      {"visitor": {"text": "s4"},
+       "phase": "left",
+       "id": {"id": 91},
+       "hostName": "s3",
+       "host": {"id": 7}}}}]},
+  {"useCase": "Lobby.VisitorName",
+   "theorem": "valid_iff",
+   "target": "behaviors",
+   "method": "valid",
+   "doc": "",
+   "cases":
+   [{"ok": true, "kind": "pure", "args": {"n": {"text": "s0"}}},
+    {"ok": true, "kind": "pure", "args": {"n": {"text": "s1"}}},
+    {"ok": true, "kind": "pure", "args": {"n": {"text": "s2"}}},
+    {"ok": true, "kind": "pure", "args": {"n": {"text": "s3"}}}]}],
+ "behaviors":
+ [{"subject": "Lobby.Application.VisitRepositoryState",
+   "module": "Lobby.Application.RepositoryState",
+   "methods":
+   [{"ret": {"k": "bool"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "vacant",
+     "doc": "受付中の来訪が無い（ひと組を受け入れられる）。 "},
+    {"ret": {"of": {"name": "Lobby.Domain.Visit", "k": "ref"}, "k": "option"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"},
+      {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"}],
+     "name": "find?",
+     "doc": ""},
+    {"ret": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"},
+      {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
+      {"type":
+       {"to": {"name": "Lobby.Domain.Visit", "k": "ref"},
+        "k": "arrow",
+        "from": {"name": "Lobby.Domain.Visit", "k": "ref"}},
+       "name": "f"}],
+     "name": "update",
+     "doc": "1 件を差し替える。同一性を変えず、受付中を増やさない操作にのみ使う。**消す操作は無い**。 "},
+    {"ret": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"},
+      {"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "add",
+     "doc": "末尾に足す。受け付けるのは新鮮な同一性と、ロビーが空いているときだけ。 "},
+    {"ret": {"of": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "ids",
+     "doc": ""}]},
+  {"subject": "Lobby.Domain.Visit",
+   "module": "Lobby.Domain.Entity.Visit",
+   "methods":
+   [{"ret": {"k": "bool"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "isExpected",
+     "doc": ""},
+    {"ret": {"name": "Lobby.Domain.Visit", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "leave",
+     "doc": "退出する。 "},
+    {"ret": {"name": "Lobby.Domain.Visit", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
+      {"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"},
+       "name": "host"},
+      {"type": {"k": "string"}, "name": "hostName"},
+      {"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "visitor"}],
+     "name": "book",
+     "doc": "受け付ける（採番は呼び出し側の関心）。 "}]},
+  {"subject": "Lobby.VisitorName",
+   "module": "Lobby.Domain.ValueObject",
+   "methods":
+   [{"ret": {"k": "bool"},
+     "params":
+     [{"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "n"}],
+     "name": "valid",
+     "doc": ""}]}]}

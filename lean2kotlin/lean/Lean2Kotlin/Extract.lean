@@ -25,6 +25,12 @@
      `(coll.filter p).length ≤ n` の上限制約)を IR に出す(fixture の構築規律)。
      Prop フィールドと def の Prop 引数はデータでも interface 面でもない —
      形状と署名から除き、評価では decide の証明で埋める。
+  6. **外部能力の Port** — `Application/Port/<Port>/<操作>`(Domain/Port も同じ)の固定名
+     `Request` / `Outcome` を要求・観測の型として読み、UseCase の `request`(要求を決める def)の
+     戻りと `execute` の観測引数(`Outcome`)の組で Port・操作との対応を取る。契約ケースには
+     Lean が評価した要求と定理の観測を焼き込む(生成テストがモックを組む)。
+  7. **診断** — 宣言した契約が IR に入らなかった理由・写像できない固定形の署名を `diagnostics` に
+     残す。生成器はこれを失敗として読む(検査に至らない契約を黙って通さない)。
 -/
 import Lean
 
@@ -235,9 +241,15 @@ def defaultKotlinName (n : Name) : String :=
   | none => toString n
   | some last =>
     let lastS := toString last
+    let parents := comps.dropLast
+    -- Port の操作モジュール在住の型: <Layer>.Port.<Port>.<操作>.<型> → "<Port><操作><型>"
+    -- (Request / Outcome は操作ごとにあるので、Port 名と操作名で一意化する)
+    if parents.length ≥ 3 && toString parents[parents.length - 3]! == "Port" then
+      toString parents[parents.length - 2]! ++ toString parents[parents.length - 1]! ++ lastS
+    else
     -- UseCase ディレクトリ在住の型(Command / State / ReadModel 等)は
     -- <X>UseCase.<型> → "X<型>" で一意化(1 UseCase 1 ディレクトリ)
-    match comps.dropLast.getLast? with
+    match parents.getLast? with
     | some parent =>
       let p := toString parent
       if p.endsWith "UseCase" && p != "UseCase" then
@@ -245,8 +257,27 @@ def defaultKotlinName (n : Name) : String :=
       else lastS
     | none => lastS
 
+/-- 先頭だけ小文字に(操作名 FindMember → メソッド名 findMember)。 -/
+def decapitalize (s : String) : String :=
+  match s.toList with
+  | c :: rest => String.ofList (c.toLower :: rest)
+  | [] => s
+
+/-- コンパイラ・deriving が生む補助定義の葉名(interface 面でもふるまいでもない)。
+    ofNat は列挙の deriving(DecidableEq)が生む。 -/
+def auxiliaryLeafNames : List Name :=
+  [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx, `ofNat]
+
 def isKotlinIdent (s : String) : Bool :=
   !s.isEmpty && s.front.isAlpha && s.all (fun c => c.isAlphanum || c == '_')
+
+/-- UseCase が使う Port の操作: 観測を受ける execute の引数名と、要求・観測の型。 -/
+structure PortDep where
+  param : Name
+  portMod : Name
+  op : String
+  request : Name
+  outcome : Name
 
 /-! ### 役割 -/
 
@@ -269,6 +300,14 @@ inductive Role
       生成する)。契約テストは固定の主体を実装フックへ渡す — 主体を量化する
       契約定理がそのまま認可分岐のテストファミリになる -/
   | actorPort
+  /-- 外部能力の Port の要求(`Application/Port/<Port>/<操作>` の固定名 `Request`)。
+      本番の data class に写り、UseCase の `request` が組む -/
+  | portRequest
+  /-- 外部能力の Port の観測(同 `Outcome`)。本番の型に写る一方、`execute` の引数としては
+      名義・時計と同格の調達の引数種 — 本番署名から落ち、実装は Port から調達する -/
+  | portOutcome
+  /-- Port の操作モジュール在住のそれ以外の純データ(観測が運ぶ自システムの語彙) -/
+  | portDto
 deriving BEq, Repr
 
 def Role.str : Role → String
@@ -278,6 +317,7 @@ def Role.str : Role → String
   | .repositoryState => "repositoryState" | .readModel => "readModel"
   | .clockPort => "clockPort"
   | .actorPort => "actorPort"
+  | .portRequest => "portRequest" | .portOutcome => "portOutcome" | .portDto => "portDto"
 
 /-! ### アノテーション(対象自前の TagAttribute)の読み取り -/
 
@@ -1079,17 +1119,28 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           unless (stdTimeKind? tn).isSome do return false
           data := data + 1
         return data > 0
+    -- 外部能力の Port の操作モジュール: <Root>.<Application|Domain>.Port.<Port>.<操作>
+    let isPortModule (m : Name) : Bool :=
+      [appNs, domainNs].any fun layer =>
+        (layer ++ `Port).isPrefixOf m && m.components.length == layer.components.length + 3
     let mut roles : Std.HashMap Name Role := {}
     for (n, ci) in env.constants.toList do
       unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
       let .inductInfo _ := ci | continue
       if isClass env n then continue
       if (← isPropSort n) then continue
-      if (← hasFunctionField n) then continue
       let some m := modOf n | continue
+      if (← hasFunctionField n) then
+        if isPortModule m then
+          throwError "lean2kotlin: Port の型 {n} が関数フィールドを持ちます(Port は要求と観測の純データだけ — 外部を呼ぶ関数は UseCase に渡さない)"
+        continue
       let mLast := m.components.getLast!
       let nLast := toString n.components.getLast!
       if n == errTyName then roles := roles.insert n .error
+      else if isPortModule m then
+        -- Port の操作モジュール: 固定名で役割を決める(日時だけの DTO を時計ポートと誤認しない — 置き場が先)
+        roles := roles.insert n (if nLast == "Request" then .portRequest
+          else if nLast == "Outcome" then .portOutcome else .portDto)
       else if (← isClockStruct n) then
         -- 時計ポート(Clock): DTO ではなく調達の引数種。
         -- 生成側は署名から落とし、interface も作らない(java.time.Clock を直接注入)
@@ -1154,6 +1205,31 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               ro == .aggregateRoot && toString r.components.getLast! == rootShort) do
             throwError "lean2kotlin: {n} に対応する集約ルート {rootShort} が見つかりません(命名規約)"
 
+    -- 2b. 外部能力の Port: 操作モジュールごとに Request と Outcome が揃っていること。
+    -- Port は操作の親モジュール(<Root>.<Layer>.Port.<Port>)、操作はモジュールの葉
+    let mut portOps : Std.HashMap Name (Array (String × Name × Name)) := {}
+    for (n, role) in roles.toList do
+      unless role == .portRequest do continue
+      let some m := modOf n | continue
+      let opLeaf := toString m.components.getLast!
+      let portMod := m.getPrefix
+      let some (outcomeTy, _) := roles.toList.find? (fun (o, ro) =>
+          ro == .portOutcome && modOf o == some m)
+        | throwError "lean2kotlin: Port の操作 {m} に Outcome がありません(固定名 Request / Outcome を揃える)"
+      if (toString portMod.components.getLast!).endsWith "Repository" then
+        throwError "lean2kotlin: Port 名 {portMod.components.getLast!} は Repository で終えない(Repository は自システムの集約の取得・保存)"
+      portOps := portOps.insert portMod ((portOps.get? portMod |>.getD #[]).push (opLeaf, n, outcomeTy))
+    for (n, role) in roles.toList do
+      unless role == .portOutcome do continue
+      let some m := modOf n | continue
+      unless roles.toList.any (fun (r, ro) => ro == .portRequest && modOf r == some m) do
+        throwError "lean2kotlin: Port の操作 {m} に Request がありません(固定名 Request / Outcome を揃える)"
+    -- 型名 → (Port モジュール, 操作)
+    let portOfType (ty : Name) : Option (Name × String) := do
+      let m ← modOf ty
+      guard (isPortModule m)
+      pure (m.getPrefix, toString m.components.getLast!)
+
     -- 3. UseCase / QueryService の interface 面(1 UseCase 1 ディレクトリ)。
     -- モジュールの葉(UseCase / QueryService)で対象を選び、固定形(only)だけを写す。
     -- 状態遷移契約 execute : Command → State → Result の本番面は
@@ -1179,8 +1255,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         -- コンパイラ生成物・インスタンス・射影は interface 面ではない
         if n.isInternalDetail then continue
         if isAuxRecursor env n || isNoConfusion env n then continue
-        if [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx].contains
-            (n.components.getLast!) then continue
+        if auxiliaryLeafNames.contains (n.components.getLast!) then continue
         if (env.getProjectionFnInfo? n).isSome then continue
         if (← Meta.isInstance n) then continue
         if n.components.any (fun c => (toString c).startsWith "inst") then continue
@@ -1338,8 +1413,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       unless isBehaviorModule m do continue
       if n.isInternalDetail then continue
       if isAuxRecursor env n || isNoConfusion env n then continue
-      if [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx].contains
-          (n.components.getLast!) then continue
+      if auxiliaryLeafNames.contains (n.components.getLast!) then continue
       if (env.getProjectionFnInfo? n).isSome then continue
       if (← Meta.isInstance n) then continue
       if n.components.any (fun c => (toString c).startsWith "inst") then continue
@@ -1447,12 +1521,14 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let refs := (params.map (·.type)).push ret |>.foldl (fun a t => collectRefs t a) #[]
       if refs.any (fun r => !roles.contains r) then continue
       if isProjection then
-        -- 射影: 主体が State(親 namespace)で Row の列を返すものだけ対象
+        -- 射影: 主体が State(親 namespace か先頭の値引数)で Row の列を返すものだけ対象
         let comps := n.components
-        if comps.length < 2 then continue
-        let pLast := comps[comps.length - 2]!
-        let some (stTy, _) := roles.toList.find? (fun (t, ro) =>
-            ro == .repositoryState && t.components.getLast! == pLast) | continue
+        let pLast := if comps.length ≥ 2 then comps[comps.length - 2]! else Name.anonymous
+        let byNs := (roles.toList.find? (fun (t, ro) =>
+            ro == .repositoryState && t.components.getLast! == pLast)).map (·.1)
+        let byArg := params[0]?.bind fun f =>
+          (collectRefs f.type #[]).find? (fun r => roles.get? r == some .repositoryState)
+        let some stTy := byNs <|> byArg | continue
         let rowTy? := (collectRefs ret #[]).find? (fun r =>
           roles.get? r == some .readModelRow)
         let some rowTy := rowTy? | continue
@@ -1460,13 +1536,146 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       else
         judgmentDefs := judgmentDefs.insert n (m.components.dropLast.getLast!)
 
+    -- 値引数の (名前, 型) 列(サンプルのプール用)。型・インスタンス引数は規約で埋め、
+    -- 制約(Prop)の引数は含めない
+    let valueBinders (declName : Name) : Elab.TermElabM (Array (Name × Expr)) := do
+      let ci ← getConstInfo declName
+      let mut ty := ci.type
+      let mut vals : Array (Name × Expr) := #[]
+      repeat
+        match ← whnf ty with
+        | .forallE nm dom body bi =>
+          if bi == .instImplicit then
+            ty := body.instantiate1 (← synthInstance dom)
+          else if dom.isSort then
+            ty := body.instantiate1 (← binderConst rootNs nm)
+          else
+            unless ← Meta.isProp dom do vals := vals.push (nm, dom)
+            ty := body.instantiate1 (mkConst ``Unit)   -- 非依存前提
+        | _ => break
+      return vals
+    -- 適用を組む: 型・インスタンスは規約、制約(Prop)は decide の証明、値は pick(none なら組めない)。
+    -- 返すのは適用と値引数の (名前, 型, 値) 列
+    let applyWith (declName : Name) (pick : Name → Expr → Elab.TermElabM (Option Expr)) :
+        Elab.TermElabM (Option (Expr × Array (Name × Expr × Expr))) := do
+      let ci ← getConstInfo declName
+      let mut app := mkConst declName
+      let mut ty := ci.type
+      let mut vals : Array (Name × Expr × Expr) := #[]
+      repeat
+        match ← whnf ty with
+        | .forallE nm dom body bi =>
+          let v? ←
+            if bi == .instImplicit then pure (some (← synthInstance dom))
+            else if dom.isSort then pure (some (← binderConst rootNs nm))
+            else if ← Meta.isProp dom then
+              match ← decideProp dom with
+              | some true => pure (some (← mkDecideProof dom))
+              | _ => pure none
+            else do
+              let v? ← pick nm dom
+              if let some v := v? then vals := vals.push (nm, dom, v)
+              pure v?
+          let some v := v? | return none
+          app := mkApp app v
+          ty := body.instantiate1 v
+        | _ => break
+      return some (app, vals)
+
+    -- 5b. UseCase ↔ Port の対応: `request` の戻り(Except E Request)と execute の観測引数(Outcome)の
+    -- 組で Port・操作を決める。対応が無い・複数ある・片方だけあるものは失敗(型名の末尾では推測しない)
+    let mut ucPorts : Std.HashMap Name PortDep := {}
+    for (dir, execC) in execByDir.toList do
+      let outcomeParams ← (← valueBinders execC).filterMapM fun (nm, ty) => do
+        let tyW ← whnf ty
+        match tyW.getAppFn with
+        | .const h _ => pure (if roles.get? h == some .portOutcome then some (nm, h) else none)
+        | _ => pure none
+      let reqC := execC.getPrefix ++ `request
+      let hasRequest := env.contains reqC
+      if outcomeParams.isEmpty && !hasRequest then continue
+      if outcomeParams.size > 1 then
+        throwError "lean2kotlin: UseCase {dir} の execute が観測(Outcome)を {outcomeParams.size} 個受けています(1 回の execute で観測する外部操作は 1 種 1 回)"
+      unless hasRequest do
+        throwError "lean2kotlin: UseCase {dir} の execute は観測(Outcome)を受けますが、要求を決める request がありません(固定名 request / mkRequest / apply)"
+      let some (param, outcomeTy) := outcomeParams[0]? |
+        throwError "lean2kotlin: UseCase {dir} に request がありますが、execute が観測(Outcome)を受けていません"
+      -- request の戻り型: 値引数を歩いて Except E Request に至る
+      let reqCi ← getConstInfo reqC
+      let mut rty := reqCi.type
+      repeat
+        match ← whnf rty with
+        | .forallE nm dom body bi =>
+          if bi == .instImplicit then rty := body.instantiate1 (← synthInstance dom)
+          else if dom.isSort then rty := body.instantiate1 (← binderConst rootNs nm)
+          else rty := body.instantiate1 (mkConst ``Unit)
+        | _ => break
+      let rtyW ← whnf rty
+      unless rtyW.getAppFn.isConstOf ``Except && rtyW.getAppArgs.size == 2 do
+        throwError "lean2kotlin: UseCase {dir} の request の戻りが Except E Request ではありません: {rtyW}"
+      let .const reqTy _ := (← whnf rtyW.getAppArgs[1]!).getAppFn
+        | throwError "lean2kotlin: UseCase {dir} の request の戻りが Port の Request ではありません: {rtyW}"
+      unless roles.get? reqTy == some .portRequest do
+        throwError "lean2kotlin: UseCase {dir} の request の戻り {reqTy} は Port の Request(Application/Port/<Port>/<操作> の固定名)ではありません"
+      let some (reqPort, reqOp) := portOfType reqTy | unreachable!
+      let some (outPort, outOp) := portOfType outcomeTy | unreachable!
+      unless reqPort == outPort && reqOp == outOp do
+        throwError "lean2kotlin: UseCase {dir} の request({reqPort}.{reqOp})と execute の観測({outPort}.{outOp})が別の Port 操作を指しています"
+      ucPorts := ucPorts.insert dir { param, portMod := reqPort, op := reqOp, request := reqTy, outcome := outcomeTy }
+    -- 参照系(QueryService を持つ UseCase)の Port は未対応 — 黙って落とさず失敗にする。
+    -- 同じディレクトリの execute が Port を使う場合も、QueryService の def が観測(Outcome)を受ける場合も同じ
+    for (n, ci) in env.constants.toList do
+      unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
+      let some m := modOf n | continue
+      unless ucNs.isPrefixOf m && m.components.getLast! == `QueryService do continue
+      let dir := m.components.dropLast.getLast!
+      let readsOutcome ← do
+        let .defnInfo _ := ci | pure false
+        -- 見るのは interface 面の候補だけ(コンパイラ生成物・インスタンス・射影は除く。extractServices と同じ選別)
+        if n.isInternalDetail || isAuxRecursor env n || isNoConfusion env n ||
+            auxiliaryLeafNames.contains (n.components.getLast!) ||
+            (env.getProjectionFnInfo? n).isSome || (← Meta.isInstance n) ||
+            n.components.any (fun c => (toString c).startsWith "inst") then pure false else
+        -- 署名を写せない def は interface 面から除外される側なので、ここでは観測を受けないとみなす
+        try
+          (← valueBinders n).anyM fun (_, ty) => do
+            match (← whnf ty).getAppFn with
+            | .const h _ => pure (roles.get? h == some .portOutcome)
+            | _ => pure false
+        catch _ => pure false
+      if ucPorts.contains dir || readsOutcome then
+        throwError "lean2kotlin: 参照系 UseCase {dir} が Port を使っています(Port を使う固定形は更新系だけ)"
+    let ucPortsJson (dep : PortDep) : Json :=
+      Json.mkObj [("param", Json.str (toString dep.param)),
+        ("port", Json.str (toString dep.portMod.components.getLast!)),
+        ("operation", Json.str (decapitalize dep.op)),
+        ("request", Json.str (toString dep.request)), ("outcome", Json.str (toString dep.outcome))]
+    let useCaseJs := useCaseJs.map fun j =>
+      match j.getObjVal? "name" with
+      | .ok (.str nm) =>
+        match ucPorts.get? nm.toName with
+        | some dep => j.setObjVal! "ports" (Json.arr #[ucPortsJson dep])
+        | none => j
+      | _ => j
+    -- 診断: 宣言した契約が IR に入らない・固定形の署名が写らない理由(生成器はこれを失敗として読む)
+    let mut droppedJs : Array Json := #[]
+    let dropped (kind name reason : String) : Json :=
+      Json.mkObj [("kind", Json.str kind), ("name", Json.str name), ("reason", Json.str reason)]
+    for s in qSkipped ++ uSkipped do
+      droppedJs := droppedJs.push (dropped "signature" ((s.splitOn ":").headD s) s)
+
     -- 6. @[contract] 契約定理 → テストケース演繹
     let isContract ← tagChecker `contract
     let idHeads : List Name := idTypes.toList.map (·.2.head)
-    let contractNames := (env.constants.toList.filterMap fun (n, ci) =>
-        if rootNs.isPrefixOf n && !n.hasMacroScopes && ci matches .thmInfo _
-          && isContract n then some n else none)
-      |>.toArray.qsort (fun a b => toString a < toString b)
+    let taggedContracts := (env.constants.toList.filterMap fun (n, ci) =>
+        if rootNs.isPrefixOf n && !n.hasMacroScopes && isContract n then some (n, ci) else none)
+      |>.toArray.qsort (fun a b => toString a.1 < toString b.1)
+    -- 印は theorem に付ける。他の宣言に付いた印は検査に至らない — 診断に残す
+    for (n, ci) in taggedContracts do
+      unless ci matches .thmInfo _ do
+        droppedJs := droppedJs.push (dropped "contract" (toString n) "@[contract] は theorem に付ける")
+    let contractNames := taggedContracts.filterMap fun (n, ci) =>
+      if ci matches .thmInfo _ then some n else none
     let mut contractJs : Array Json := #[]
     let mut nonUseCaseContracts : Nat := 0
     for thmName in contractNames do
@@ -1514,6 +1723,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           viewHas isBehaviorTarget
         unless touchesExec || behaviorMode || judgmentMode || projectionMode do
           nonUseCaseContracts := nonUseCaseContracts + 1
+          droppedJs := droppedJs.push (dropped "contract" (toString thmName)
+            "主対象(UseCase の execute / validate・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する")
           continue
         -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
         let mut core := stmt
@@ -1860,7 +2071,35 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 -- 期待値の形で純値形(ふるまい)/ 遷移形 / 値形を判定
                 let expW ← whnf expected
                 let expHead := headOf (← whnf (← inferType expW))
-                let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)]
+                -- Port の期待値: 要求は Lean の request を同じ引数で評価した値(validate が主対象なら
+                -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
+                let portsExtra : List (String × Json) ← do
+                  if behaviorMode || projectionMode || judgmentMode then pure [] else
+                  let dir := ((modOf execName).getD Name.anonymous).components.dropLast.getLast!
+                  match ucPorts.get? dir with
+                  | none => pure []
+                  | some dep =>
+                    let closedArgs := pApp.getAppArgs
+                    let argOf (nm : Name) : Option Expr :=
+                      (List.range (min argNames.size closedArgs.size)).findSome? fun k =>
+                        if argNames[k]! == nm then some closedArgs[k]! else none
+                    let outcomeJ ← match argOf dep.param with
+                      | some o => valueToJson o
+                      | none => pure Json.null
+                    let requestJ ←
+                      if (execName.updatePrefix Name.anonymous) != `execute then pure Json.null else do
+                        let reqC := execName.getPrefix ++ `request
+                        let some (app, _) ← applyWith reqC (fun nm _ => pure (argOf nm))
+                          | throwError "request の引数を execute の引数から埋められません(request の引数名は execute のものと揃える)"
+                        let r ← whnf app
+                        if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
+                        else if r.getAppFn.isConstOf ``Except.error then pure Json.null
+                        else throwError "request の評価結果が Except の構成子ではありません: {r}"
+                    pure [("ports", Json.arr #[Json.mkObj [
+                      ("port", Json.str (toString dep.portMod.components.getLast!)),
+                      ("operation", Json.str (decapitalize dep.op)),
+                      ("request", requestJ), ("outcome", outcomeJ)]])]
+                let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
                 if behaviorMode then
                   -- ふるまい: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
                   caseFields := caseFields ++ [("kind", Json.str "pure"),
@@ -1971,6 +2210,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let (modLast, methodName, rowTy, caseJs, whys) := cases
         if caseJs.isEmpty then
           logInfo m!"lean2kotlin: 契約定理 {thmName}: 有効なケースを演繹できませんでした({whys.toList.eraseDups})"
+          droppedJs := droppedJs.push (dropped "contract" (toString thmName)
+            s!"有効なケースを演繹できない({", ".intercalate whys.toList.eraseDups})")
         else
           let target := if behaviorMode then "behaviors"
             else if projectionMode then "projection"
@@ -1985,8 +2226,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             ("cases", Json.arr caseJs)]))
       catch e =>
         logInfo m!"lean2kotlin: 契約定理 {thmName} を翻訳できません: {← e.toMessageData.toString}"
+        droppedJs := droppedJs.push (dropped "contract" (toString thmName)
+          s!"翻訳できない: {← e.toMessageData.toString}")
     if nonUseCaseContracts > 0 then
-      logInfo m!"lean2kotlin: UseCase execute 以外の契約定理 {nonUseCaseContracts} 本は本段の対象外(Entity / VO / State 単体テストの演繹は次段)"
+      logInfo m!"lean2kotlin: 主対象(execute / validate・ふるまい・判断・射影)に触れない契約定理 {nonUseCaseContracts} 本 — 検査に至らないので生成は失敗する(指名を外す)"
 
     -- 7. @[faultContract] 障害契約 → 障害注入フックつき契約テストの期待値。
     -- 定義の値 = 環境の技術的障害(DB 例外など — モデル外の事象)でフェーズが
@@ -1994,10 +2237,14 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     -- **成功する**入力に限る — 中断すべきフェーズが実際に走る入力だけが
     -- 障害注入の対象になる(失敗枝は通常の契約定理群が固定する)
     let isFaultContract ← tagCheckerOpt `faultContract
-    let faultNames := (env.constants.toList.filterMap fun (n, ci) =>
-        if rootNs.isPrefixOf n && !n.hasMacroScopes && (ci matches .defnInfo _)
-          && isFaultContract n then some n else none)
-      |>.toArray.qsort (fun a b => toString a < toString b)
+    let taggedFaults := (env.constants.toList.filterMap fun (n, ci) =>
+        if rootNs.isPrefixOf n && !n.hasMacroScopes && isFaultContract n then some (n, ci) else none)
+      |>.toArray.qsort (fun a b => toString a.1 < toString b.1)
+    for (n, ci) in taggedFaults do
+      unless ci matches .defnInfo _ do
+        droppedJs := droppedJs.push (dropped "faultContract" (toString n) "@[faultContract] は def に付ける")
+    let faultNames := taggedFaults.filterMap fun (n, ci) =>
+      if ci matches .defnInfo _ then some n else none
     let mut faultJs : Array Json := #[]
     for fName in faultNames do
       try
@@ -2008,51 +2255,6 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let dir := fMod.components.dropLast.getLast!
         let some execC := execByDir.get? dir
           | throwError "UseCase {dir} の execute が見つかりません"
-        -- 値引数の (名前, 型) 列(サンプルのプール用)。型・インスタンス引数は規約で埋め、
-        -- 制約(Prop)の引数は含めない
-        let valueBinders (declName : Name) : Elab.TermElabM (Array (Name × Expr)) := do
-          let ci ← getConstInfo declName
-          let mut ty := ci.type
-          let mut vals : Array (Name × Expr) := #[]
-          repeat
-            match ← whnf ty with
-            | .forallE nm dom body bi =>
-              if bi == .instImplicit then
-                ty := body.instantiate1 (← synthInstance dom)
-              else if dom.isSort then
-                ty := body.instantiate1 (← binderConst rootNs nm)
-              else
-                unless ← Meta.isProp dom do vals := vals.push (nm, dom)
-                ty := body.instantiate1 (mkConst ``Unit)   -- 非依存前提
-            | _ => break
-          return vals
-        -- 適用を組む: 型・インスタンスは規約、制約(Prop)は decide の証明、値は pick(none なら組めない)。
-        -- 返すのは適用と値引数の (名前, 型, 値) 列
-        let applyWith (declName : Name) (pick : Name → Expr → Elab.TermElabM (Option Expr)) :
-            Elab.TermElabM (Option (Expr × Array (Name × Expr × Expr))) := do
-          let ci ← getConstInfo declName
-          let mut app := mkConst declName
-          let mut ty := ci.type
-          let mut vals : Array (Name × Expr × Expr) := #[]
-          repeat
-            match ← whnf ty with
-            | .forallE nm dom body bi =>
-              let v? ←
-                if bi == .instImplicit then pure (some (← synthInstance dom))
-                else if dom.isSort then pure (some (← binderConst rootNs nm))
-                else if ← Meta.isProp dom then
-                  match ← decideProp dom with
-                  | some true => pure (some (← mkDecideProof dom))
-                  | _ => pure none
-                else do
-                  let v? ← pick nm dom
-                  if let some v := v? then vals := vals.push (nm, dom, v)
-                  pure v?
-              let some v := v? | return none
-              app := mkApp app v
-              ty := body.instantiate1 v
-            | _ => break
-          return some (app, vals)
         let fVals ← valueBinders fName
         -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
         let strCtrF : IO.Ref Nat ← IO.mkRef 800
@@ -2090,16 +2292,22 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               | some (_, _, x) => pure (some x)
               | none => buildValue idHeads strCtrF ty vmax)
             | continue
-          -- execute が成功する入力だけを採用(Result の error フィールドが none)
+          -- execute が成功する入力だけを採用: Except なら ok の構成子、Result 構造体なら error フィールドが none
           let eRes ← whnf eApp
           let .const rcn _ := eRes.getAppFn | continue
           let some (.ctorInfo rci) := env.find? rcn | continue
-          let rFields := eRes.getAppArgs.extract rci.numParams eRes.getAppArgs.size
-          let rNames := getStructureFields env rci.induct
-          let mut isOk := false
-          for fi in [0:rFields.size] do
-            if toString rNames[fi]! == "error" then
-              if (← whnf rFields[fi]!).getAppFn.isConstOf ``Option.none then isOk := true
+          let isOk ← do
+            if rcn == ``Except.ok then pure true
+            else if rcn == ``Except.error then pure false
+            else if isStructure env rci.induct then do
+              let rFields := eRes.getAppArgs.extract rci.numParams eRes.getAppArgs.size
+              let rNames := getStructureFields env rci.induct
+              let mut ok := false
+              for fi in [0:rFields.size] do
+                if toString rNames[fi]! == "error" then
+                  if (← whnf rFields[fi]!).getAppFn.isConstOf ``Option.none then ok := true
+              pure ok
+            else pure false
           unless isOk do continue
           -- 期待値 = fault 定義の値(障害で中断されたときに観測される状態)
           let some (fApp, _) ← applyWith fName (fun nm _ =>
@@ -2122,8 +2330,27 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
               if roles.get? h == some .command then cmdKey := aj.compress
               argJs := argJs ++ [(toString nm, aj)]
           let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-          let caseJ := Json.mkObj [("args", Json.mkObj argJs),
-            ("stateType", Json.str (toString st)), ("before", bj), ("after", afterJ)]
+          -- Port の期待値(契約定理のケースと同じ形): 要求は request の評価、観測は execute の観測引数
+          let portsExtra : List (String × Json) ← match ucPorts.get? dir with
+            | none => pure []
+            | some dep =>
+              let valOf (nm : Name) : Option Expr := (eVals.find? (·.1 == nm)).map (·.2.2)
+              let outcomeJ ← match valOf dep.param with
+                | some o => valueToJson o
+                | none => pure Json.null
+              let some (app, _) ← applyWith (execC.getPrefix ++ `request) (fun nm _ => pure (valOf nm))
+                | throwError "request の引数を execute の引数から埋められません"
+              let r ← whnf app
+              let requestJ ←
+                if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
+                else if r.getAppFn.isConstOf ``Except.error then pure Json.null
+                else throwError "request の評価結果が Except の構成子ではありません: {r}"
+              pure [("ports", Json.arr #[Json.mkObj [
+                ("port", Json.str (toString dep.portMod.components.getLast!)),
+                ("operation", Json.str (decapitalize dep.op)),
+                ("request", requestJ), ("outcome", outcomeJ)]])]
+          let caseJ := Json.mkObj ([("args", Json.mkObj argJs)] ++ portsExtra ++ [
+            ("stateType", Json.str (toString st)), ("before", bj), ("after", afterJ)])
           unless collected.any (·.2.compress == caseJ.compress) do
             collected := collected.push (cmdKey, caseJ)
         -- 選抜: ペイロードごとに 1 件を先に取り、残枠を先頭から埋める(≤4)
@@ -2140,6 +2367,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             caseJs := caseJs.push cj
         if caseJs.isEmpty then
           logInfo m!"lean2kotlin: 障害契約 {fName}: 有効なケース(execute が成功する入力)を演繹できませんでした"
+          droppedJs := droppedJs.push (dropped "faultContract" (toString fName) "有効なケース(execute が成功する入力)を演繹できない")
         else
           faultJs := faultJs.push (Json.mkObj [
             ("useCase", Json.str (toString dir)),
@@ -2148,6 +2376,21 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             ("cases", Json.arr caseJs)])
       catch e =>
         logInfo m!"lean2kotlin: 障害契約 {fName} を翻訳できません: {← e.toMessageData.toString}"
+        droppedJs := droppedJs.push (dropped "faultContract" (toString fName)
+          s!"翻訳できない: {← e.toMessageData.toString}")
+
+    -- 7b. Port の一覧(生成器が interface とモックを出す)。doc は Request の docstring
+    let mut portsJs : Array Json := #[]
+    for (portMod, ops) in portOps.toList.toArray.qsort (fun a b => toString a.1 < toString b.1) do
+      let layer := if (appNs ++ `Port).isPrefixOf portMod then "application" else "domain"
+      let mut opsJ : Array Json := #[]
+      for (op, req, out) in ops.qsort (fun a b => a.1 < b.1) do
+        opsJ := opsJ.push (Json.mkObj [("name", Json.str op), ("method", Json.str (decapitalize op)),
+          ("request", Json.str (toString req)), ("outcome", Json.str (toString out)),
+          ("doc", Json.str ((← findDocString? env req).getD ""))])
+      portsJs := portsJs.push (Json.mkObj [("name", Json.str (toString portMod.components.getLast!)),
+        ("layer", Json.str layer), ("module", Json.str (toString portMod)),
+        ("operations", Json.arr opsJ)])
 
     -- 8. 形状の抽出と未分類検出
     let roleList := roles.toList.toArray.qsort (fun a b => toString a.1 < toString b.1)
@@ -2231,10 +2474,15 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     for (src, r) in allRefs do
       unless roles.contains r do
         throwError "lean2kotlin: {src} が参照する型 {r} に生成区分がありません(配置規約 or アノテーションを確認)"
-    -- Kotlin 名は型とサービス(interface)で 1 つの名前空間を分け合う
+    -- Kotlin 名は型とサービス(interface)と Port で 1 つの名前空間を分け合う
     let mut seen : Std.HashMap String Name := {}
     for (nm, md) in serviceNames do
       seen := seen.insert nm md.toName
+    for (portMod, _) in portOps.toList do
+      let k := toString portMod.components.getLast!
+      if let some prev := seen.get? k then
+        throwError "lean2kotlin: Kotlin 名 {k} が衝突しています: {prev} と {portMod}"
+      seen := seen.insert k portMod
     for (n, _) in roleList do
       let k := kotlinNames.get? n |>.getD ""
       if let some prev := seen.get? k then
@@ -2250,7 +2498,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       ("domainServices", Json.arr domainSvcJs),
       ("contracts", Json.arr contractJs),
       ("faultContracts", Json.arr faultJs),
-      ("behaviors", Json.arr behaviorsJs)]
+      ("behaviors", Json.arr behaviorsJs),
+      ("ports", Json.arr portsJs),
+      ("diagnostics", Json.mkObj [("dropped", Json.arr droppedJs)])]
   if let some dir := System.FilePath.parent outPath then
     IO.FS.createDirAll dir
   IO.FS.writeFile outPath (ir.pretty ++ "\n")

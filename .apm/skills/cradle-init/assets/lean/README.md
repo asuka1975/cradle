@@ -29,8 +29,9 @@ lean/
     │   ├── ReadModel.lean     Row（業務事実だけ）
     │   ├── View.lean          閲覧の共有語彙（View→Row の壁・View→ドメイン語彙の壁）
     │   ├── Projection.lean    書き込み → 読み取りの射影（Entity を読める唯一の読み側）
+    │   ├── Port/<Port>/<操作>.lean  外部能力の Port（固定名 Request / Outcome — 要求と観測の語彙だけ。Domain が所有するなら Domain/Port/）
     │   └── UseCase/           1 UseCase 1 ディレクトリ（validate / execute は固定名）
-    │       ├── <更新系>UseCase/   Command.lean + UseCase.lean
+    │       ├── <更新系>UseCase/   Command.lean + UseCase.lean（Port を使うなら request / mkRequest / apply も固定名）
     │       └── <参照系>UseCase/   ReadModel.lean + QueryService.lean（固定名 query）+ UseCase.lean
     ├── Runtime/               実行系（非規範 — 表現の仮置き・境界）
     │   ├── Ids.lean           同一性の仮置き + 泉の具体化

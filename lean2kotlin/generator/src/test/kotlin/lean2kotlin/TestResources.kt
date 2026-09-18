@@ -7,3 +7,5 @@ import kotlin.io.path.readText
 val testResources: Path = Path.of("src/test/resources")
 
 fun sproutIr(): Ir = Ir.parse(testResources.resolve("sprout/sprout-ir.json").readText())
+
+fun lobbyIr(): Ir = Ir.parse(testResources.resolve("lobby/lobby-ir.json").readText())

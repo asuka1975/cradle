@@ -34,6 +34,7 @@ gradlePlugin {
 
 tasks.test {
 	useJUnitPlatform()
-	// GenerationTest が突き合わせる生成物のスナップショット — 変われば再実行する
+	// GenerationTest / LobbyGenerationTest が突き合わせる生成物のスナップショット — 変われば再実行する
 	inputs.dir("../scaffold-check/src/generated").withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir("../scaffold-check/port/src/generated").withPathSensitivity(PathSensitivity.RELATIVE)
 }

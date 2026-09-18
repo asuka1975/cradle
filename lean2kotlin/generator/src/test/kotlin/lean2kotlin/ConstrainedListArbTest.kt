@@ -18,7 +18,7 @@ class ConstrainedListArbTest {
 	private val k = Kotlinize(ir)
 
 	private fun generate(out: Path) {
-		EmitTests(ir, k, Output(out, "mini", "\t"), emptyList()) {}.emitAll()
+		EmitTests(ir, k, Output(out, "mini", "\t"), Output(out.resolve("adapter"), "mini", "\t"), emptyList()) {}.emitAll()
 	}
 
 	@Test

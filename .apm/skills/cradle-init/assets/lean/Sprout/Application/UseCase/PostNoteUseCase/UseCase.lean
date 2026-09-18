@@ -80,15 +80,15 @@ theorem execute_ok_shape (actor : ActorContext UserId) (fountain : Fountain G No
   | error e => rw [hv] at h; cases h
   | ok free => rw [hv] at h; injection h with h; exact ⟨free, h.symm⟩
 
-/-- メモは末尾に足される（書かれた順 = コレクションの並び）。 -/
-@[contract] theorem act_appends (actor : ActorContext UserId) (fountain : Fountain G NoteId)
+/-- メモは末尾に足される（書かれた順 = コレクションの並び）。@[contract] は付けない — execute_ok のオラクル（作用後の状態）に含まれる。 -/
+theorem act_appends (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
     (hfresh : fountain.Fresh before.noteIds before.notes.ids) (free : FreeTitle c before) :
     (act actor fountain c before hfresh free).notes.notes =
       before.notes.notes ++ [Note.post (fountain.valueAt before.noteIds) actor.user c.title] := rfl
 
-/-- 泉を 1 つ消費する（採番の消費は契約 — golden が守る）。 -/
-@[contract] theorem act_consumes_fountain (actor : ActorContext UserId) (fountain : Fountain G NoteId)
+/-- 泉を 1 つ消費する（採番の消費は golden と execute_ok の泉の残高が守る）。@[contract] は付けない — execute_ok の系。 -/
+theorem act_consumes_fountain (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
     (hfresh : fountain.Fresh before.noteIds before.notes.ids) (free : FreeTitle c before) :
     (act actor fountain c before hfresh free).noteIds = fountain.next before.noteIds := rfl

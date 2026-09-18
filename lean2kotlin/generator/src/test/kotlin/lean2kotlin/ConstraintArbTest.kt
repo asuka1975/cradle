@@ -16,7 +16,7 @@ class ConstraintArbTest {
 	private val ir = Ir.parse(testResources.resolve("unique-name/ir.json").readText())
 
 	private fun generate(out: Path) {
-		EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), emptyList()) {}.emitAll()
+		EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), Output(out.resolve("adapter"), "mini", "\t"), emptyList()) {}.emitAll()
 	}
 
 	@Test

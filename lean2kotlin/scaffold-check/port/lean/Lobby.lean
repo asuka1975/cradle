@@ -1,0 +1,17 @@
+-- ライブラリルート。層の壁は Cradle の骨格と同じ。
+import Lobby.Prelude
+import Lobby.Domain.Annotations
+import Lobby.Domain.ValueObject
+import Lobby.Domain.Error
+import Lobby.Domain.Entity.Visit
+import Lobby.Domain.DomainService
+import Lobby.Domain.DomainService.Tax
+import Lobby.Domain.DomainService.Pricing
+import Lobby.Application.ActorContext
+import Lobby.Application.RepositoryState
+import Lobby.Application.Port.OrganizationDirectory.FindMember
+import Lobby.Application.UseCase.BookVisitUseCase.Command
+import Lobby.Application.UseCase.BookVisitUseCase.UseCase
+import Lobby.Application.UseCase.LeaveUseCase.Command
+import Lobby.Application.UseCase.LeaveUseCase.UseCase
+import Lobby.Runtime.Ids
