@@ -62,7 +62,7 @@ backend フェーズの生成器 lean2kotlin はこのリポジトリの `lean2k
 | `cradle doctor` | ハーネスの配線、道具の有無と版、lean2kotlin の解決可否 |
 | `cradle doctor --local` | local スタックのコンテナの鮮度（Created と HEAD） |
 | `contract-check`（api-contract スキル） | Lean のコマンド・画面と openapi の操作が 1 対 1 か |
-| `flows-from-golden`（e2e-parity スキル） | golden から E2E の台本 |
+| `flows-from-golden`（e2e-parity スキル） | golden から E2E の台本。`--check` で台本が golden の流れに対応しているか |
 
 すべて `node <skills>/cradle/scripts/cradle.mjs <command>`（`<skills>` は Claude Code `.claude/skills` / Codex `.agents/skills`）。
 

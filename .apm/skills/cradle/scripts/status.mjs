@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -123,10 +123,11 @@ phase("インフラ実装", hasInfra ? "着手済" : "未着手",
 // 8. E2E
 if (!existsSync(R(cfg.e2e.dir))) phase("E2E（Lean × REST の一致）", "未着手", [], "インフラ実装（local スタック）の後に e2e-parity スキルで締める");
 else {
-  const fromGolden = existsSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`)) ? (JSON.parse(readFileSync(R(`${cfg.e2e.dir}/scenarios/from-golden.json`), "utf8")).flows ?? []).length : 0;
-  const scenDir = R(`${cfg.e2e.dir}/scenarios`);
-  const others = existsSync(scenDir) ? walk(scenDir, { ext: [".json"] }).filter(f => !f.endsWith("from-golden.json")).length : 0;
-  phase("E2E（Lean × REST の一致）", "着手済", [`golden 由来の台本 ${fromGolden} 本`, `その他の台本 ${others} 本`], fromGolden ? "pnpm test で差分ゼロを確かめる" : "flows-from-golden で台本を起こす");
+  // 台本は golden の流れに対応していて初めて数える（手書きでも、手の列が golden と同じなら対応）
+  const c = e2eCoverage(cfg);
+  phase("E2E（Lean × REST の一致）", "着手済", [`golden の流れ ${c.golden.length} 本 / 台本が対応 ${c.covered.length} 本（${c.place}）`, `台本 ${c.scripts} 本`],
+    c.golden.length === 0 ? "モックアップで流れを確かめ golden を採る"
+      : c.covered.length < c.golden.length ? "flows-from-golden --check で対応の無い流れを起こす（台本は golden から）" : "pnpm test で差分ゼロを確かめる");
 }
 
 // 9. 本番投入（E2E 合格の後）

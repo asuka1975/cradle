@@ -72,7 +72,7 @@ jobs:
           printf 'name: smoke\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm:\n    - %s\n' "$GITHUB_WORKSPACE" > apm.yml
           apm install
           node .claude/skills/cradle-init/scripts/init.mjs --project Demo
-          apm install   # 骨格の project.instructions.md を rules に写す（無いと unslop が stale-path で落ちる）
+          apm install   # 骨格が敷いた project.instructions.md（固有の事実）を rules に写す
       - name: lake build
         run: cd "$RUNNER_TEMP/smoke/lean" && lake build
       - name: cradle checks

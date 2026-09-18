@@ -19,6 +19,7 @@ APMでCodex向けの規約・スキルを配り、その上に追加の統合を
 2. ルートに `cradle.json`（cradle スキルの `references/cradle-json.md`）。既定と違う場所（生成ディレクトリ・ポート・exe 名）だけ書く。
 3. `cradle status` / `cradle lean-check` / `cradle unslop --all` を走らせ、出たものを直す。既存の golden には `<name>.request.json` を足す（`golden-check --manifest` で一度再生してから `--update` で作り直してもよい）。
 4. `documents/codestyle/` の汎用規約は Cradle の rules に置き換わる。プロジェクト固有の決めごとだけを残す。
+5. 手書きの E2E の台本があるなら、e2e-parity スキルの `flows-from-golden --check` に通す。
 
 ## Codex で違うこと
 
