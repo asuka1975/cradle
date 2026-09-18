@@ -5,6 +5,7 @@
 -/
 import Sprout.Runtime.Command
 import Sprout.Runtime.Observation
+import Sprout.Runtime.Environment
 import Sprout.Application.UseCase.PostNoteUseCase.UseCase
 import Sprout.Application.UseCase.CloseNoteUseCase.UseCase
 
@@ -67,10 +68,77 @@ def Snapshot.apply (today : Date) (actor : Actor) (cmd : Command) (s : Snapshot)
     (h : s.check = true) : Except DomainError Snapshot :=
   Snapshot.applyCommand today actor cmd (s.opened actor) (Snapshot.opened_check actor s h)
 
+/-! ### external — 外部能力と内部入力を扱う経路（環境つき）。既存の `apply` はそのまま -/
+
+/-- external の入力: 利用者の操作（名義つき）か内部入力。fault はモデルにある障害契約（def 名）の指名で、
+    任意の事後状態を外から渡す口ではない。 -/
+inductive Input where
+  | command (actor : Actor) (c : Command) (fault : Option String)
+  | observation (o : Observation) (fault : Option String)
+deriving Repr
+
+/-- external の 1 手の結果。refused は状態不変（`domainError` の意味は旧経路と同じ）。
+    fault は指名した障害契約が言う状態と、そこまでに消費した外部呼び出しの数。harness は script の不一致・不足など
+    ハーネスの失敗で、業務の拒否にも外部の観測にも化けない。 -/
+inductive StepResult where
+  | applied (s : Snapshot) (env : Environment) (used : List Interaction)
+  | refused (e : DomainError) (env : Environment) (used : List Interaction)
+  | fault (s : Snapshot) (env : Environment) (used : List Interaction) (contract : String) (portCalls : Nat)
+  | harness (message : String)
+deriving Repr
+
+/-- Port を使わない腕の配線: execute の結果をそのまま。障害の指名は成功経路でだけ効く（外部は呼ばない）。 -/
+def direct (env : Environment) (run : Except DomainError Snapshot) (fault : Option (String × Snapshot)) : StepResult :=
+  match run with
+  | .error e => .refused e env []
+  | .ok s' =>
+    match fault with
+    | some (name, after) => .fault after env [] name 0
+    | none => .applied s' env []
+
+/-- Port を使う腕の固定配線: 要求を評価 → 通ったときだけ script の次と照合して観測を調達 → execute。
+    要求が拒否されれば外部を呼ばず cursor は不変。観測後の拒否は cursor 消費済み。
+    障害の指名: 外部を呼ぶ前の中断（portCalls 0）は script を消費せず、応答を得た後の中断（1）は消費してから
+    障害契約の状態を返す。要求の不一致・script の不足・別の Port 操作はハーネスの失敗。 -/
+def viaPort {R O : Type} [BEq R] (env : Environment) (req : Except DomainError R)
+    (pick : Interaction → Option (R × O)) (run : O → Except DomainError Snapshot)
+    (fault : Option (String × Nat × (Option O → Snapshot))) : StepResult :=
+  match req with
+  | .error e => .refused e env []
+  | .ok r =>
+    match fault with
+    | some (name, 0, after) => .fault (after none) env [] name 0
+    | _ =>
+      match env.next with
+      | none => .harness "script exhausted: the model issued a request but the environment has no more interactions"
+      | some i =>
+        match pick i with
+        | none => .harness "wrong port or operation: the next interaction is for another port operation"
+        | some (expected, outcome) =>
+          if expected == r then
+            match fault with
+            | some (name, _, after) => .fault (after (some outcome)) env.consume [i] name 1
+            | none =>
+              match run outcome with
+              | .ok s' => .applied s' env.consume [i]
+              | .error e => .refused e env.consume [i]
+          else .harness "request mismatch: the model's request differs from the expected request in the environment"
+
 /-- 内部入力のルーティング: 名義が無いので `opened` は通さない。内部入力を持つ UseCase を足す手順は
     コマンドと同じ（Observation.lean → `Runtime/Observation.lean` に構成子 → ここに腕 → `Json.lean` にワイヤ）。 -/
-def Snapshot.applyObservation (_today : Date) (obs : Observation) (_s : Snapshot)
-    (_h : _s.check = true) : Except DomainError Snapshot :=
+def Snapshot.applyObservation (_today : Date) (obs : Observation) (_s : Snapshot) (_env : Environment)
+    (_h : _s.check = true) : StepResult :=
   nomatch obs
+
+/-- external のルーティング: 利用者の操作は開く → 腕へ、内部入力は腕へ。Port を使う腕は `viaPort`、
+    使わない腕は `direct`。障害契約の指名は腕ごとの表（この骨格には無い）。 -/
+def Snapshot.applyExternal (today : Date) (input : Input) (s : Snapshot) (env : Environment)
+    (h : s.check = true) : StepResult :=
+  match input with
+  | .command actor cmd fault =>
+    match fault with
+    | some name => .harness s!"unknown fault contract: {name}"
+    | none => direct env (Snapshot.apply today actor cmd s h) none
+  | .observation obs _ => Snapshot.applyObservation today obs s env h
 
 end Sprout.Runtime

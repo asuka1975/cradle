@@ -25,6 +25,10 @@ def scenarioByName : String → Option Snapshot
   | "basic" => some Scenario.basic
   | _       => none
 
+/-- 名前付きの環境（外部能力の script）。Port を持たない間は無い。 -/
+def environmentByName : String → Option Environment
+  | _ => none
+
 -- 初期状態は検査を通る
 #guard Scenario.basic.check
 
@@ -42,5 +46,13 @@ def scenarioByName : String → Option Snapshot
 #guard match Snapshot.apply Scenario.today ⟨⟨alice⟩⟩ (.closeNote ⟨⟨0⟩⟩) Scenario.basic (by decide) with
   | .ok s => (views Scenario.today s (some alice)).notes == some []
   | .error _ => false
+
+-- external の経路は同じ手で同じ結果になり、Port を使わない手は環境を消費しない
+#guard match Snapshot.applyExternal Scenario.today (.command ⟨⟨alice⟩⟩ (.closeNote ⟨⟨0⟩⟩) none) Scenario.basic Environment.empty (by decide) with
+  | .applied s env [] => (views Scenario.today s (some alice)).notes == some [] && env == Environment.empty
+  | _ => false
+#guard match Snapshot.applyExternal Scenario.today (.command ⟨⟨bob⟩⟩ (.closeNote ⟨⟨0⟩⟩) none) Scenario.basic Environment.empty (by decide) with
+  | .refused .notAuthor env [] => env == Environment.empty
+  | _ => false
 
 end Sprout.Runtime
