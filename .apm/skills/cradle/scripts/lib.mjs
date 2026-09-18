@@ -376,6 +376,17 @@ function canonical(v) {
   return v;
 }
 
+/** プロダクトの一言: event-timeline.md 冒頭の `プロダクト:` 行。value は行が無ければ null、placeholder は骨格の置き場（`（一言で）`）か空のまま。 */
+export const PRODUCT_PLACEHOLDER = "（一言で）";
+export function productLine(cfg) {
+  const file = join(cfg.root, cfg.documents.ddd, "event-timeline.md");
+  if (!existsSync(file)) return { value: null, placeholder: false };
+  const m = readFileSync(file, "utf8").match(/^プロダクト[:：]\s*(.*)$/m);
+  if (!m) return { value: null, placeholder: false };
+  const value = m[1].trim();
+  return { value, placeholder: !value || value === PRODUCT_PLACEHOLDER };
+}
+
 /** 用語集の英語候補 → 用語。`/`・`、`・`,` で割り、空白を除いて小文字化した名前で引く。 */
 export function glossaryEnglish(cfg) {
   const map = new Map();

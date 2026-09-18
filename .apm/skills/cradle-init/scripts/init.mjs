@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // init — 新しいプロダクトに Cradle の骨格を敷く。
-//   init --project <Root> [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
+//   init --project <Root> [--domain "<一言>"] [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
+//   --domain "<一言>" はプロダクトの一言（documents/ddd/event-timeline.md の冒頭に書く。無ければ置き場だけ敷く）
 //   --only <prefix> は、そのパスで始まるファイルだけを対象にする（例: --only lean/mockup --force で骨格由来のモックアップだけ更新）
 //   --backend <package> を付けると backend/ の骨格（ktlint 独自ルール・.editorconfig・gradle.properties）も敷く（例: com.example.notes）
 //   <Root> は Lean のルート名前空間（例: MonoWa）。lake の exe 名は小文字にしたもの。
@@ -15,10 +16,12 @@ const opt = (k, d) => { const i = args.indexOf(`--${k}`); return i >= 0 ? (args[
 const project = opt("project");
 const target = opt("dir", process.env.CRADLE_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
 const backendPkg = opt("backend", null);
+const domain = opt("domain", null);
 const dryRun = args.includes("--dry-run");
 const force = args.includes("--force");
 const only = opt("only", null);
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
+if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
 const lower = project.toLowerCase();
 const assets = join(import.meta.dirname, "..", "assets");
 
@@ -36,7 +39,8 @@ function put(rel, content, { exec = false } = {}) {
   } catch (e) { failed.push(`${rel}（${e.code ?? e.message}）`); }
 }
 function rename(text) {
-  return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower);
+  return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower)
+    .replace(/__DOMAIN__/g, () => domain === null ? "（一言で）" : String(domain).trim());
 }
 function walk(dir) {
   const out = [];
@@ -83,5 +87,6 @@ for (const w of written) console.log(`  + ${w}`);
 for (const s of skipped) console.log(`  = ${s}（既存のため据え置き）`);
 for (const f of failed) console.log(`  ! ${f}`);
 if (failed.length) console.log(`\n${failed.length} 件を書けなかった。書ける権限で同じコマンドをもう一度実行すると、敷いた分は据え置いて残りだけ敷く。`);
+if (domain === null && written.includes("documents/ddd/event-timeline.md")) console.log(`\nプロダクトの一言は書いていない（documents/ddd/event-timeline.md 冒頭の「プロダクト:」行）。ddd.mjs start --domain "<一言>" が書く。`);
 console.log(`\n次: apm install（固有の事実を rules に写す。Codex は apm compile --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める`);
 process.exit(failed.length ? 1 : 0);

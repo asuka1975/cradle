@@ -8,7 +8,7 @@ APMでCodex向けの規約・スキルを配り、その上に追加の統合を
 ## 新規プロダクト
 
 1. `apm init` → `apm.yml` の `targets` に `claude` か `codex`（両方でもよい）、`apm install asuka1975/cradle`。Codex はさらに `apm compile --single-agents`（規約を 1 枚の AGENTS.md にする）。
-2. cradle-init スキル（Claude Code `/cradle-init`、Codex `$cradle-init`）で `--project <Root>`。`lean/` に動く最小ドメインが入る。
+2. cradle-init スキル（Claude Code `/cradle-init`、Codex `$cradle-init`）で `--project <Root> --domain "<一言>"`。`lean/` に動く最小ドメインが入り、プロダクトの一言は `documents/ddd/event-timeline.md` の冒頭に書かれる（探索役の最初の問いの出発点）。
    `.apm/instructions/project.instructions.md` にこのプロジェクト固有の事実を書き、`apm install` で rules に写す（Codex は `apm compile --single-agents` で AGENTS.md に）。`cd lean && lake build`。
 3. cradle-status スキルで現在地を確かめ、ddd スキルで探索を始める。最小ドメインは最初の形式化で置き換える。
 4. backend を作る段階で lean2kotlin を導入する（`backend-implement` スキル。Gradle の `dev.lean2kotlin` plugin と `lean2kotlin { … }` の設定）。生成器の置き場と配線は同スキルの `references/gradle-wiring.md`。`cradle doctor` で解決できることを先に確かめる。

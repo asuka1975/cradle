@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // ddd — 探索セッションの中継を機械にする。
-//   ddd.mjs start                     5 ファイルの存在確認 + .session 印（hook が documents/ddd の編集を許す。lean/ の sha256 も記録する）+ 用語集に無い Lean の名前を documents/ddd/naming.md に書く
+//   ddd.mjs start [--domain "<一言>"]  5 ファイルの存在確認 + .session 印（hook が documents/ddd の編集を許す。lean/ の sha256 も記録する）+ event-timeline.md 冒頭のプロダクトの一言を出す（置き場のままなら止まる。--domain で書く）+ 用語集に無い Lean の名前を documents/ddd/naming.md に書く
 //   ddd.mjs questions @file|-         explorer の [QUESTIONS] JSON → documents/ddd/questions.md（改変せず写す）
 //   ddd.mjs answers                   questions.md の回答欄 → 「質問 → 回答」（explorer に返す文面）
 //   ddd.mjs end [--abandon]           questions.md・naming.md を消し、ddd-clean-check --build に .session（開始時点の lean/）を渡す。通れば .session も消す（answers を中継した後でだけ通る。問いを捨てるなら --abandon）
-//   ddd.mjs status                    出来事数・open の HS/UX/MQ・用語数・命名の確認待ち
+//   ddd.mjs status                    プロダクトの一言・出来事数・open の HS/UX/MQ・用語数・命名の確認待ち
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, git, rel } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -19,6 +19,7 @@ const FILES = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux
 const qfile = join(ddd, "questions.md");
 const nfile = join(ddd, "naming.md");
 const marker = join(ddd, ".session");
+const timeline = join(ddd, "event-timeline.md");
 // .session には開始時点の lean/ の sha256、問いの版（sha256）、その版の回答を answers で中継したかを記録する。
 // end は lean/ を開始時点と比べ（HEAD と比べると未コミットの形式化が差分に出る）、explorer が回答を受け取らないまま片付けるのを止める。
 const sha = (t) => createHash("sha256").update(t).digest("hex");
@@ -39,6 +40,19 @@ switch (cmd) {
     if (existsSync(marker)) fail(`前のセッション（${cfg.documents.ddd}/.session）が end されていません。プローブを片付けて ddd.mjs end を先に実行する。前の探索は終わっていて lean/ の変更が形式化（フェーズ 2）なら、${cfg.documents.ddd}/.session を消してから start する`);
     const missing = FILES.filter(f => !existsSync(join(ddd, f)));
     if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（cradle-init スキルで骨格を作る）`);
+    // プロダクトの一言（event-timeline.md 冒頭の `プロダクト:` 行）は探索役の最初の問いの出発点。無いまま始めない
+    if (opts.domain !== undefined) {
+      if (opts.domain === true || !String(opts.domain).trim()) fail("--domain には一言（空でない文字列）が要ります");
+      const text = readFileSync(timeline, "utf8");
+      const line = `プロダクト: ${String(opts.domain).trim()}`;
+      // 置換は関数で渡す（一言に $ が含まれても置換パターンとして読まれない）
+      const replaced = /^プロダクト[:：].*$/m.test(text) ? text.replace(/^プロダクト[:：].*$/m, () => line)
+        : text.replace(/^(# [^\n]*\n)/, (h) => `${h}\n${line}\n`);
+      writeFileSync(timeline, replaced === text ? `${line}\n\n${text}` : replaced);
+    }
+    const product = productLine(cfg);
+    if (product.value === null || product.placeholder) fail(`プロダクトの一言が無い（${cfg.documents.ddd}/event-timeline.md 冒頭の「プロダクト:」行${product.value === null ? "が無い" : `が ${PRODUCT_PLACEHOLDER} のまま`}）。ddd.mjs start --domain "<一言>" で書くか、cradle-init スキルの --domain で敷く`);
+    console.log(`プロダクト: ${product.value}`);
     writeSession({ theme: opts.theme ?? null, scaffold, lean: leanSnapshot(cfg) });
     console.log(`セッション開始（${cfg.documents.ddd}/.session）。終わりに ddd.mjs end を必ず実行する。`);
     let uncommitted = "";
@@ -121,6 +135,7 @@ switch (cmd) {
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");
     const terms = (ul.match(/^\|(?!\s*用語)(?!---)[^|]+\|/gm) ?? []).length;
     console.log(JSON.stringify({
+      product: productLine(cfg).value,
       events, hotspots: { open: countRows(hs, "HS-\\d+", "open"), resolved: countRows(hs, "HS-\\d+", "resolved") },
       ux: { open: countRows(ux, "UX-\\d+", "open") }, mq: { open: countRows(mq, "MQ-\\d+", "open") }, terms,
       session: existsSync(marker), questionsPending: existsSync(qfile), namingPending: scaffold ? 0 : unlistedNames().length, scaffoldSample: scaffold,

@@ -27,7 +27,7 @@ description: Use to run or continue domain exploration with the product owner as
 
 ## フルループ
 
-1. **開始**: `ddd.mjs start`（5 ファイルの存在確認と `.session` 印。印がある間だけ hook が `documents/ddd/` の編集を許す。用語集に無いモデルの名前があれば `documents/ddd/naming.md` に書き、件数を出す）。
+1. **開始**: `ddd.mjs start`（5 ファイルの存在確認と `.session` 印。印がある間だけ hook が `documents/ddd/` の編集を許す。`event-timeline.md` 冒頭のプロダクトの一言を出力し、置き場のままなら止まる — `start --domain "<一言>"` で書く。用語集に無いモデルの名前があれば `documents/ddd/naming.md` に書き、件数を出す）。
 2. **セッション起動**: `ddd-domain-explorer` を起動する。プロンプトに書くのは「探索セッションを 1 回実施する」「その時点で聞けるものは 1 巡に全部載せる」「読むのは documents/ddd/ だけ（lean/ は読まない）」「テーマ: …（指定があれば）」だけ。現状の要約は渡さない（自分で読む）。
    - Claude Code: Agent ツールで **フォアグラウンド**（`run_in_background: false`）。返事は SendMessage。
    - Codex: `spawn_agent`（`agent_type: "ddd-domain-explorer"`）。`wait_agent` を最終状態になるまで繰り返す。タイムアウト（空の status）は待ち直すだけで、`send_input` で「完了して報告を返せ」と急かさない（急かすと問いが捨てられる）。返事は `send_input`。

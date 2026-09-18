@@ -9,7 +9,7 @@ applyTo: "documents/**"
 
 | 場所 | 中身 | 書ける者 |
 |---|---|---|
-| `documents/ddd/event-timeline.md` `hotspots.md` `ubiquitous-language.md` | 正式ドキュメント（ドメインの事実の正本） | `ddd-domain-explorer` だけ（/ddd のセッション中 — hook が `.session` 印の無い編集を止める） |
+| `documents/ddd/event-timeline.md` `hotspots.md` `ubiquitous-language.md` | 正式ドキュメント（ドメインの事実の正本） | `ddd-domain-explorer` だけ（/ddd のセッション中 — hook が `.session` 印の無い編集を止める）。冒頭の `プロダクト:` 行だけは骨格の敷設として cradle-init の `--domain` / `ddd.mjs start --domain` が書く |
 | `documents/ddd/ux-review.md` | 利用者視点の仮説（UX-xxx） | 起票は `ddd-ux-reviewer`、状態・結果列は explorer |
 | `documents/ddd/model-review.md` | 形式化で詰まった問い（MQ-xxx） | 起票は `lean-domain-modeler`、状態・結果列は explorer |
 | `documents/ddd/questions.md` | 探索セッションの問いかけ（一時ファイル） | メインエージェント。セッション終了時に必ず消す |

@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -26,7 +26,8 @@ else {
   const tl = read(`${dddDir}/event-timeline.md`) ?? "";
   const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
   const openQ = existsSync(R(`${dddDir}/questions.md`));
-  phase("探索 (DDD)", events ? "進行中" : "着手済", [`出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${files.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
+  const product = productLine(cfg);
+  phase("探索 (DDD)", events ? "進行中" : "着手済", [product.value !== null && !product.placeholder ? `プロダクト: ${product.value}` : `プロダクトの一言が無い（${dddDir}/event-timeline.md 冒頭の「プロダクト:」行。ddd.mjs start --domain で書く）`, `出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${files.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
     mqOpen ? `ddd スキルで open の MQ ${mqOpen} 件を先に検証する（形式化を止めている問い）` : hsOpen ? `ddd スキルで open の HS ${hsOpen} 件を掘る` : "次の探索テーマを決める、または次フェーズへ");
 }
 

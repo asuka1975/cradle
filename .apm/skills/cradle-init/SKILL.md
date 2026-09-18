@@ -6,10 +6,11 @@ description: Use to start a new product on Cradle or to add the Cradle skeleton 
 # 骨格を敷く
 
 ```bash
-node <skills>/cradle-init/scripts/init.mjs --project <Root> [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
+node <skills>/cradle-init/scripts/init.mjs --project <Root> [--domain "<一言>"] [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
 ```
 
 `<skills>` は cradle-core 規則のとおり（Claude Code `.claude/skills` / Codex `.agents/skills`）。`<Root>` は Lean のルート名前空間（大文字始まり。例: `MonoWa`）。lake の exe 名はその小文字。
+`--domain "<一言>"` はプロダクトの一言（ドメインの事実なので `documents/ddd/event-timeline.md` の冒頭 `プロダクト:` 行に書く。探索役の最初の問いの出発点になる）。
 
 敷くもの: `cradle.json`、`.apm/instructions/project.instructions.md`（このプロジェクト固有の事実。Claude Code では `apm install` が `.claude/rules/project.md` に、Codex では `apm compile --single-agents` が AGENTS.md に写す）、`.gitignore`（追記）、
 `.github/workflows/cradle.yml`（lake build と cradle の検査を CI で回す）、`documents/ddd/`（5 ファイル）、`documents/ai-notes/README.md`、`documents/infra-design/`（README + 01〜04）、`documents/codebase/openapi.yaml`、
@@ -20,7 +21,7 @@ node <skills>/cradle-init/scripts/init.mjs --project <Root> [--dir <path>] [--ba
 
 ## 敷いたあと
 
-1. `.apm/instructions/project.instructions.md` の「ドメイン」を埋め、`apm install` で rules に写す（Codex は `apm compile --single-agents` で AGENTS.md に。`apm compile` は rules を書かない）。
+1. プロダクトの一言は `documents/ddd/event-timeline.md` の冒頭 `プロダクト:` 行（`--domain` が書く。置き場のまま（`（一言で）`）なら `ddd.mjs start --domain "<一言>"` が書く）。`.apm/instructions/project.instructions.md` の残りの固有の事実は `apm install` で rules に写す（Codex は `apm compile --single-agents` で AGENTS.md に。`apm compile` は rules を書かない）。
 2. `cd lean && lake build` → `cradle status`（Lean が「ビルド済」になる）。`lean/README.md` のドメインの節を書く。
 3. ddd スキルで探索を始める。最小ドメイン（Note）は探索の根拠にならず（`cradle status` が「骨格のサンプル」と示す）、形式化の最初のセッションで丸ごと置き換える（層の形は残す）。
 4. frontend / backend / infra / e2e は各フェーズのスキル（frontend / backend-implement / infra-implement / e2e-parity）が順に作る（順序を飛ばさない）。
