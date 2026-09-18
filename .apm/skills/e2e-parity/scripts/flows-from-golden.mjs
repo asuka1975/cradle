@@ -4,8 +4,8 @@
 //   flows-from-golden --check [<台本の置き場>]
 // 台本は「誰が・何を・結果は通った／断られた・そのとき画面（views）に何が見えたか」の列。
 // 画面の操作（どのボタン・どの欄）への写しは e2e 側の仕事で、ここでは決めない。
-// --check は golden の各流れの手の列（command・actor・outcome）が、置き場の台本（from-golden.json と同じ steps の形）に同じ順であるかを見る。
-// 置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
+// --check は golden の各流れの手の列（command・actor・outcome。台本に payload があればそれも）が、置き場の台本（from-golden.json と同じ steps の形）に同じ順であるかを見る。
+// 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { loadConfig, parseArgs, fail, e2eCoverage, commandNameOf, outcomeOf } from "../../cradle/scripts/lib.mjs";

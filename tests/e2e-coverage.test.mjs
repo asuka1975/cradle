@@ -61,6 +61,31 @@ test("全部の流れに台本が対応していれば 0 で終わる。from-gol
   assert.match(r.stdout, /golden の流れ 2 本のうち台本が対応しているのは 2 本/);
 });
 
+test("手の列が同じで payload だけ違う流れ 2 本に台本 1 本なら、対応は 1 本と数える", (t) => {
+  const { run, put } = fixture(t);
+  put("lean/golden/twin-flow.json", flow([applied(alice, { postNote: { title: "掃除" } }), refused(bob, { closeNote: { note: { id: 0 } } })]));
+  put("e2e/scenarios/basic.json", basicScript);
+  const j = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: j.covered, uncovered: j.uncovered, scripts: j.scripts }, { covered: ["basic"], uncovered: ["other", "twin"], scripts: 1 });
+});
+
+test("payload まで書いた台本はその payload の流れにだけ対応し、手の列だけの台本は残りの流れに当たる", (t) => {
+  const { run, put } = fixture(t);
+  put("lean/golden/twin-flow.json", flow([applied(alice, { postNote: { title: "掃除" } }), refused(bob, { closeNote: { note: { id: 0 } } })]));
+  const withPayload = (title) => ({ steps: [{ ...step(1, alice, "postNote", "applied"), payload: { title } }, { ...step(2, bob, "closeNote", "refused"), payload: { note: { id: 0 } } }] });
+  put("e2e/scenarios/twin.json", withPayload("掃除"));
+  const only = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: only.covered, uncovered: only.uncovered }, { covered: ["twin"], uncovered: ["basic", "other"] });
+  // 手の列だけの台本を足すと、payload つきの台本が先に twin に当たり、手の列だけの台本が basic に回る（置き場の並びに依らない）
+  put("e2e/scenarios/a-hand.json", basicScript);
+  const both = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: both.covered, uncovered: both.uncovered, scripts: both.scripts }, { covered: ["basic", "twin"], uncovered: ["other"], scripts: 2 });
+  // payload が golden と違う台本は対応しない
+  put("e2e/scenarios/twin.json", withPayload("洗濯"));
+  const wrong = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
+  assert.deepEqual({ covered: wrong.covered, uncovered: wrong.uncovered }, { covered: ["basic"], uncovered: ["other", "twin"] });
+});
+
 test("手の順・結果・当事者が違う台本は対応しない。steps の形でないファイルは台本と数えない", (t) => {
   const { run, put } = fixture(t);
   put("e2e/scenarios/reordered.json", { steps: [step(1, bob, "closeNote", "refused"), step(2, alice, "postNote", "applied")] });
