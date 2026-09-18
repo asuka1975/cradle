@@ -85,3 +85,14 @@ test("Runtime/Observation.lean の構成子は Json.lean と applyObservation �
   const missingUnion = fixture(t, noUnion);
   assert.ok(missingUnion.some(f => f.rule === "wiring" && /Runtime\/Observation.lean/.test(f.message)), JSON.stringify(missingUnion));
 });
+
+test("Observation.lean が名義を運ぶ形と、Runtime/Command.lean に内部入力を混ぜる形は error", (t) => {
+  const findings = fixture(t, {
+    ...wellFormed,
+    "Application/UseCase/ConfirmUseCase/Observation.lean": "structure Observation where\n  attempt : Nat\n  by : ActorContext UserId\n",
+    "Runtime/Command.lean": runtime["Runtime/Command.lean"].replace("deriving Repr", "  | confirm (o : ConfirmUseCase.Observation)\nderiving Repr"),
+  });
+  const messages = findings.map(f => f.message);
+  assert.ok(messages.some(m => /名義（ActorContext）を運んでいる/.test(m)), messages.join(" / "));
+  assert.ok(messages.some(m => /構成子 confirm が内部入力（Observation）を運んでいる/.test(m)), messages.join(" / "));
+});

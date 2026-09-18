@@ -11,6 +11,11 @@ info:
     **名義はリクエストに現れない。** 「誰として操作しているか」は `Authorization` ヘッダのトークンだけが決める。
     「今日」もリクエストからは受け取らず、サーバの時計を使う。
 
+    ## 操作の分類
+
+    GET 以外の操作は `x-cradle-kind` と `x-cradle-model` を宣言する。`command` は利用者の操作（`x-cradle-model: __PROJECT__.Runtime.Command.<構成子>`、構成子と 1 対 1）、
+    `observation` は提供元の通知の受信（`x-cradle-model: __PROJECT__.Runtime.Observation.<構成子>`。名義は無い）。
+
     ## エラー契約
 
     本文は全経路で `{"code","message"}`（`Error`）。画面が分岐に使うのは `code` だけ。

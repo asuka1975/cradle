@@ -57,34 +57,9 @@ abstract class ConfirmPaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 未確定（送れる状態・通知待ち・結果不明）なら、その通知で確定する — 順序が逆でも遅れて届いても同じ。 */
+	/** 送った後で未確定（印つき・通知待ち・結果不明）なら、その通知で確定する — 順序が逆でも遅れて届いても同じ。 */
 	@Test
 	fun `execute は定理 execute_settles を再現する(1)`() {
-		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val useCase = useCase(paymentAttemptRepository)
-		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Authorized)))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Authorized)),
-			paymentAttemptRepository.findAll().map { it.toFixture() })
-	}
-
-	/** 未確定（送れる状態・通知待ち・結果不明）なら、その通知で確定する — 順序が逆でも遅れて届いても同じ。 */
-	@Test
-	fun `execute は定理 execute_settles を再現する(2)`() {
-		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val useCase = useCase(paymentAttemptRepository)
-		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Authorized)))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
-			paymentAttemptRepository.findAll().map { it.toFixture() })
-	}
-
-	/** 未確定（送れる状態・通知待ち・結果不明）なら、その通知で確定する — 順序が逆でも遅れて届いても同じ。 */
-	@Test
-	fun `execute は定理 execute_settles を再現する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)))
 		val useCase = useCase(paymentAttemptRepository)
@@ -94,15 +69,53 @@ abstract class ConfirmPaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 未確定（送れる状態・通知待ち・結果不明）なら、その通知で確定する — 順序が逆でも遅れて届いても同じ。 */
+	/** まだ送っていない試みへの通知は受け付けない（無関係な結果）。 */
 	@Test
-	fun `execute は定理 execute_settles を再現する(4)`() {
+	fun `execute は定理 execute_unexpected を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val useCase = useCase(paymentAttemptRepository)
-		assertEquals(DomainResult.Ok(Unit),
+		assertEquals(DomainResult.Err(DomainError.UnexpectedResult),
+			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Authorized)))
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)),
+			paymentAttemptRepository.findAll().map { it.toFixture() })
+	}
+
+	/** まだ送っていない試みへの通知は受け付けない（無関係な結果）。 */
+	@Test
+	fun `execute は定理 execute_unexpected を再現する(2)`() {
+		val paymentAttemptRepository = paymentAttemptRepository()
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		val useCase = useCase(paymentAttemptRepository)
+		assertEquals(DomainResult.Err(DomainError.UnexpectedResult),
+			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Authorized)))
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+			paymentAttemptRepository.findAll().map { it.toFixture() })
+	}
+
+	/** まだ送っていない試みへの通知は受け付けない（無関係な結果）。 */
+	@Test
+	fun `execute は定理 execute_unexpected を再現する(3)`() {
+		val paymentAttemptRepository = paymentAttemptRepository()
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		val useCase = useCase(paymentAttemptRepository)
+		assertEquals(DomainResult.Err(DomainError.UnexpectedResult),
 			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Declined)))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Declined)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)),
+			paymentAttemptRepository.findAll().map { it.toFixture() })
+	}
+
+	/** まだ送っていない試みへの通知は受け付けない（無関係な結果）。 */
+	@Test
+	fun `execute は定理 execute_unexpected を再現する(4)`() {
+		val paymentAttemptRepository = paymentAttemptRepository()
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		val useCase = useCase(paymentAttemptRepository)
+		assertEquals(DomainResult.Err(DomainError.UnexpectedResult),
+			useCase.execute(o = ConfirmPaymentObservation(attempt = PaymentAttemptId(id = 91L), result = PaymentResult.Declined)))
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 

@@ -22,19 +22,25 @@ import org.junit.jupiter.api.Test
  * 環境の技術的障害(DB 例外など — モデルの語彙外の事象)で実行が中断されたとき、
  * 観測される状態が Lean の宣言(定義の値)と一致することを検査する。
  * 各ケースの入力は execute が**成功するはずの入力** — 具象側は「その実行の途中で
- * 技術的障害が起きる」仕掛けを施した実装を faultedUseCase で返す
+ * 技術的障害が起きる」仕掛けを施した実装を障害契約ごとのフック faulted<定義名> で返す
  * (注入手段は具象の自由 — 例: 採番衝突による PRIMARY KEY 違反)。
  * 表明: execute は業務の失敗語彙の外の例外で中断し(サイト側の不調は
- * 名指ししない — DomainResult に写さない)、Repository の観測は宣言された状態。
+ * 名指ししない — DomainResult に写さない)、Port の消費は宣言の位置(観測を引数に取らない定義 =
+ * 外部を呼ぶ前、取る定義 = 応答を得た後)、Repository の観測は宣言された状態。
  */
 abstract class DispatchPaymentUseCaseFaultContractTest {
 	protected abstract fun paymentAttemptRepository(): PaymentAttemptRepository
 	/** fixture の実体化(観測が一致する実装の値を返す)。 */
 	protected abstract fun paymentAttempt(fixture: PaymentAttemptFixture): PaymentAttempt
-	/** 「実行の途中で技術的障害が起きる」仕掛けを施した実装を返す。注入手段は
-	    具象の自由(渡された泉を差し替え・ラップしてよい)— ただし観測対象の
-	    Repository は渡されたものを配線すること。 */
-	protected abstract fun faultedUseCase(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase
+	/* 「実行の途中で技術的障害が起きる」仕掛けを施した実装を、障害契約(定義)ごとに返す。注入手段は
+	   具象の自由(渡された泉・Port を差し替え・ラップしてよい)— ただし観測対象の Repository は渡されたものを配線し、
+	   Port の呼び出しは渡されたモックへ届けること(消費位置を検査する)。 */
+	/** 応答を得た後、反映の commit 前に中断した: 外部の効果は取り消されず、印の残る状態から回復する。 — 外部の応答を得た後に中断する(Port は 1 回呼ばれる) */
+	protected abstract fun faultedAppliedNotCommitted(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase
+	/** 送る印を保存した後、送る前に中断した: 印（sending）は残る。送ったかどうかは印だけでは分からないので、照会で確かめてから同じ鍵で送り直す。外部は呼ばれていない。 — 外部を呼ぶ前に中断する(Port は呼ばれない) */
+	protected abstract fun faultedMarkedNotSent(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase
+	/** 外部では成立したかもしれないが応答を失った: 印（sending）は残り、未成立と断定しない — 照会で確かめる。外部は 1 回呼ばれた。 — 外部の応答を得た後に中断する(Port は 1 回呼ばれる) */
+	protected abstract fun faultedSentNoAnswer(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase
 
 	/** 応答を得た後、反映の commit 前に中断した: 外部の効果は取り消されず、印の残る状態から回復する。 */
 	@Test
@@ -42,17 +48,17 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -63,17 +69,17 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -84,17 +90,17 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -104,181 +110,181 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送る印を保存した後、送る前に中断した: 印は残り、同じ鍵で送り直せる。外部は呼ばれていない。 */
+	/** 送る印を保存した後、送る前に中断した: 印（sending）は残る。送ったかどうかは印だけでは分からないので、照会で確かめてから同じ鍵で送り直す。外部は呼ばれていない。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送る印を保存した後、送る前に中断した: 印は残り、同じ鍵で送り直せる。外部は呼ばれていない。 */
+	/** 送る印を保存した後、送る前に中断した: 印（sending）は残る。送ったかどうかは印だけでは分からないので、照会で確かめてから同じ鍵で送り直す。外部は呼ばれていない。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送る印を保存した後、送る前に中断した: 印は残り、同じ鍵で送り直せる。外部は呼ばれていない。 */
+	/** 送る印を保存した後、送る前に中断した: 印（sending）は残る。送ったかどうかは印だけでは分からないので、照会で確かめてから同じ鍵で送り直す。外部は呼ばれていない。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送る印を保存した後、送る前に中断した: 印は残り、同じ鍵で送り直せる。外部は呼ばれていない。 */
+	/** 送る印を保存した後、送る前に中断した: 印（sending）は残る。送ったかどうかは印だけでは分からないので、照会で確かめてから同じ鍵で送り直す。外部は呼ばれていない。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 外部では成立したかもしれないが応答を失った: 印は残り、未成立と断定しない。外部は 1 回呼ばれた。 */
+	/** 外部では成立したかもしれないが応答を失った: 印（sending）は残り、未成立と断定しない — 照会で確かめる。外部は 1 回呼ばれた。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 外部では成立したかもしれないが応答を失った: 印は残り、未成立と断定しない。外部は 1 回呼ばれた。 */
+	/** 外部では成立したかもしれないが応答を失った: 印（sending）は残り、未成立と断定しない — 照会で確かめる。外部は 1 回呼ばれた。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 外部では成立したかもしれないが応答を失った: 印は残り、未成立と断定しない。外部は 1 回呼ばれた。 */
+	/** 外部では成立したかもしれないが応答を失った: 印（sending）は残り、未成立と断定しない — 照会で確かめる。外部は 1 回呼ばれた。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 外部では成立したかもしれないが応答を失った: 印は残り、未成立と断定しない。外部は 1 回呼ばれた。 */
+	/** 外部では成立したかもしれないが応答を失った: 印（sending）は残り、未成立と断定しない — 照会で確かめる。外部は 1 回呼ばれた。 */
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
 		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
-		val useCase = faultedUseCase(paymentAttemptRepository, paymentGateway)
+		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(o = DispatchPaymentObservation(attempt = PaymentAttemptId(id = 91L)))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		paymentGateway.assertNoFailure()
+		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 }

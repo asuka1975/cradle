@@ -27,10 +27,11 @@ import org.junit.jupiter.api.Test
  * 環境の技術的障害(DB 例外など — モデルの語彙外の事象)で実行が中断されたとき、
  * 観測される状態が Lean の宣言(定義の値)と一致することを検査する。
  * 各ケースの入力は execute が**成功するはずの入力** — 具象側は「その実行の途中で
- * 技術的障害が起きる」仕掛けを施した実装を faultedUseCase で返す
+ * 技術的障害が起きる」仕掛けを施した実装を障害契約ごとのフック faulted<定義名> で返す
  * (注入手段は具象の自由 — 例: 採番衝突による PRIMARY KEY 違反)。
  * 表明: execute は業務の失敗語彙の外の例外で中断し(サイト側の不調は
- * 名指ししない — DomainResult に写さない)、Repository の観測は宣言された状態。
+ * 名指ししない — DomainResult に写さない)、Port の消費は宣言の位置(観測を引数に取らない定義 =
+ * 外部を呼ぶ前、取る定義 = 応答を得た後)、Repository の観測は宣言された状態。
  */
 abstract class BookVisitUseCaseFaultContractTest {
 	protected abstract fun visitRepository(): VisitRepository
@@ -38,10 +39,11 @@ abstract class BookVisitUseCaseFaultContractTest {
 	protected abstract fun visit(fixture: VisitFixture): Visit
 	/** fixture の実体化(観測が一致する実装の値を返す)。 */
 	protected abstract fun visitorName(fixture: VisitorNameFixture): VisitorName
-	/** 「実行の途中で技術的障害が起きる」仕掛けを施した実装を返す。注入手段は
-	    具象の自由(渡された泉を差し替え・ラップしてよい)— ただし観測対象の
-	    Repository は渡されたものを配線すること。 */
-	protected abstract fun faultedUseCase(visitRepository: VisitRepository, organizationDirectory: OrganizationDirectory, visitIdGenerator: VisitIdGenerator, actor: ActorContext): BookVisitUseCase
+	/* 「実行の途中で技術的障害が起きる」仕掛けを施した実装を、障害契約(定義)ごとに返す。注入手段は
+	   具象の自由(渡された泉・Port を差し替え・ラップしてよい)— ただし観測対象の Repository は渡されたものを配線し、
+	   Port の呼び出しは渡されたモックへ届けること(消費位置を検査する)。 */
+	/** 受入担当者を確認した後、来訪の保存で技術的障害が起きたら、来訪も採番も残らない（観測される状態は作用前のまま）。 — 外部の応答を得た後に中断する(Port は 1 回呼ばれる) */
+	protected abstract fun faultedSavingFailed(visitRepository: VisitRepository, organizationDirectory: OrganizationDirectory, visitIdGenerator: VisitIdGenerator, actor: ActorContext): BookVisitUseCase
 
 	/** 連番採番 — 状態(visitIds.next)を種とする決定的実装。 */
 	protected class SequentialVisitIdGenerator(var next: Long) : VisitIdGenerator {
@@ -54,14 +56,14 @@ abstract class BookVisitUseCaseFaultContractTest {
 		val visitRepository = visitRepository()
 		val organizationDirectory = OrganizationDirectoryMock(listOf(OrganizationDirectoryMock.FindMember(request = OrganizationDirectoryFindMemberRequest(employee = EmployeeId(id = 10L)), outcome = OrganizationDirectoryFindMemberOutcome.Found(member = OrganizationDirectoryFindMemberMember(name = "s828", active = true)))))
 		val visitIdGenerator = SequentialVisitIdGenerator(506L)
-		val useCase = faultedUseCase(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
+		val useCase = faultedSavingFailed(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = BookVisitCommand(host = EmployeeId(id = 10L), visitor = visitorName(VisitorNameFixture(text = "s829"))))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		organizationDirectory.assertNoFailure()
+		organizationDirectory.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
 		assertEquals(listOf<VisitFixture>(),
@@ -74,14 +76,14 @@ abstract class BookVisitUseCaseFaultContractTest {
 		val visitRepository = visitRepository()
 		val organizationDirectory = OrganizationDirectoryMock(listOf(OrganizationDirectoryMock.FindMember(request = OrganizationDirectoryFindMemberRequest(employee = EmployeeId(id = 10L)), outcome = OrganizationDirectoryFindMemberOutcome.Found(member = OrganizationDirectoryFindMemberMember(name = "s836", active = true)))))
 		val visitIdGenerator = SequentialVisitIdGenerator(506L)
-		val useCase = faultedUseCase(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
+		val useCase = faultedSavingFailed(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = BookVisitCommand(host = EmployeeId(id = 10L), visitor = visitorName(VisitorNameFixture(text = "s837"))))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		organizationDirectory.assertNoFailure()
+		organizationDirectory.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
 		assertEquals(listOf<VisitFixture>(),
@@ -94,14 +96,14 @@ abstract class BookVisitUseCaseFaultContractTest {
 		val visitRepository = visitRepository()
 		val organizationDirectory = OrganizationDirectoryMock(listOf(OrganizationDirectoryMock.FindMember(request = OrganizationDirectoryFindMemberRequest(employee = EmployeeId(id = 10L)), outcome = OrganizationDirectoryFindMemberOutcome.Found(member = OrganizationDirectoryFindMemberMember(name = "s844", active = true)))))
 		val visitIdGenerator = SequentialVisitIdGenerator(506L)
-		val useCase = faultedUseCase(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
+		val useCase = faultedSavingFailed(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = BookVisitCommand(host = EmployeeId(id = 10L), visitor = visitorName(VisitorNameFixture(text = "s845"))))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		organizationDirectory.assertNoFailure()
+		organizationDirectory.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
 		assertEquals(listOf<VisitFixture>(),
@@ -114,14 +116,14 @@ abstract class BookVisitUseCaseFaultContractTest {
 		val visitRepository = visitRepository()
 		val organizationDirectory = OrganizationDirectoryMock(listOf(OrganizationDirectoryMock.FindMember(request = OrganizationDirectoryFindMemberRequest(employee = EmployeeId(id = 10L)), outcome = OrganizationDirectoryFindMemberOutcome.Found(member = OrganizationDirectoryFindMemberMember(name = "s852", active = true)))))
 		val visitIdGenerator = SequentialVisitIdGenerator(506L)
-		val useCase = faultedUseCase(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
+		val useCase = faultedSavingFailed(visitRepository, organizationDirectory, visitIdGenerator, ActorContext(user = UserId(id = 10L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = BookVisitCommand(host = EmployeeId(id = 10L), visitor = visitorName(VisitorNameFixture(text = "s853"))))
 		} catch (t: Throwable) {
 			thrown = t
 		}
-		organizationDirectory.assertNoFailure()
+		organizationDirectory.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
 		assertEquals(listOf<VisitFixture>(),

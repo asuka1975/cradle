@@ -330,6 +330,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		sb.append(" * 期待するやり取り(Lean が評価した要求と定理の観測)を順に積み、実装が同じ要求で呼べばその観測を返す。\n")
 		sb.append(" * 違う要求・積んでいない呼び出し・別の操作は記録して PortHarnessFailure を投げる(業務の拒否とは別)。\n")
 		sb.append(" * 被検査コードが例外を捕捉しても記録は残り、assertComplete が失敗にする。\n")
+		sb.append(" * 障害契約テストは消費位置を検査する: 外部を呼ぶ前の中断は assertUntouched、応答を得た後の中断は assertComplete。\n")
 		sb.append(" */\n")
 		sb.append("class $mock(expected: List<Expectation>) : ${p.name} {\n")
 		sb.append("\t/** 期待するやり取り(操作ごとに 1 種)。 */\n")
@@ -338,6 +339,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 			sb.append("\tdata class ${capitalizeFirst(op.method)}(val request: ${k.name(op.request)}, val outcome: ${k.name(op.outcome)}) : Expectation\n")
 		}
 		sb.append("\n\tprivate val queue = ArrayDeque(expected)\n")
+		sb.append("\tprivate val expectedCount = expected.size\n")
 		sb.append("\tprivate val failures = mutableListOf<String>()\n\n")
 		sb.append("\tprivate fun fail(message: String): Nothing {\n")
 		sb.append("\t\tfailures += message\n")
@@ -360,6 +362,11 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		sb.append("\tfun assertComplete() {\n")
 		sb.append("\t\tassertNoFailure()\n")
 		sb.append("\t\tif (queue.isNotEmpty()) throw AssertionError(\"${p.name}: 呼ばれなかったやり取りが残っている: \$queue\")\n")
+		sb.append("\t}\n\n")
+		sb.append("\t/** 失敗が無く、まだ何も呼ばれていないこと(外部を呼ぶ前の中断の検査)。 */\n")
+		sb.append("\tfun assertUntouched() {\n")
+		sb.append("\t\tassertNoFailure()\n")
+		sb.append("\t\tif (queue.size != expectedCount) throw AssertionError(\"${p.name}: 外部を呼ぶ前に中断するはずの位置で呼ばれている(消費 \${expectedCount - queue.size} 件)\")\n")
 		sb.append("\t}\n")
 		sb.append("}")
 		return sb.toString()
@@ -1116,10 +1123,11 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 				sb.append(" * 環境の技術的障害(DB 例外など — モデルの語彙外の事象)で実行が中断されたとき、\n")
 				sb.append(" * 観測される状態が Lean の宣言(定義の値)と一致することを検査する。\n")
 				sb.append(" * 各ケースの入力は execute が**成功するはずの入力** — 具象側は「その実行の途中で\n")
-				sb.append(" * 技術的障害が起きる」仕掛けを施した実装を faultedUseCase で返す\n")
+				sb.append(" * 技術的障害が起きる」仕掛けを施した実装を障害契約ごとのフック faulted<定義名> で返す\n")
 				sb.append(" * (注入手段は具象の自由 — 例: 採番衝突による PRIMARY KEY 違反)。\n")
 				sb.append(" * 表明: execute は業務の失敗語彙の外の例外で中断し(サイト側の不調は\n")
-				sb.append(" * 名指ししない — DomainResult に写さない)、Repository の観測は宣言された状態。\n")
+				sb.append(" * 名指ししない — DomainResult に写さない)、Port の消費は宣言の位置(観測を引数に取らない定義 =\n")
+				sb.append(" * 外部を呼ぶ前、取る定義 = 応答を得た後)、Repository の観測は宣言された状態。\n")
 				sb.append(" */\n")
 				sb.append("abstract class ${ucName}FaultContractTest {\n")
 				for (part in sortedParts) {
@@ -1133,16 +1141,24 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 					sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
 						"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
 				}
-				sb.append("\t/** 「実行の途中で技術的障害が起きる」仕掛けを施した実装を返す。注入手段は\n")
-				sb.append("\t    具象の自由(渡された泉を差し替え・ラップしてよい)— ただし観測対象の\n")
-				sb.append("\t    Repository は渡されたものを配線すること。 */\n")
-				sb.append("\tprotected abstract fun faultedUseCase(" +
-					sortedParts.joinToString(", ") { "${repoVar(it.root)}: ${it.root.kotlin}Repository" } +
+				val hookParams = sortedParts.joinToString(", ") { "${repoVar(it.root)}: ${it.root.kotlin}Repository" } +
 					portDeps.joinToString("") { ", ${portVar(it)}: ${it.name}" } +
 					genParts.joinToString("") { ", ${decapitalizeFirst(it.port.port)}: ${it.port.port}" } +
 					actorParams.joinToString("") { ", ${ident(it.name)}: ${k.typeRef(it.type)}" } +
-					clockFields.joinToString("") { ", ${ident(it.field.name)}: ${k.typeRef(it.field.type)}" } +
-					"): ${s.name}\n")
+					clockFields.joinToString("") { ", ${ident(it.field.name)}: ${k.typeRef(it.field.type)}" }
+				fun hookOf(fc: IrFaultContract) = "faulted${capitalizeFirst(fc.def)}"
+				sb.append("\t/* 「実行の途中で技術的障害が起きる」仕掛けを施した実装を、障害契約(定義)ごとに返す。注入手段は\n")
+				sb.append("\t   具象の自由(渡された泉・Port を差し替え・ラップしてよい)— ただし観測対象の Repository は渡されたものを配線し、\n")
+				sb.append("\t   Port の呼び出しは渡されたモックへ届けること(消費位置を検査する)。 */\n")
+				for (fc in fcs) {
+					val where = when {
+						portDeps.isEmpty() -> ""
+						fc.portCalls == 0 -> " — 外部を呼ぶ前に中断する(Port は呼ばれない)"
+						else -> " — 外部の応答を得た後に中断する(Port は 1 回呼ばれる)"
+					}
+					sb.append("\t/** ${docLine(fc.doc) ?: fc.def}$where */\n")
+					sb.append("\tprotected abstract fun ${hookOf(fc)}($hookParams): ${s.name}\n")
+				}
 				emitSequentialClasses(sb, genParts)
 				var emitted = 0
 				for (fc in fcs) {
@@ -1170,8 +1186,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 								sb.append("\t\t${repoVar(part.root)}.add($mat(${k.refLiteral(part.root, el)}))\n")
 							}
 						}
-						// Port のモック: 期待は当該ケース。中断がどこで起きたかは宣言の外なので、
-						// 消費し切ったかは見ない(要求不一致・積んでいない呼び出しだけを失敗にする)
+						// Port のモック: 期待は当該ケース。消費位置は宣言(portCalls)が決める
 						var portArg = ""
 						for (p in portDeps) {
 							sb.append("\t\tval ${portVar(p)} = ${portMockExpr(p, case.ports)}\n")
@@ -1195,7 +1210,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 								?: defaultLiteral(cf.field.type)
 								?: error("障害契約 ${fc.def}: 時計 ${cf.field.name} の値を構成できません"))
 						}
-						sb.append("\t\tval useCase = faultedUseCase(" +
+						sb.append("\t\tval useCase = ${hookOf(fc)}(" +
 							sortedParts.joinToString(", ") { repoVar(it.root) } + "$portArg$idGenArg$actorArgs$clockArgs)\n")
 						sb.append("\t\tvar thrown: Throwable? = null\n")
 						sb.append("\t\ttry {\n")
@@ -1203,7 +1218,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 						sb.append("\t\t} catch (t: Throwable) {\n")
 						sb.append("\t\t\tthrown = t\n")
 						sb.append("\t\t}\n")
-						for (p in portDeps) sb.append("\t\t${portVar(p)}.assertNoFailure()\n")
+						for (p in portDeps) sb.append("\t\t${portVar(p)}.${if (fc.portCalls == 0) "assertUntouched" else "assertComplete"}()\n")
 						sb.append("\t\tif (thrown == null) throw AssertionError(\n")
 						sb.append("\t\t\t\"技術的障害が注入されていない(execute が正常終了した)\")\n")
 						// 障害後の観測 = 宣言された状態(Repository 単位の完全一致)

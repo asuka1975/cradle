@@ -10,6 +10,7 @@ import dev.cradle.lobby.PortHarnessFailure
  * 期待するやり取り(Lean が評価した要求と定理の観測)を順に積み、実装が同じ要求で呼べばその観測を返す。
  * 違う要求・積んでいない呼び出し・別の操作は記録して PortHarnessFailure を投げる(業務の拒否とは別)。
  * 被検査コードが例外を捕捉しても記録は残り、assertComplete が失敗にする。
+ * 障害契約テストは消費位置を検査する: 外部を呼ぶ前の中断は assertUntouched、応答を得た後の中断は assertComplete。
  */
 class PaymentGatewayMock(expected: List<Expectation>) : PaymentGateway {
 	/** 期待するやり取り(操作ごとに 1 種)。 */
@@ -18,6 +19,7 @@ class PaymentGatewayMock(expected: List<Expectation>) : PaymentGateway {
 	data class Inquire(val request: PaymentGatewayInquireRequest, val outcome: PaymentGatewayInquireOutcome) : Expectation
 
 	private val queue = ArrayDeque(expected)
+	private val expectedCount = expected.size
 	private val failures = mutableListOf<String>()
 
 	private fun fail(message: String): Nothing {
@@ -48,5 +50,11 @@ class PaymentGatewayMock(expected: List<Expectation>) : PaymentGateway {
 	fun assertComplete() {
 		assertNoFailure()
 		if (queue.isNotEmpty()) throw AssertionError("PaymentGateway: 呼ばれなかったやり取りが残っている: $queue")
+	}
+
+	/** 失敗が無く、まだ何も呼ばれていないこと(外部を呼ぶ前の中断の検査)。 */
+	fun assertUntouched() {
+		assertNoFailure()
+		if (queue.size != expectedCount) throw AssertionError("PaymentGateway: 外部を呼ぶ前に中断するはずの位置で呼ばれている(消費 ${expectedCount - queue.size} 件)")
 	}
 }

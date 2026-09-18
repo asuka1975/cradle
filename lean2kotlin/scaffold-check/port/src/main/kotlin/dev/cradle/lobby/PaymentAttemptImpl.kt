@@ -6,7 +6,7 @@ import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.PaymentResult
 import dev.cradle.lobby.domain.valueobject.VisitId
 
-/** `Lobby.Domain.PaymentAttempt` の写し。各遷移は同一性（冪等キー）を変えずに写しを返し、`markSending` だけが試行番号を進める。 */
+/** `Lobby.Domain.PaymentAttempt` の写し。各遷移は同一性（冪等キー）を変えずに写しを返し、`markSending` だけが試行番号を進める（送ったかどうか分からない段階 sending にする）。 */
 data class PaymentAttemptImpl(
 	override val id: PaymentAttemptId,
 	override val visit: VisitId,
@@ -14,12 +14,13 @@ data class PaymentAttemptImpl(
 	override val tries: Long,
 	override val phase: PaymentPhase,
 ) : PaymentAttempt {
-	override fun markSending(): PaymentAttempt = copy(tries = tries + 1)
+	override fun markSending(): PaymentAttempt = copy(tries = tries + 1, phase = PaymentPhase.Sending)
 	override fun settle(r: PaymentResult): PaymentAttempt = copy(phase = phaseOf(r))
 	override fun awaitConfirmation(): PaymentAttempt = copy(phase = PaymentPhase.AwaitingConfirmation)
 	override fun lose(): PaymentAttempt = copy(phase = PaymentPhase.Unknown)
 	override fun resetPending(): PaymentAttempt = copy(phase = PaymentPhase.Pending)
 	override fun isSettled(): Boolean = phase == PaymentPhase.Authorized || phase == PaymentPhase.Declined
+	override fun isInquirable(): Boolean = phase == PaymentPhase.Sending || phase == PaymentPhase.Unknown || phase == PaymentPhase.AwaitingConfirmation
 	override fun settledAs(r: PaymentResult): Boolean = phase == phaseOf(r)
 
 	companion object {

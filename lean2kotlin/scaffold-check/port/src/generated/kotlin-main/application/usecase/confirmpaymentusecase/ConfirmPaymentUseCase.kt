@@ -17,7 +17,7 @@ import dev.cradle.lobby.domain.entity.PaymentAttempt
  */
 interface ConfirmPaymentUseCase {
 	/**
-	 * 始まる前の拒否: 試みが無い（無関係な通知）/ 確定した結果と矛盾する通知。
+	 * 始まる前の拒否: 試みが無い（無関係な通知）/ まだ送っていない試みへの通知（無関係な結果）/ 確定した結果と矛盾する通知。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
 	 * validate を呼ぶ」形に一本化する — 分岐条件を再実装しない)。
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。

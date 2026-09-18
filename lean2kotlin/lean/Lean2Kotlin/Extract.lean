@@ -2285,6 +2285,16 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let some execC := execByDir.get? dir
           | throwError "UseCase {dir} の execute が見つかりません"
         let fVals ← valueBinders fName
+        -- 消費位置: Port を使う UseCase の障害契約は、観測(Outcome)を引数に取るかどうかで
+        -- 「外部を呼ぶ前の中断」(0)/「応答を得た後の中断」(1)を宣言する(観測が無い中断点に観測は存在しない)
+        let portCalls : Nat ← match ucPorts.get? dir with
+          | none => pure 0
+          | some _ => do
+            let takesOutcome ← fVals.anyM fun (_, ty) => do
+              match (← whnf ty).getAppFn with
+              | .const h _ => pure (roles.get? h == some .portOutcome)
+              | _ => pure false
+            pure (if takesOutcome then 1 else 0)
         -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
         let strCtrF : IO.Ref Nat ← IO.mkRef 800
         let mut pools : Array (Name × Array (Nat × Expr)) := #[]
@@ -2402,6 +2412,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             ("useCase", Json.str (toString dir)),
             ("def", Json.str (toString (fName.updatePrefix Name.anonymous))),
             ("doc", Json.str ((← findDocString? env fName).getD "")),
+            ("portCalls", Json.num portCalls),
             ("cases", Json.arr caseJs)])
       catch e =>
         logInfo m!"lean2kotlin: 障害契約 {fName} を翻訳できません: {← e.toMessageData.toString}"

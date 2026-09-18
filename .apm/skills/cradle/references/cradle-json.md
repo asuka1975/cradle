@@ -31,6 +31,7 @@
     "openapi": "documents/codebase/openapi.yaml"
   },
   "e2e": { "dir": "e2e", "scenarios": "e2e/scenarios" },
+  "api": { "outletsWithoutEndpoint": [] },
   "infra": { "dir": "infra", "up": "docker compose --project-directory infra/local up -d --build", "containers": ["myapp-local-backend", "myapp-local-frontend"] },
   "ports": { "mockup": 8787, "frontend": 5173, "backend": 8080, "idp": 8090 },
   "protected": ["documents/developer/**"],
@@ -47,6 +48,7 @@
 | `backend.generated` | 生成物のディレクトリ。hook が直接編集を止め、`regen-impact` が差分を読む |
 | `backend.regenerate` | 再生成コマンド（`backend.dir` で実行） |
 | `e2e.scenarios` | E2E の台本の置き場（ファイルかディレクトリ）。`flows-from-golden --check` と `cradle status` が golden の流れと突き合わせる。既定は `<e2e.dir>/scenarios` |
+| `api.outletsWithoutEndpoint` | GET のエンドポイントを持たない画面の口の名前。`contract-check` が「GET の無い画面の口」から外す。既定は空 |
 | `infra.up` | local スタックを立てる 1 コマンド（ルートで実行）。既定なし |
 | `infra.containers` | local スタックのコンテナ名。`cradle doctor --local` が Created と HEAD の時刻を比べる |
 | `protected` | AI が書き込まない領域（glob） |

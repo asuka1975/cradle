@@ -27,10 +27,14 @@ def PaymentAttempt.start (id : PaymentAttemptId) (visit : VisitId) (amount : Nat
     PaymentAttempt PaymentAttemptId VisitId :=
   { id, visit, amount, tries := 0, phase := .pending }
 
-/-- 送る前に試行番号を進める（冪等キーは変えない）。 -/
+/-- 送る前に印を付ける: 試行番号を進め、送ったかどうか分からない状態（sending）にする（冪等キーは変えない）。 -/
 def PaymentAttempt.markSending (a : PaymentAttempt PaymentAttemptId VisitId) :
     PaymentAttempt PaymentAttemptId VisitId :=
-  { a with tries := a.tries + 1 }
+  { a with tries := a.tries + 1, phase := .sending }
+
+/-- 送っている途中（印つき）か、答えを失ったか、通知待ちか — 照会で確かめる状態。 -/
+def PaymentAttempt.isInquirable (a : PaymentAttempt PaymentAttemptId VisitId) : Bool :=
+  a.phase == .sending || a.phase == .unknown || a.phase == .awaitingConfirmation
 
 /-- 確定する。 -/
 def PaymentAttempt.settle (a : PaymentAttempt PaymentAttemptId VisitId) (r : PaymentResult) :
@@ -75,6 +79,22 @@ def PaymentAttempt.settledAs (a : PaymentAttempt PaymentAttemptId VisitId) (r : 
 /-- 送る印は試行番号を 1 進める。 -/
 @[contract] theorem PaymentAttempt.markSending_tries (a : PaymentAttempt PaymentAttemptId VisitId) :
     a.markSending.tries = a.tries + 1 := rfl
+
+/-- 送る印を付けた試みは、送ったかどうか分からない状態。 -/
+@[contract] theorem PaymentAttempt.markSending_phase (a : PaymentAttempt PaymentAttemptId VisitId) :
+    a.markSending.phase = .sending := rfl
+
+/-- 受け付けられたら通知待ち。 -/
+@[contract] theorem PaymentAttempt.awaitConfirmation_phase (a : PaymentAttempt PaymentAttemptId VisitId) :
+    a.awaitConfirmation.phase = .awaitingConfirmation := rfl
+
+/-- 送れる状態に戻せば送れる（試行番号は戻らない）。 -/
+@[contract] theorem PaymentAttempt.resetPending_phase (a : PaymentAttempt PaymentAttemptId VisitId) :
+    a.resetPending.phase = .pending := rfl
+
+/-- 送れる状態に戻しても試行番号は戻らない。 -/
+@[contract] theorem PaymentAttempt.resetPending_tries (a : PaymentAttempt PaymentAttemptId VisitId) :
+    a.resetPending.tries = a.tries := rfl
 
 /-- 確定は同一性を変えない。 -/
 @[contract] theorem PaymentAttempt.settle_id (a : PaymentAttempt PaymentAttemptId VisitId) (r : PaymentResult) :

@@ -126,7 +126,11 @@ for (const f of files) {
   };
   const cmdFile = join(modelDir, "Runtime", "Command.lean");
   const obsFile = join(modelDir, "Runtime", "Observation.lean");
-  if (existsSync(cmdFile)) wire(cmdFile, "Command", "applyCommand");
+  if (existsSync(cmdFile)) {
+    wire(cmdFile, "Command", "applyCommand");
+    // 利用者の操作の合併型に内部入力を混ぜない（通知・契機は Runtime/Observation.lean）
+    for (const m of stripComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
+  }
   if (existsSync(obsFile)) wire(obsFile, "Observation", "applyObservation");
   // 内部入力の UseCase があるなら Runtime/Observation.lean が要る（Runtime の境界を持つプロジェクトだけ）
   const ucDir = join(modelDir, "Application", "UseCase");
@@ -149,6 +153,7 @@ for (const f of files) {
       if (readSide && !has("ReadModel.lean")) add("usecase", "error", d, 1, `${name}/ は参照系なのに ReadModel.lean が無い`);
       const uc = read("UseCase.lean");
       if (observe && /\bActorContext\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "内部入力（Observation）の UseCase が名義（ActorContext）を受けている — 通知・worker からの入力に利用者の名義は無い");
+      if (observe && /\bActorContext\b/.test(read("Observation.lean"))) add("usecase", "error", join(d, "Observation.lean"), 1, "内部入力（Observation）が名義（ActorContext）を運んでいる — 通知・worker からの入力に利用者の名義は無い");
       if (!/\bdef\s+validate\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 validate が無い");
       if (!/\bdef\s+execute\b/.test(uc)) add("usecase", "error", join(d, "UseCase.lean"), 1, "固定名 execute が無い");
       if (/\bdef\s+request\b/.test(uc)) {

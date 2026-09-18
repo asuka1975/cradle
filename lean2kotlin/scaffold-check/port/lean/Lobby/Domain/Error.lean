@@ -27,11 +27,13 @@ inductive DomainError where
   | paymentInProgress
   /-- 宛先の決済の試みが無い（無関係な通知・契機）。 -/
   | unknownAttempt
+  /-- まだ送っていない試みへの結果の通知（無関係な結果）。 -/
+  | unexpectedResult
   /-- 送れる状態ではない（受付済み・確定済み・結果不明からは送り直さない）。 -/
   | attemptNotDispatchable
   /-- 確定した結果と矛盾する通知（上書きしない）。 -/
   | contradictingResult
-  /-- 結果不明ではないので照会しない。 -/
+  /-- 照会する状態（送る印つき・結果不明・通知待ち）ではない。 -/
   | attemptNotInquirable
 deriving Repr, DecidableEq
 

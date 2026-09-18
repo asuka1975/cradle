@@ -10,7 +10,7 @@ description: Use for the infrastructure design phase between domain exploration 
 
 ## 手順
 
-1. `cradle status` と `cradle spec-query meta` で、モデルにある集約・コマンド・画面・境界入力（名義・時計）を把握する。
+1. `cradle status` と `cradle spec-query meta` で、モデルにある集約・コマンド・内部入力（通知・契機）・外部能力の Port・画面・境界入力（名義・時計）を把握する。
 2. `01_model-to-infra.md` の問いに答える: 入口、直列化点（横断不変条件をどこで守るか）、時計、名義（誰が確定するか）、同一性の表現（連番か UUID か — NFR を根拠に）、**作らないもの**（モデルに裏付けの無いインフラの一覧）。
 3. 環境を 3 つ決める（test = 外部依存なし、local = 本番同等のコンテナ + モック発行者、prod）。検証を飛ばすプロファイルは作らない。
 4. 決定を INFRA-D-xxx として根拠（モデルの定理名・HS）付きで表に書く。裏付けの無い仮定は INFRA-A-xxx（サイジングにだけ使う）。ユーザーの判断が要るものは INFRA-Q-xxx として問いの形で残し、暫定を書く。決着・却下は状況列に書き、行は消さない（書き方は documents 規約）。

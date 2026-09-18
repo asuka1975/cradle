@@ -10,6 +10,7 @@ enum class PaymentPhase {
 	Pending,
 	Authorized,
 	Unknown,
+	Sending,
 	Declined,
 	AwaitingConfirmation,
 }

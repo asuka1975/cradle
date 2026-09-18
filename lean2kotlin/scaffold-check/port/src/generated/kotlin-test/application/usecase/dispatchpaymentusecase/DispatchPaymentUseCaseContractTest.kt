@@ -156,7 +156,7 @@ abstract class DispatchPaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送れなかったら送れる状態のまま、試行番号だけ進む（同じ鍵で送り直す）。 */
+	/** 送れなかったら送れる状態に戻り、試行番号だけ進む（同じ鍵で送り直す）。 */
 	@Test
 	fun `execute は定理 execute_unavailable を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
@@ -169,7 +169,7 @@ abstract class DispatchPaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 送れなかったら送れる状態のまま、試行番号だけ進む（同じ鍵で送り直す）。 */
+	/** 送れなかったら送れる状態に戻り、試行番号だけ進む（同じ鍵で送り直す）。 */
 	@Test
 	fun `execute は定理 execute_unavailable を再現する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()

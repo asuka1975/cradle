@@ -99,7 +99,7 @@ abstract class CloseNoteUseCaseContractTest {
 | `<X>UseCaseContractTest`（参照系） | golden の views + `@[contract]` | 値形: Row 列と主体をフックで配線し `execute` の返り値を一致。golden の views のキーは UseCase 名（先頭小文字） |
 | `<X>RepositoryContractTest` | 規約 + `constraints` | PBT: 観測モデルの制約を満たす個体の列（`arb<Root>Repository`）を add → findAll の並びと findById、列の末尾を先頭の id に写して update → 並び保持、未知 id は null。add / update の有無は観測モデルの同名の操作から導く |
 | `ReadModelDdlContractTest` | golden の各状態 + Projection の `@[contract]` | `retrieve<X>ReadModel(ルートの fixture 列…)` で観測の Set を復元し完全一致（並び込み） |
-| `<X>FaultContractTest` | `@[faultContract]` | 同じ UseCase の execute が成功する入力 ≤ 4 件。`faultedUseCase(...)` フックが障害を仕込んだ実装を返し、業務語彙外の例外で中断すること + Repository の観測 = 定義の評価値。Port を使う UseCase は生成モックを渡し、要求不一致・積んでいない呼び出しだけを検査する（中断がどこで起きたかは宣言の外なので、消費し切ったかは見ない） |
+| `<X>FaultContractTest` | `@[faultContract]` | 同じ UseCase の execute が成功する入力 ≤ 4 件。定義ごとのフック `faulted<定義名>(...)` が障害を仕込んだ実装を返し、Port の消費位置（`portCalls` 0 = `assertUntouched`、1 = `assertComplete`）→ 業務語彙外の例外で中断すること → Repository の観測 = 定義の評価値、の順に検査する。消費位置は定義が観測（`Outcome`）を引数に取るかで決まる（取らない = 外部を呼ぶ前、取る = 応答を得た後）。モックは要求不一致・積んでいない呼び出し・呼ばれなかった要求に加え、呼ばれてはいけない位置での呼び出しも失敗にする |
 
 契約定理からの演繹（抽出時）:
 - binder の分類: 型 = binder 規約で単型化、インスタンス = 合成、Prop = 仮定（ケース選択器。decide で真と決まった仮定は証明項として主対象の Prop 引数に渡す）、値 = サンプル。

@@ -1,6 +1,6 @@
 /-
-  結果不明の決済を照会する — 内部の配送（Observation + Port の別の操作）。
-  結果不明からは新しい決済を作らず、同じ冪等キーで確かめる。届いていなかったなら送れる状態に戻す。
+  送ったかどうか分からない決済を照会する — 内部の配送（Observation + Port の別の操作）。
+  印つき（sending）・結果不明・通知待ちからは新しい決済を作らず、同じ冪等キーで確かめる。届いていなかったなら送れる状態に戻す。
 -/
 import Lobby.Application.RepositoryState
 import Lobby.Application.Port.PaymentGateway.Inquire
@@ -20,12 +20,12 @@ structure State (PaymentAttemptId VisitId : Type) where
   attempts : PaymentAttemptRepositoryState PaymentAttemptId VisitId
 deriving Repr, DecidableEq
 
-/-- 始まる前の拒否: 試みが無い / 結果不明ではない（照会するのは結果不明だけ）。 -/
+/-- 始まる前の拒否: 試みが無い / 照会する状態（印つき・結果不明・通知待ち）ではない。 -/
 def validate (o : Observation PaymentAttemptId) (before : State PaymentAttemptId VisitId) :
     Except DomainError (PaymentAttempt PaymentAttemptId VisitId) :=
   match before.attempts.find? o.attempt with
   | none   => .error .unknownAttempt
-  | some a => if a.phase == .unknown then .ok a else .error .attemptNotInquirable
+  | some a => if a.isInquirable then .ok a else .error .attemptNotInquirable
 
 def mkRequest (_o : Observation PaymentAttemptId) (_before : State PaymentAttemptId VisitId)
     (a : PaymentAttempt PaymentAttemptId VisitId) : Inquire.Request PaymentAttemptId :=
@@ -64,31 +64,31 @@ def execute (outcome : Inquire.Outcome) (o : Observation PaymentAttemptId)
     execute outcome o before = .error .unknownAttempt := by
   simp [execute, validate, h, Bind.bind, Except.bind]
 
-/-- 結果不明でなければ照会しない。 -/
+/-- 照会する状態でなければ照会しない（送れる状態・確定済み）。 -/
 @[contract] theorem execute_not_inquirable (outcome : Inquire.Outcome) (o : Observation PaymentAttemptId)
     (before : State PaymentAttemptId VisitId) (a : PaymentAttempt PaymentAttemptId VisitId)
-    (h : before.attempts.find? o.attempt = some a) (hp : (a.phase == .unknown) = false) :
+    (h : before.attempts.find? o.attempt = some a) (hp : a.isInquirable = false) :
     execute outcome o before = .error .attemptNotInquirable := by
   simp [execute, validate, h, hp, Bind.bind, Except.bind]
 
 /-- 確定していれば、その結果で確定する。 -/
 @[contract] theorem execute_settled (r : PaymentResult) (o : Observation PaymentAttemptId)
     (before : State PaymentAttemptId VisitId) (a : PaymentAttempt PaymentAttemptId VisitId)
-    (h : before.attempts.find? o.attempt = some a) (hp : (a.phase == .unknown) = true) :
+    (h : before.attempts.find? o.attempt = some a) (hp : a.isInquirable = true) :
     execute (.settled r) o before = .ok ⟨before.attempts.update o.attempt (reflect (.settled r)) (reflect_id (.settled r))⟩ := by
   simp [execute, validate, apply, h, hp, Bind.bind, Except.bind]
 
 /-- 提供元に届いていなければ、送れる状態に戻す（同じ冪等キーで送り直す）。 -/
 @[contract] theorem execute_not_found (o : Observation PaymentAttemptId)
     (before : State PaymentAttemptId VisitId) (a : PaymentAttempt PaymentAttemptId VisitId)
-    (h : before.attempts.find? o.attempt = some a) (hp : (a.phase == .unknown) = true) :
+    (h : before.attempts.find? o.attempt = some a) (hp : a.isInquirable = true) :
     execute .notFound o before = .ok ⟨before.attempts.update o.attempt (reflect .notFound) (reflect_id .notFound)⟩ := by
   simp [execute, validate, apply, h, hp, Bind.bind, Except.bind]
 
-/-- 答えなければ結果不明のまま（次の照会を待つ）。 -/
+/-- 答えなければそのまま（次の照会を待つ）。 -/
 @[contract] theorem execute_unavailable (o : Observation PaymentAttemptId)
     (before : State PaymentAttemptId VisitId) (a : PaymentAttempt PaymentAttemptId VisitId)
-    (h : before.attempts.find? o.attempt = some a) (hp : (a.phase == .unknown) = true) :
+    (h : before.attempts.find? o.attempt = some a) (hp : a.isInquirable = true) :
     execute .unavailable o before = .ok ⟨before.attempts.update o.attempt (reflect .unavailable) (reflect_id .unavailable)⟩ := by
   simp [execute, validate, apply, h, hp, Bind.bind, Except.bind]
 

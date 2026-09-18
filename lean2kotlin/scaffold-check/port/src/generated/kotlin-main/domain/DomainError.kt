@@ -17,6 +17,7 @@ enum class DomainError {
 	NotYetLeft,
 	PaymentInProgress,
 	UnknownAttempt,
+	UnexpectedResult,
 	AttemptNotDispatchable,
 	ContradictingResult,
 	AttemptNotInquirable,

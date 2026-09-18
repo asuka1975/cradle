@@ -48,7 +48,7 @@ abstract class InquirePaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 結果不明でなければ照会しない。 */
+	/** 照会する状態でなければ照会しない（送れる状態・確定済み）。 */
 	@Test
 	fun `execute は定理 execute_not_inquirable を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
@@ -61,7 +61,7 @@ abstract class InquirePaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 結果不明でなければ照会しない。 */
+	/** 照会する状態でなければ照会しない（送れる状態・確定済み）。 */
 	@Test
 	fun `execute は定理 execute_not_inquirable を再現する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
@@ -75,7 +75,7 @@ abstract class InquirePaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 結果不明でなければ照会しない。 */
+	/** 照会する状態でなければ照会しない（送れる状態・確定済み）。 */
 	@Test
 	fun `execute は定理 execute_not_inquirable を再現する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
@@ -89,7 +89,7 @@ abstract class InquirePaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 結果不明でなければ照会しない。 */
+	/** 照会する状態でなければ照会しない（送れる状態・確定済み）。 */
 	@Test
 	fun `execute は定理 execute_not_inquirable を再現する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
@@ -115,7 +115,7 @@ abstract class InquirePaymentUseCaseContractTest {
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
-	/** 答えなければ結果不明のまま（次の照会を待つ）。 */
+	/** 答えなければそのまま（次の照会を待つ）。 */
 	@Test
 	fun `execute は定理 execute_unavailable を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()

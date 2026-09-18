@@ -29,6 +29,8 @@ interface PaymentAttempt {
 	fun isSettled(): Boolean
 	/** 送ったが答えを失った（送り直さず照会する）。 */
 	fun lose(): PaymentAttempt
-	/** 送る前に試行番号を進める（冪等キーは変えない）。 */
+	/** 送っている途中（印つき）か、答えを失ったか、通知待ちか — 照会で確かめる状態。 */
+	fun isInquirable(): Boolean
+	/** 送る前に印を付ける: 試行番号を進め、送ったかどうか分からない状態（sending）にする（冪等キーは変えない）。 */
 	fun markSending(): PaymentAttempt
 }

@@ -149,8 +149,18 @@ class IrParseTest {
 		assertEquals(listOf("findMember"), port.operations.map { it.method })
 		assertEquals("Lobby.Application.Port.OrganizationDirectory.FindMember.Request", port.operations.single().request)
 		assertEquals(
-			mapOf("portRequest" to 1, "portOutcome" to 1, "portDto" to 1),
+			mapOf("portRequest" to 3, "portOutcome" to 3, "portDto" to 1),
 			ir.types.filter { it.role.startsWith("port") }.groupingBy { it.role }.eachCount())
+		// 決済ゲートウェイは 2 操作を持ち、配送と照会が別の操作に対応する
+		assertEquals(listOf("authorize", "inquire"), ir.port("PaymentGateway").operations.map { it.method })
+		assertEquals(listOf(IrUseCasePort("PaymentGateway", "authorize")), ir.useCases.single { it.name == "DispatchPaymentUseCase" }.ports)
+		assertEquals(listOf(IrUseCasePort("PaymentGateway", "inquire")), ir.useCases.single { it.name == "InquirePaymentUseCase" }.ports)
+		// 入力の種別: 利用者の Command と内部入力の Observation
+		assertEquals(mapOf("BookVisitUseCase" to "command", "ConfirmPaymentUseCase" to "observation", "DispatchPaymentUseCase" to "observation",
+			"InquirePaymentUseCase" to "observation", "LeaveUseCase" to "command", "StartPaymentUseCase" to "command"),
+			ir.useCases.associate { it.name to it.kind })
+		assertEquals("Lobby.Application.DispatchPaymentUseCase.Observation", ir.useCases.single { it.name == "DispatchPaymentUseCase" }.input)
+		assertEquals(3, ir.types.count { it.role == "observation" })
 		assertEquals("OrganizationDirectoryFindMemberRequest", ir.typeDef(port.operations.single().request).kotlin)
 		val book = ir.useCases.single { it.name == "BookVisitUseCase" }
 		assertEquals(listOf(IrUseCasePort("OrganizationDirectory", "findMember")), book.ports)
@@ -161,9 +171,16 @@ class IrParseTest {
 		assertEquals(json("""{"employee":{"id":4}}"""), missing.request)
 		assertEquals(JsonPrimitive("missing"), missing.outcome)
 		assertEquals(listOf("DomainService", "PricingService", "TaxService"), ir.domainServices.map { it.name })
-		val fault = ir.faultContracts.single()
-		assertEquals("BookVisitUseCase" to "savingFailed", fault.useCase to fault.def)
+		val fault = ir.faultContracts.single { it.useCase == "BookVisitUseCase" }
+		assertEquals("savingFailed", fault.def)
+		assertEquals(1, fault.portCalls)
 		assertTrue(fault.cases.all { c -> c.ports.single().request != null && c.before == c.after }, fault.cases.toString())
+		// 消費位置は観測を引数に取るかどうか: 送る前の中断は 0、応答を得た後の中断は 1。Port を使わない UseCase は 0
+		assertEquals(mapOf("appliedNotCommitted" to 1, "markedNotSent" to 0, "sentNoAnswer" to 1),
+			ir.faultContracts.filter { it.useCase == "DispatchPaymentUseCase" }.associate { it.def to it.portCalls })
+		assertEquals(0, ir.faultContracts.single { it.useCase == "StartPaymentUseCase" }.portCalls)
+		// 送る前の中断でも「呼ばれるはずだった要求」はケースに載る(呼ばれないことをモックが検査する)
+		assertTrue(ir.faultContracts.single { it.def == "markedNotSent" }.cases.all { it.ports.single().request != null })
 		assertEquals("atMost", ir.typeDef("Lobby.Application.VisitRepositoryState").constraints.single { it.name == "atMostOneExpected" }.kind)
 		assertTrue(ir.dropped.isEmpty())
 	}

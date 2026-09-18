@@ -28,10 +28,11 @@ import org.junit.jupiter.api.Test
  * 環境の技術的障害(DB 例外など — モデルの語彙外の事象)で実行が中断されたとき、
  * 観測される状態が Lean の宣言(定義の値)と一致することを検査する。
  * 各ケースの入力は execute が**成功するはずの入力** — 具象側は「その実行の途中で
- * 技術的障害が起きる」仕掛けを施した実装を faultedUseCase で返す
+ * 技術的障害が起きる」仕掛けを施した実装を障害契約ごとのフック faulted<定義名> で返す
  * (注入手段は具象の自由 — 例: 採番衝突による PRIMARY KEY 違反)。
  * 表明: execute は業務の失敗語彙の外の例外で中断し(サイト側の不調は
- * 名指ししない — DomainResult に写さない)、Repository の観測は宣言された状態。
+ * 名指ししない — DomainResult に写さない)、Port の消費は宣言の位置(観測を引数に取らない定義 =
+ * 外部を呼ぶ前、取る定義 = 応答を得た後)、Repository の観測は宣言された状態。
  */
 abstract class StartPaymentUseCaseFaultContractTest {
 	protected abstract fun paymentAttemptRepository(): PaymentAttemptRepository
@@ -40,10 +41,11 @@ abstract class StartPaymentUseCaseFaultContractTest {
 	protected abstract fun paymentAttempt(fixture: PaymentAttemptFixture): PaymentAttempt
 	/** fixture の実体化(観測が一致する実装の値を返す)。 */
 	protected abstract fun visit(fixture: VisitFixture): Visit
-	/** 「実行の途中で技術的障害が起きる」仕掛けを施した実装を返す。注入手段は
-	    具象の自由(渡された泉を差し替え・ラップしてよい)— ただし観測対象の
-	    Repository は渡されたものを配線すること。 */
-	protected abstract fun faultedUseCase(paymentAttemptRepository: PaymentAttemptRepository, visitRepository: VisitRepository, paymentAttemptIdGenerator: PaymentAttemptIdGenerator, actor: ActorContext): StartPaymentUseCase
+	/* 「実行の途中で技術的障害が起きる」仕掛けを施した実装を、障害契約(定義)ごとに返す。注入手段は
+	   具象の自由(渡された泉・Port を差し替え・ラップしてよい)— ただし観測対象の Repository は渡されたものを配線し、
+	   Port の呼び出しは渡されたモックへ届けること(消費位置を検査する)。 */
+	/** 開始の commit 前に中断したら、試みも採番も残らない（外部はもともと呼ばない）。 */
+	protected abstract fun faultedBeforeCommit(paymentAttemptRepository: PaymentAttemptRepository, visitRepository: VisitRepository, paymentAttemptIdGenerator: PaymentAttemptIdGenerator, actor: ActorContext): StartPaymentUseCase
 
 	/** 連番採番 — 状態(attemptIds.next)を種とする決定的実装。 */
 	protected class SequentialPaymentAttemptIdGenerator(var next: Long) : PaymentAttemptIdGenerator {
@@ -60,7 +62,7 @@ abstract class StartPaymentUseCaseFaultContractTest {
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s808", visitor = VisitorNameFixture(text = "s809"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s810", visitor = VisitorNameFixture(text = "s811"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(504L)
-		val useCase = faultedUseCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 8L)))
+		val useCase = faultedBeforeCommit(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 8L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L)))
@@ -85,7 +87,7 @@ abstract class StartPaymentUseCaseFaultContractTest {
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s804", visitor = VisitorNameFixture(text = "s805"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s806", visitor = VisitorNameFixture(text = "s807"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(503L)
-		val useCase = faultedUseCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 8L)))
+		val useCase = faultedBeforeCommit(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 8L)))
 		var thrown: Throwable? = null
 		try {
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L)))

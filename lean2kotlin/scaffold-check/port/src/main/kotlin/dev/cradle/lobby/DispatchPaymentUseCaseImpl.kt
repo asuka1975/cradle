@@ -32,7 +32,7 @@ class DispatchPaymentUseCaseImpl(
 					PaymentGatewayAuthorizeOutcome.Authorized -> marked.settle(PaymentResult.Authorized)
 					PaymentGatewayAuthorizeOutcome.Declined -> marked.settle(PaymentResult.Declined)
 					PaymentGatewayAuthorizeOutcome.Accepted -> marked.awaitConfirmation()
-					PaymentGatewayAuthorizeOutcome.Unavailable -> marked
+					PaymentGatewayAuthorizeOutcome.Unavailable -> marked.resetPending()
 					PaymentGatewayAuthorizeOutcome.Unknown -> marked.lose()
 				}
 				paymentAttemptRepository.update(reflected)
