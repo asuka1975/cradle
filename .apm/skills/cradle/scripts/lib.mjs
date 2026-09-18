@@ -381,7 +381,8 @@ export const PRODUCT_PLACEHOLDER = "（一言で）";
 export function productLine(cfg) {
   const file = join(cfg.root, cfg.documents.ddd, "event-timeline.md");
   if (!existsSync(file)) return { value: null, placeholder: false };
-  const m = readFileSync(file, "utf8").match(/^プロダクト[:：]\s*(.*)$/m);
+  // 空白は行内のものだけ — ラベルだけ残した行の次の行（見出しなど）を値にしない
+  const m = readFileSync(file, "utf8").match(/^プロダクト[:：][ \t]*(.*)$/m);
   if (!m) return { value: null, placeholder: false };
   const value = m[1].trim();
   return { value, placeholder: !value || value === PRODUCT_PLACEHOLDER };

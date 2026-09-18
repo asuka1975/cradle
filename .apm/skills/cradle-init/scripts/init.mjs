@@ -12,7 +12,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSy
 import { join, dirname, relative } from "node:path";
 
 const args = process.argv.slice(2);
-const opt = (k, d) => { const i = args.indexOf(`--${k}`); return i >= 0 ? (args[i + 1] ?? true) : d; };
+// 次の語が別のフラグなら値ではない（`--domain --force` の domain は「値なし」）
+const opt = (k, d) => { const i = args.indexOf(`--${k}`); if (i < 0) return d; const v = args[i + 1]; return v === undefined || v.startsWith("--") ? true : v; };
 const project = opt("project");
 const target = opt("dir", process.env.CRADLE_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
 const backendPkg = opt("backend", null);

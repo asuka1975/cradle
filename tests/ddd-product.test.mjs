@@ -59,6 +59,15 @@ test("start --domain は置き場の行を書き換えて始め、status がそ�
   assert.ok(s.phases[0].facts.includes("プロダクト: 吹奏楽団の練習出欠と楽譜貸出の管理"), JSON.stringify(s.phases[0]));
 });
 
+test("ラベルだけ残して一言を消した行は置き場と同じで、次の行の見出しを一言に取らない", (t) => {
+  const { run, marker } = fixture(t, `# イベント時系列マップ\n\nプロダクト:\n\n## 出来事\n${TABLE}`);
+  const r = run(ddd, "start");
+  assert.equal(r.status, 1, r.stdout);
+  assert.match(r.stderr, /プロダクトの一言が無い/);
+  assert.doesNotMatch(r.stdout + r.stderr, /## 出来事/);
+  assert.equal(existsSync(marker), false);
+});
+
 test("行が無いところへ start --domain は見出しの直後に差し込む", (t) => {
   const { run, timeline } = fixture(t, `# イベント時系列マップ\n${TABLE}`);
   const r = run(ddd, "start", "--domain", "図書の貸出");
@@ -99,6 +108,11 @@ test("init --domain は一言を event-timeline.md の冒頭に書き、project.
   const bad = spawnSync(process.execPath, [init, "--project", "Demo", "--dir", withoutDomain, "--domain", "  "], { cwd: withoutDomain, env, encoding: "utf8", timeout: 20_000 });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /--domain/);
+  // 次の語が別のフラグなら --domain の値ではない（"--force" を一言に書かない）
+  const flagAsValue = spawnSync(process.execPath, [init, "--project", "Demo", "--dir", withoutDomain, "--domain", "--force"], { cwd: withoutDomain, env, encoding: "utf8", timeout: 20_000 });
+  assert.equal(flagAsValue.status, 1);
+  assert.match(flagAsValue.stderr, /--domain には一言/);
+  assert.doesNotMatch(readFileSync(join(withoutDomain, "documents/ddd/event-timeline.md"), "utf8"), /--force/);
   // event-timeline.md を敷かない実行（骨格の一部だけ敷き直す）では、書いていないという案内も出ない
   const again = spawnSync(process.execPath, [init, "--project", "Demo", "--dir", withoutDomain, "--only", "lean/mockup", "--force"], { cwd: withoutDomain, env, encoding: "utf8", timeout: 20_000 });
   assert.equal(again.status, 0, again.stderr);
