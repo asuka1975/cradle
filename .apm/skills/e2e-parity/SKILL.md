@@ -11,6 +11,7 @@ description: Use after the backend follows the model — derive E2E flow scripts
 
 1. **台本を起こす**: このスキルの `scripts/flows-from-golden.mjs --out e2e/scenarios/from-golden.json`。
    golden の trace から人物・手・通った / 断られた・そのとき見えた口を機械で列挙する。手で台本を書かない。
+   既に手書きの台本を持つプロジェクトは、台本を from-golden.json と同じ `steps` の形（`command` / `actor` / `outcome`）に寄せ、置き場を `cradle.json` の `e2e.scenarios` に書いて `scripts/flows-from-golden.mjs --check` を回す（受け入れの条件は e2e 規則）。
 2. **画面への写し**: 各手を「どの画面で・どの要素を・どう操作するか」に写す（ここだけが手書き）。ID に頼らず、ラベル + 当事者で紙面を特定する。日付は相対指定。
 3. **前提**: local スタック（infra-implement フェーズの成果物。`infra.up` で立て、`cradle doctor --local` が fresh）と Lean CLI サーバ、dev の画面。テスト用 DB は開発ループと分ける。
 4. **播種**: REST 側の初期盤面は golden の init state から REST 経由で作る（DB への直接 INSERT は最小限、test-harness 専用と明記）。

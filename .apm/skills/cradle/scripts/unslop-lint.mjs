@@ -19,7 +19,8 @@
 //   suppress-no-why  [warn]  @Suppress / eslint-disable / oxlint-disable に理由コメントが無い
 //   console-log      [warn]  frontend の本番コードに console.log
 //   emoji            [warn]  コードや docstring の装飾絵文字
-//   stale-path       [error] コメント・ドキュメントが指すリポジトリ内パスが存在しない（README・CLAUDE.md・AGENTS.md の腐りも拾う）
+//   stale-path       [error] コメント・ドキュメントが指すリポジトリ内パスが存在しない（README・CLAUDE.md・.apm/instructions の腐りも拾う）。
+//                            ハーネスの散文（配布物の rules / skills / agents・compile された AGENTS.md）は見ない — 消費側は cradle.json で置き場を変えられるので突き合わせられない
 //   restate          [warn]  直下の宣言名をそのまま繰り返すだけのコメント
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -40,7 +41,9 @@ function candidateFiles() {
   if (opts._.length) return opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p)).filter(existsSync);
   if (opts.all) {
     const code = codeDirs.flatMap(d => walk(d, { ext: CODE_EXT }));
+    // .apm/instructions は消費側の固有の事実の正本（写しの rules / AGENTS.md ではなくここを見る）
     const docs = [...walk(join(cfg.root, cfg.documents.dir), { ext: DOC_EXT }), ...["CLAUDE.md", "README.md", "AGENTS.md"].map(f => join(cfg.root, f)).filter(existsSync),
+      ...walk(join(cfg.root, ".apm", "instructions"), { ext: [".md"] }),
       ...codeDirs.flatMap(d => walk(d, { ext: [".md"] })),
       ...HARNESS_DIRS.flatMap(d => walk(join(cfg.root, d), { ext: [".md"] }))];
     return [...new Set([...code, ...docs])];
@@ -164,14 +167,13 @@ for (const file of files) {
   const isDdd = relPath.startsWith(cfg.documents.dir + "/");
   const lines = text.split("\n");
 
-  // stale-path: コード・ドキュメントの両方（documents は正本なので ID は書いてよいが、パスの腐りは拾う）
-  lines.forEach((l, i) => {
+  // stale-path: コード・ドキュメントの両方（documents は正本なので ID は書いてよいが、パスの腐りは拾う）。
+  // ハーネスの散文は見ない — 配布物が指すパスは消費側の cradle.json で置き場が変わり、消費側のツリーとは突き合わせられない
+  if (!isHarnessProse(relPath)) lines.forEach((l, i) => {
     for (const m of l.matchAll(PATH_IN_TEXT)) {
       const p = m[1];
       if (/^(https?:|\$|\{|<)/.test(p) || p.includes("*") || p.includes("{") || p.includes("<")) continue;
       if (IGNORED_PATHS.some(re => re.test(p))) continue;
-      // ハーネス散文は「これから作られる」パスを指すことがある — トップレベルのディレクトリがまだ無ければ見ない
-      if (isHarnessProse(relPath) && !existsSync(join(cfg.root, p.split("/")[0]))) continue;
       if (!pathExistsSomewhere(p, file)) add("stale-path", "error", file, i + 1, `存在しないパスを指しています: ${p}`);
     }
   });

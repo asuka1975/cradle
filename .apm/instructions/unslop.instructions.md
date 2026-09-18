@@ -11,7 +11,7 @@ description: unslop — それらしいが価値のない痕跡、腐る写し�
 | comment-status / comment-domain-id / comment-history | コードコメントのステータス語・documents の ID・日付や経緯（comments.md） |
 | lean-ref-missing / lean-ref-retracted | Lean が引く出典 ID が documents に無い・撤回済み（状態列か、状態列の無い表では最後の列の先頭 `撤回:`） |
 | lean-name-unlisted | モデルが付けた名前（コマンド・失敗・画面の口）に用語集の行が無い（次の探索セッションで確定する） |
-| stale-path | コメント・README・CLAUDE.md / AGENTS.md が指すリポジトリ内パスが存在しない |
+| stale-path | コメント・README・CLAUDE.md・.apm/instructions が指すリポジトリ内パスが存在しない（配られた rules / skills / agents と AGENTS.md は対象外） |
 | todo-bare / hedge | 理由の無い TODO、逃げ言葉 |
 | empty-catch / suppress-no-why / console-log | 握りつぶし、理由の無い抑止、本番コードの console.log |
 | restate / emoji | 宣言名をなぞるだけのコメント、装飾絵文字 |

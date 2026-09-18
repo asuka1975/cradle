@@ -68,7 +68,7 @@ export function loadConfig(root = findProjectRoot()) {
       openapi: "documents/codebase/openapi.yaml",
       ...(raw.documents ?? {}),
     },
-    e2e: { dir: "e2e", ...(raw.e2e ?? {}) },
+    e2e: { dir: raw.e2e?.dir ?? "e2e", scenarios: `${raw.e2e?.dir ?? "e2e"}/scenarios`, ...(raw.e2e ?? {}) },
     infra: { dir: "infra", ...(raw.infra ?? {}) },
     ports: { mockup: 8787, frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
     protected: raw.protected ?? ["documents/developer/**"],
@@ -308,6 +308,72 @@ export function tableRows(text) {
     out.push({ line: i + 1, cells: cellsOf(l), columns });
   });
   return out;
+}
+
+/** golden の流れ: `<golden>/<name>-flow.json` の trace を手の列 { command, actor, payload, outcome } に写す。
+    outcome は applied（通った）/ refused（domainError）/ protocol-error。payload は command の中身（無いコマンドでは undefined）。 */
+export function goldenFlows(cfg) {
+  const dir = join(cfg.root, cfg.lean.golden);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter(f => f.endsWith("-flow.json")).sort().map(f => {
+    const trace = JSON.parse(readFileSync(join(dir, f), "utf8")).ok?.trace ?? [];
+    return { id: f.replace(/-flow\.json$/, ""), steps: trace.map(t => { const command = commandNameOf(t.command); return { command, actor: t.actor ?? null, payload: t.command?.[command], outcome: outcomeOf(t) }; }) };
+  });
+}
+
+export function commandNameOf(command) {
+  return command && typeof command === "object" ? Object.keys(command)[0] : String(command);
+}
+
+export function outcomeOf(traceEntry) {
+  if (traceEntry.domainError !== undefined) return "refused";
+  if (traceEntry.error !== undefined) return "protocol-error";
+  return "applied";
+}
+
+/** 台本の置き場（ファイルかディレクトリ）から台本を読む。形は from-golden.json と同じ `steps`（`{ flows: [{ id?, steps }] }` か `{ id?, steps }` 1 本）。
+    手の列の要素は command（構成子名）・actor・outcome と、書いてあれば payload。形の合わないファイルは台本ではないので数えない。 */
+export function scenarioScripts(cfg, place) {
+  const root = resolve(cfg.root, place);
+  if (!existsSync(root)) return [];
+  const files = statSync(root).isDirectory() ? walk(root, { ext: [".json"] }) : [root];
+  const out = [];
+  for (const file of files) {
+    let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }
+    const flows = Array.isArray(j?.flows) ? j.flows : [j];
+    for (const fl of flows) {
+      if (!Array.isArray(fl?.steps) || !fl.steps.every(s => s && typeof s.command === "string" && typeof s.outcome === "string")) continue;
+      out.push({ id: fl.id ?? null, file: rel(cfg.root, file), steps: fl.steps.map(s => ({ command: s.command, actor: s.actor ?? null, outcome: s.outcome, ...(s.payload !== undefined ? { payload: s.payload } : {}) })) });
+    }
+  }
+  return out;
+}
+
+/** golden の流れが台本に対応しているか: 手の列（command・actor・outcome）が同じ順で台本にあれば対応。
+    台本の手に payload が書いてあれば golden の command の中身とも一致を要る（無ければ手の列だけで合う）。
+    台本 1 本が対応する流れは 1 本 — 手の列が同じ流れが複数あっても、台本の本数を超えては数えない。 */
+export function e2eCoverage(cfg, place = cfg.e2e.scenarios) {
+  const golden = goldenFlows(cfg);
+  const scripts = scenarioScripts(cfg, place);
+  const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+  const stepMatches = (g, s) => g.command === s.command && g.outcome === s.outcome && same(g.actor, s.actor) && (s.payload === undefined || same(g.payload, s.payload));
+  const matches = (flow, script) => flow.steps.length === script.steps.length && flow.steps.every((g, i) => stepMatches(g, script.steps[i]));
+  const specificity = (script) => script.steps.filter(s => s.payload !== undefined).length;
+  const free = new Set(scripts);
+  const covered = [], uncovered = [];
+  for (const g of golden) {
+    // payload まで書いた台本を先に当てる — 手の列だけの台本を、payload の違う別の流れに取られないため
+    const found = [...free].filter(s => matches(g, s)).sort((a, b) => specificity(b) - specificity(a))[0];
+    if (found) { free.delete(found); covered.push(g.id); } else uncovered.push(g.id);
+  }
+  return { place, flows: golden, golden: golden.map(g => g.id), covered, uncovered, scripts: scripts.length };
+}
+
+/** キーの順に依らない JSON（actor の比較用）。 */
+function canonical(v) {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])]));
+  return v;
 }
 
 /** 用語集の英語候補 → 用語。`/`・`、`・`,` で割り、空白を除いて小文字化した名前で引く。 */
