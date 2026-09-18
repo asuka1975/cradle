@@ -1,11 +1,11 @@
 {
   "ok": {
     "env": {
-      "cursor": 2,
+      "cursor": 1,
       "script": [
         {
           "operation": "authorize",
-          "outcome": "authorized",
+          "outcome": "unknown",
           "port": "PaymentGateway",
           "request": {
             "amount": 1,
@@ -17,16 +17,24 @@
         },
         {
           "operation": "inquire",
-          "outcome": {
-            "settled": {
-              "result": "authorized"
-            }
-          },
+          "outcome": "notFound",
           "port": "PaymentGateway",
           "request": {
             "attempt": {
               "id": 0
             }
+          }
+        },
+        {
+          "operation": "authorize",
+          "outcome": "authorized",
+          "port": "PaymentGateway",
+          "request": {
+            "amount": 1,
+            "attempt": {
+              "id": 0
+            },
+            "attemptNo": 2
           }
         }
       ]
@@ -50,7 +58,7 @@
           "script": [
             {
               "operation": "authorize",
-              "outcome": "authorized",
+              "outcome": "unknown",
               "port": "PaymentGateway",
               "request": {
                 "amount": 1,
@@ -62,16 +70,24 @@
             },
             {
               "operation": "inquire",
-              "outcome": {
-                "settled": {
-                  "result": "authorized"
-                }
-              },
+              "outcome": "notFound",
               "port": "PaymentGateway",
               "request": {
                 "attempt": {
                   "id": 0
                 }
+              }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
               }
             }
           ]
@@ -149,7 +165,7 @@
           "script": [
             {
               "operation": "authorize",
-              "outcome": "authorized",
+              "outcome": "unknown",
               "port": "PaymentGateway",
               "request": {
                 "amount": 1,
@@ -161,29 +177,32 @@
             },
             {
               "operation": "inquire",
-              "outcome": {
-                "settled": {
-                  "result": "authorized"
-                }
-              },
+              "outcome": "notFound",
               "port": "PaymentGateway",
               "request": {
                 "attempt": {
                   "id": 0
                 }
               }
+            },
+            {
+              "operation": "authorize",
+              "outcome": "authorized",
+              "port": "PaymentGateway",
+              "request": {
+                "amount": 1,
+                "attempt": {
+                  "id": 0
+                },
+                "attemptNo": 2
+              }
             }
           ]
-        },
-        "fault": "sentNoAnswer",
-        "faultContract": {
-          "name": "DispatchPaymentUseCase.sentNoAnswer",
-          "portCalls": 1
         },
         "interactions": [
           {
             "operation": "authorize",
-            "outcome": "authorized",
+            "outcome": "unknown",
             "port": "PaymentGateway",
             "request": {
               "amount": 1,
@@ -201,127 +220,6 @@
             }
           }
         },
-        "result": "fault",
-        "state": {
-          "attemptIds": {
-            "next": 1
-          },
-          "attempts": [
-            {
-              "amount": 1,
-              "id": {
-                "id": 0
-              },
-              "phase": "sending",
-              "tries": 1,
-              "visit": {
-                "id": 0
-              }
-            }
-          ],
-          "visitIds": {
-            "next": 1
-          },
-          "visits": [
-            {
-              "host": {
-                "id": 10
-              },
-              "hostName": "受入 太郎",
-              "id": {
-                "id": 0
-              },
-              "phase": "left",
-              "visitor": {
-                "text": "来訪 花子"
-              }
-            }
-          ]
-        },
-        "views": {
-          "payments": [
-            {
-              "amount": 1,
-              "id": {
-                "id": 0
-              },
-              "phase": "sending",
-              "tries": 1,
-              "visit": {
-                "id": 0
-              }
-            }
-          ],
-          "visits": [
-            {
-              "host": {
-                "id": 10
-              },
-              "hostName": "受入 太郎",
-              "id": {
-                "id": 0
-              },
-              "phase": "left",
-              "visitor": "来訪 花子"
-            }
-          ]
-        }
-      },
-      {
-        "env": {
-          "cursor": 2,
-          "script": [
-            {
-              "operation": "authorize",
-              "outcome": "authorized",
-              "port": "PaymentGateway",
-              "request": {
-                "amount": 1,
-                "attempt": {
-                  "id": 0
-                },
-                "attemptNo": 1
-              }
-            },
-            {
-              "operation": "inquire",
-              "outcome": {
-                "settled": {
-                  "result": "authorized"
-                }
-              },
-              "port": "PaymentGateway",
-              "request": {
-                "attempt": {
-                  "id": 0
-                }
-              }
-            }
-          ]
-        },
-        "interactions": [
-          {
-            "operation": "inquire",
-            "outcome": {
-              "settled": {
-                "result": "authorized"
-              }
-            },
-            "port": "PaymentGateway",
-            "request": {
-              "attempt": {
-                "id": 0
-              }
-            }
-          }
-        ],
-        "observation": {
-          "inquirePayment": {
-            "attempt": {
-              "id": 0
-            }
-          }
-        },
         "result": "applied",
         "state": {
           "attemptIds": {
@@ -333,7 +231,7 @@
               "id": {
                 "id": 0
               },
-              "phase": "authorized",
+              "phase": "unknown",
               "tries": 1,
               "visit": {
                 "id": 0
@@ -366,7 +264,7 @@
               "id": {
                 "id": 0
               },
-              "phase": "authorized",
+              "phase": "unknown",
               "tries": 1,
               "visit": {
                 "id": 0

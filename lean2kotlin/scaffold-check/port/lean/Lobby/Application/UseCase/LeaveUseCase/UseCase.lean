@@ -51,4 +51,11 @@ def execute (actor : ActorContext UserId) (c : Command VisitId)
     execute actor c before = .ok (act c before v) := by
   simp [execute, validate, h, hl, Except.map]
 
+/-- 成功したら、その結果は act の形（境界の可到達性が使う）。 -/
+theorem execute_ok_shape (actor : ActorContext UserId) (c : Command VisitId)
+    (before after : VisitRepositoryState VisitId EmployeeId)
+    (h : execute actor c before = .ok after) : ∃ v, after = act c before v := by
+  obtain ⟨v, _, hv⟩ := Lobby.Prelude.except_map_eq_ok h
+  exact ⟨v, hv⟩
+
 end Lobby.Application.LeaveUseCase

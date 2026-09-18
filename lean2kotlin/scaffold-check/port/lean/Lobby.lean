@@ -32,6 +32,7 @@ import Lobby.Runtime.Command
 import Lobby.Runtime.Observation
 import Lobby.Runtime.Environment
 import Lobby.Runtime.Machine
+import Lobby.Runtime.Reachable
 import Lobby.Runtime.Views
 import Lobby.Runtime.Json
 import Lobby.Runtime.Scenarios

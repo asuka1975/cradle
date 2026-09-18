@@ -92,4 +92,12 @@ def execute (actor : ActorContext UserId) (fountain : Fountain P PaymentAttemptI
     execute actor fountain c before hfresh = .ok (act fountain c before hfresh v) := by
   simp [execute, validate, h, ht, ho, Except.map]
 
+/-- 成功したら、その結果は act の形（境界の可到達性が使う）。 -/
+theorem execute_ok_shape (actor : ActorContext UserId) (fountain : Fountain P PaymentAttemptId)
+    (c : Command VisitId) (before after : State PaymentAttemptId VisitId EmployeeId P)
+    (hfresh : fountain.Fresh before.attemptIds before.attempts.ids)
+    (h : execute actor fountain c before hfresh = .ok after) : ∃ v, after = act fountain c before hfresh v := by
+  obtain ⟨v, _, hv⟩ := Lobby.Prelude.except_map_eq_ok h
+  exact ⟨v, hv⟩
+
 end Lobby.Application.StartPaymentUseCase

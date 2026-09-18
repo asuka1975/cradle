@@ -92,4 +92,14 @@ def execute (outcome : Inquire.Outcome) (o : Observation PaymentAttemptId)
     execute .unavailable o before = .ok ⟨before.attempts.update o.attempt (reflect .unavailable) (reflect_id .unavailable)⟩ := by
   simp [execute, validate, apply, h, hp, Bind.bind, Except.bind]
 
+/-- 成功したら、その結果は apply の形（境界の可到達性が使う）。 -/
+theorem execute_ok_shape (outcome : Inquire.Outcome) (o : Observation PaymentAttemptId)
+    (before after : State PaymentAttemptId VisitId)
+    (h : execute outcome o before = .ok after) :
+    ∃ a, apply outcome o before a = .ok after := by
+  unfold execute at h
+  cases hv : validate o before with
+  | error e => rw [hv] at h; cases h
+  | ok a => rw [hv] at h; exact ⟨a, h⟩
+
 end Lobby.Application.InquirePaymentUseCase

@@ -2,10 +2,13 @@
   名前付きの初期状態と環境、流れを一巡させる #guard 表明（golden の源）。期待値のずれは lake build の失敗として検知される。
 -/
 import Lobby.Runtime.Views
+import Lobby.Runtime.Reachable
+import Lobby.Runtime.Json
 
 namespace Lobby.Runtime
 
 open Lobby Lobby.Domain Lobby.Application Lobby.Application.Port
+open Lean (toJson fromJson?)
 
 /-- 受付に立つ担当者。 -/
 def reception : UserId := ⟨1⟩
@@ -58,18 +61,12 @@ def environmentByName : String → Option Environment
   | "paymentAnswerLost"   => some Environment.paymentAnswerLost
   | _                     => none
 
-/-- 入力列を順に流す（flow の定義そのもの: 連続する step）。ハーネスの失敗で止まる。 -/
+/-- 入力列を順に流す（`flow` の写し。ハーネスの失敗があれば無し）。 -/
 def runInputs (today : Date) (s : Snapshot) (env : Environment) (inputs : List Input) : Option (Snapshot × Environment) :=
-  match inputs with
-  | [] => some (s, env)
-  | i :: rest =>
-    if h : s.check = true then
-      match Snapshot.applyExternal today i s env h with
-      | .applied s' env' _ => runInputs today s' env' rest
-      | .refused _ env' _ => runInputs today s env' rest
-      | .fault s' env' _ _ _ => runInputs today s' env' rest
-      | .harness _ => none
-    else none
+  if h : s.check = true then
+    let (t, s', env') := flow today inputs s env h
+    if t.any (fun x => match x.2.2 with | .harness _ => true | _ => false) then none else some (s', env')
+  else none
 
 def actor : Actor := ⟨⟨reception⟩⟩
 
@@ -109,6 +106,89 @@ def actor : Actor := ⟨⟨reception⟩⟩
 #guard match runInputs Scenario.today Scenario.basic Environment.paymentLost
     [.command actor (.startPayment ⟨⟨0⟩⟩) none, .observation (.dispatchPayment ⟨⟨0⟩⟩) (some "markedNotSent")] with
   | some (s, env) => env.cursor == 0 && (paymentViews s.attempts).map (fun v => (v.phase, v.tries)) == [(.sending, 1)]
+  | none => false
+
+
+-- script が尽きていれば外部を呼べない（ハーネスの失敗。業務の拒否にならない）
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨"来訪 次郎"⟩⟩) none) Scenario.basic Environment.empty (by decide) with
+  | .harness _ => true
+  | _ => false
+
+-- 別の Port 操作が並んでいてもハーネスの失敗
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨"来訪 次郎"⟩⟩) none) Scenario.basic Environment.paymentAuthorized (by decide) with
+  | .harness _ => true
+  | _ => false
+
+-- 知らない障害契約の指名はハーネスの失敗
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.leave ⟨⟨0⟩⟩) (some "nope")) Scenario.basic Environment.empty (by decide) with
+  | .harness _ => true
+  | _ => false
+
+-- 拒否される入力への障害の指名はハーネスの失敗（障害契約は通る入力にだけ宣言される）
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨""⟩⟩) (some "savingFailed")) Scenario.basic Environment.directoryFound (by decide) with
+  | .harness _ => true
+  | _ => false
+
+-- 観測の後の拒否は cursor を消費している
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨"来訪 次郎"⟩⟩) none) Scenario.basic
+    ⟨[.organizationDirectoryFindMember ⟨taro⟩ (.found ⟨"受入 太郎", false⟩)], 0⟩ (by decide) with
+  | .refused .hostInactive env [_] => env.cursor == 1
+  | _ => false
+
+-- 障害契約ごとの消費位置。保存の失敗（応答の後）: 状態は作用前のまま、script は 1 つ消費
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨"来訪 次郎"⟩⟩) (some "savingFailed")) Scenario.basic Environment.directoryFound (by decide) with
+  | .fault s env [_] "BookVisitUseCase.savingFailed" 1 => s == Scenario.basic && env.cursor == 1
+  | _ => false
+
+-- 開始の commit 前の中断（外部は呼ばない）: 試みも採番も残らない
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.startPayment ⟨⟨0⟩⟩) (some "beforeCommit")) Scenario.basic Environment.empty (by decide) with
+  | .fault s env [] "StartPaymentUseCase.beforeCommit" 0 => s == Scenario.basic && env == Environment.empty
+  | _ => false
+
+-- 応答を失った中断と反映の commit 前の中断（応答の後）: 印は残り、script は 1 つ消費
+#guard match runInputs Scenario.today Scenario.basic Environment.paymentAuthorized [.command actor (.startPayment ⟨⟨0⟩⟩) none] with
+  | some (s, env) =>
+    if h : s.check = true then
+      (match Snapshot.applyExternal Scenario.today (.observation (.dispatchPayment ⟨⟨0⟩⟩) (some "sentNoAnswer")) s env h with
+        | .fault s' env' [_] "DispatchPaymentUseCase.sentNoAnswer" 1 =>
+          env'.cursor == 1 && (paymentViews s'.attempts).map (fun v => (v.phase, v.tries)) == [(.sending, 1)]
+        | _ => false) &&
+      (match Snapshot.applyExternal Scenario.today (.observation (.dispatchPayment ⟨⟨0⟩⟩) (some "appliedNotCommitted")) s env h with
+        | .fault s' env' [_] "DispatchPaymentUseCase.appliedNotCommitted" 1 =>
+          env'.cursor == 1 && (paymentViews s'.attempts).map (fun v => (v.phase, v.tries)) == [(.sending, 1)]
+        | _ => false)
+    else false
+  | none => false
+
+-- 送る前の中断からの再開（golden payment-fault と同じ列）: 照会で届いていないと分かり、同じ鍵で送り直して承認される
+#guard match runInputs Scenario.today Scenario.basic Environment.paymentInterrupted
+    [.command actor (.startPayment ⟨⟨0⟩⟩) none, .observation (.dispatchPayment ⟨⟨0⟩⟩) (some "markedNotSent"),
+     .observation (.dispatchPayment ⟨⟨0⟩⟩) none, .observation (.inquirePayment ⟨⟨0⟩⟩) none,
+     .observation (.dispatchPayment ⟨⟨0⟩⟩) none] with
+  | some (s, env) => env.exhausted && (paymentViews s.attempts).map (fun v => (v.phase, v.tries)) == [(.authorized, 2)]
+  | none => false
+
+-- 応答を失った中断からの再開（golden payment-answer-lost と同じ列）: 送った要求は成立しており、照会で確定
+#guard match runInputs Scenario.today Scenario.basic Environment.paymentAnswerLost
+    [.command actor (.startPayment ⟨⟨0⟩⟩) none, .observation (.dispatchPayment ⟨⟨0⟩⟩) (some "sentNoAnswer"),
+     .observation (.inquirePayment ⟨⟨0⟩⟩) none] with
+  | some (s, env) => env.exhausted && (paymentViews s.attempts).map (fun v => (v.phase, v.tries)) == [(.authorized, 1)]
+  | none => false
+
+
+-- 観測の後に execute が断る入力への障害の指名もハーネスの失敗
+#guard match Snapshot.applyExternal Scenario.today (.command actor (.bookVisit ⟨taro, ⟨"来訪 次郎"⟩⟩) (some "savingFailed")) Scenario.basic
+    ⟨[.organizationDirectoryFindMember ⟨taro⟩ .missing], 0⟩ (by decide) with
+  | .harness _ => true
+  | _ => false
+
+-- JSON の往復: 初期状態と名前付きの環境は同じ値に戻る
+#guard match (fromJson? (toJson Scenario.basic) : Except String Snapshot) with
+  | .ok s => s == Scenario.basic
+  | .error _ => false
+#guard ["directoryFound", "paymentAuthorized", "paymentLost", "paymentInterrupted", "paymentAnswerLost"].all fun n =>
+  match environmentByName n with
+  | some e => (match (fromJson? (toJson e) : Except String Environment) with | .ok e' => e' == e | .error _ => false)
   | none => false
 
 end Lobby.Runtime

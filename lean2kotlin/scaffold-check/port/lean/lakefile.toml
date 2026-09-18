@@ -1,6 +1,6 @@
 # 生成器の回帰素材（外部能力の Port を持つ最小ドメイン「ロビーの来訪受付」）。CLI と golden は external の回帰のために持つ。モックアップは持たない。
 name = "lobby-lean"
-defaultTargets = ["Lobby"]
+defaultTargets = ["Lobby", "lobby"]
 
 [[lean_lib]]
 name = "Lobby"

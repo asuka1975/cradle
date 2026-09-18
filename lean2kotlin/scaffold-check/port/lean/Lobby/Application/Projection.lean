@@ -1,5 +1,6 @@
 /-
   書き込みモデル → 見え方の射影（Entity を読んでよい読み側）。この素材は参照系 UseCase を持たず、画面の口は射影そのもの。
+  ここに @[contract] は付けない — 読取モデル（Row の structure）が無いので射影として抽出されず、付けた契約は未 emit となって生成が失敗する。
 -/
 import Lobby.Application.View
 import Lobby.Application.RepositoryState

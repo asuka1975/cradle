@@ -2,7 +2,8 @@
   境界の環境（非規範）: 外部能力の script（Port・操作・期待する要求・観測の列）と cursor。
   1 リクエスト 1 プロセスなので、環境も状態と同じく応答で返し、次の step が受け取る（プロセス内に持たない）。
   Port を持たない間、Interaction の構成子は無い。Port を足す手順: `Application/Port/<Port>/<操作>.lean` →
-  ここに構成子 → `Machine.lean` の腕で照合 → `Json.lean` にワイヤ。
+  ここに構成子 → `Machine.lean` の腕で照合（viaPort）→ `Json.lean` にワイヤ → `Reachable.lean` の腕 → `Scenarios.lean` に環境。
+  ワイヤの綴り: port は Port のディレクトリ名そのまま、operation は操作ファイル名の先頭を小文字に（抽出器の ports / operations と同じ）。
 -/
 import Sprout.Runtime.Ids
 

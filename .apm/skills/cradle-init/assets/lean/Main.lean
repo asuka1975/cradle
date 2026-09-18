@@ -17,9 +17,13 @@
     {"cmd":"external","version":1,"action":"init","scenario":…,"environment":"名前" | "env":{"script":[…],"cursor":0},…}
       → {"ok":{"state":…,"views":…,"env":…}}
     {"cmd":"external","version":1,"action":"step","state":…,"env":…,"input":{"command":…,"actor":…} | {"observation":…},"actor":…?,…}
-      → {"ok":{"result":"applied"|"refused"|"fault","state":…,"views":…,"env":…,"interactions":[…],…}} | {"harnessError":…}
+      → {"ok":{"result":"applied"|"refused"|"fault","state":…,"views":…,"env":…,"interactions":[…],
+                "domainError":…?,"faultContract":{"name":…,"portCalls":n}?}} | {"harnessError":{"step":null,"message":…}}
+    trace の各要素は入力の写し（actor / command か observation / 指名した fault の名前）に同じ欄が続く。
     {"cmd":"external","version":1,"action":"flow"|"dump","scenario":…,"inputs":[…],"stopAt":n?,…}
-      → {"ok":{"trace":[…],"env":…}}（dump は "initial" も）| {"harnessError":{"step":i,"message":…}}
+      → {"ok":{"trace":[…],"env":…}}（dump は "initial" も）| {"harnessError":{"step":i|null,"message":…}}
+    ハーネスの失敗は常にトップレベルの 1 形（trace の要素にはならず、そこまでの trace も返さない）。step は失敗した入力の番号（1 始まり）で、
+    step action と完了時の検査（全消費 / stopAt）では null。
   環境（script と cursor）は状態と同じく応答で返し、次の step が受け取る。script の不一致・不足はハーネスの失敗で、
   業務の拒否（domainError）にも外部の観測にも化けない。不明な欄・版違い・不正な組合せはプロトコルエラー。
 
@@ -171,18 +175,44 @@ def readInput (fallback : Option Actor) (j : Json) : Except String Input := do
     | none => pure none
   match (j.getObjVal? "command").toOption, (j.getObjVal? "observation").toOption with
   | some cj, none =>
-    let c ← fromJson? (α := Command) cj
-    match (j.getObjVal? "actor").toOption with
-    | some aj => pure (.command (← fromJson? (α := Actor) aj) c fault)
-    | none =>
-      match fallback with
-      | some a => pure (.command a c fault)
-      | none => throw "command input requires actor"
+    -- 名義の有無はコマンドの decode より先に見る（モデルに依らない拒否）
+    let actor ← match (j.getObjVal? "actor").toOption, fallback with
+      | some aj, _ => fromJson? (α := Actor) aj
+      | none, some a => pure a
+      | none, none => throw "command input requires actor"
+    pure (.command actor (← fromJson? (α := Command) cj) fault)
   | none, some oj =>
     if (j.getObjVal? "actor").toOption.isSome then throw "observation input must not carry actor (internal inputs have no user)"
     pure (.observation (← fromJson? (α := Observation) oj) fault)
   | some _, some _ => throw "input must be either command or observation, not both"
   | none, none => throw "input requires command or observation"
+
+/-! ### プロトコルエラーの固定 — モデルに依らない形。exe の build で走る -/
+
+private def rejects (raw : String) : Bool :=
+  match readExternal raw with | .error _ => true | .ok _ => false
+private def rejectsInput (fallback : Option Actor) (raw : String) : Bool :=
+  match Json.parse raw >>= readInput fallback with | .error _ => true | .ok _ => false
+
+#guard !rejects "{\"cmd\":\"external\",\"version\":1,\"action\":\"init\",\"scenario\":\"basic\"}"
+-- 版違い
+#guard rejects "{\"cmd\":\"external\",\"version\":2,\"action\":\"init\",\"scenario\":\"basic\"}"
+-- 不明な action
+#guard rejects "{\"cmd\":\"external\",\"version\":1,\"action\":\"nope\"}"
+-- action に許されない欄（step に scenario）
+#guard rejects "{\"cmd\":\"external\",\"version\":1,\"action\":\"step\",\"scenario\":\"basic\",\"state\":{},\"env\":{},\"input\":{}}"
+-- environment と env の両方
+#guard rejects "{\"cmd\":\"external\",\"version\":1,\"action\":\"init\",\"scenario\":\"basic\",\"environment\":\"x\",\"env\":{}}"
+-- views に env
+#guard rejects "{\"cmd\":\"external\",\"version\":1,\"action\":\"views\",\"state\":{},\"env\":{}}"
+-- 名義の無いコマンド（要素にもリクエストの既定にも無い）
+#guard rejectsInput none "{\"command\":{}}"
+-- 内部入力に名義
+#guard rejectsInput none "{\"observation\":{},\"actor\":{\"user\":{\"id\":1}}}"
+-- command と observation の両方 / どちらも無い / 知らない欄
+#guard rejectsInput none "{\"command\":{},\"observation\":{}}"
+#guard rejectsInput none "{}"
+#guard rejectsInput none "{\"command\":{},\"actor\":{\"user\":{\"id\":1}},\"extra\":1}"
 
 /-- trace に残す入力の写し（誰が・何を・指名した障害）。 -/
 def echoOf (i : Input) : List (String × Json) :=
@@ -200,40 +230,50 @@ def resultJson (today : Date) (viewer : Option UserId) (before : Snapshot) (echo
   | .applied s env used => .ok (s, env, body "applied" s env used [])
   | .refused e env used => .ok (before, env, body "refused" before env used [("domainError", toJson e)])
   | .fault s env used contract calls =>
-    .ok (s, env, body "fault" s env used [("fault", Json.mkObj [("contract", Json.str contract), ("portCalls", toJson calls)])])
+    .ok (s, env, body "fault" s env used [("faultContract", Json.mkObj [("name", Json.str contract), ("portCalls", toJson calls)])])
   | .harness msg => .error msg
 
-def harnessError (j : Json) : Json := Json.mkObj [("harnessError", j)]
+/-- ハーネスの失敗は 1 つの形: step は flow / dump で失敗した入力の番号（1 始まり）、step action と完了時の検査では null。 -/
+def harnessError (step : Option Nat) (msg : String) : Json :=
+  Json.mkObj [("harnessError", Json.mkObj [("step", toJson step), ("message", Json.str msg)])]
 
-/-- 入力列を順に流す。入力の不正はプロトコルエラー、script の不一致・不足はハーネスの失敗（どの手で起きたかを添える）。
-    flow は連続する step の定義そのもの。 -/
+/-- 入力列を順に流す — `Runtime.flow`（連続する step の定義）の写し。入力の不正はプロトコルエラー、
+    script の不一致・不足などハーネスの失敗は最初の手で止まり、どの手で起きたかを添える。 -/
 def runInputs (today : Date) (viewer : Option UserId) (fallback : Option Actor) (s0 : Snapshot) (env0 : Environment)
     (inputs : Array Json) : Except Json (Snapshot × Environment × Array Json) := do
-  let mut s := s0
-  let mut env := env0
-  let mut trace : Array Json := #[]
-  let mut i := 0
+  let mut decoded : Array Input := #[]
   for ij in inputs do
-    let input ← match readInput fallback ij with
-      | .ok x => pure x
-      | .error e => throw (protocolError s!"bad input #{i + 1}: {e}")
-    if h : s.check = true then
-      match resultJson today viewer s (echoOf input) (Snapshot.applyExternal today input s env h) with
-      | .ok (s', env', j) => s := s'; env := env'; trace := trace.push j
-      | .error msg => throw (harnessError (Json.mkObj [("step", toJson (i + 1)), ("message", Json.str msg)]))
-    else throw (protocolError s!"state failed Snapshot.check before input #{i + 1}")
-    i := i + 1
-  pure (s, env, trace)
+    match readInput fallback ij with
+    | .ok x => decoded := decoded.push x
+    | .error e => throw (protocolError s!"bad input #{decoded.size + 1}: {e}")
+  if h : s0.check = true then
+    let (t, sf, ef) := flow today decoded.toList s0 env0 h
+    let mut trace : Array Json := #[]
+    for (input, before, r) in t do
+      match resultJson today viewer before (echoOf input) r with
+      | .ok (_, _, j) => trace := trace.push j
+      | .error msg => throw (harnessError (some (trace.size + 1)) msg)
+    pure (sf, ef, trace)
+  else throw (protocolError "state failed Snapshot.check")
 
 /-- 完了した flow は全消費を検査する。途中で止めるケースは stopAt に終了 cursor を明示する。 -/
 def consumedCheck (env : Environment) (stopAt : Option Nat) : Option Json :=
   match stopAt with
-  | some n => if env.cursor == n then none else some (harnessError (Json.str s!"the environment stopped at cursor {env.cursor}, expected stopAt {n}"))
-  | none => if env.exhausted then none else some (harnessError (Json.str s!"the environment was not fully consumed: cursor {env.cursor} of {env.script.length}"))
+  | some n => if env.cursor == n then none else some (harnessError none s!"the environment stopped at cursor {env.cursor}, expected stopAt {n}")
+  | none => if env.exhausted then none else some (harnessError none s!"the environment was not fully consumed: cursor {env.cursor} of {env.script.length}")
 
 def runExternal (x : External) : IO Json := do
-  let viewer := x.viewer.bind (fun j => (fromJson? (α := UserId) j).toOption)
-  let actor? := x.actor.bind (fun j => (fromJson? (α := Actor) j).toOption)
+  -- 欄の値が decode できなければプロトコルエラー（null は無いのと同じ）
+  let viewer ← match x.viewer with
+    | none | some .null => pure none
+    | some j => match fromJson? (α := UserId) j with
+      | .ok v => pure (some v)
+      | .error e => return protocolError s!"bad viewer: {e}"
+  let actor? ← match x.actor with
+    | none | some .null => pure none
+    | some j => match fromJson? (α := Actor) j with
+      | .ok a => pure (some a)
+      | .error e => return protocolError s!"bad actor: {e}"
   let today ← match x.today with
     | none => pure Scenario.today
     | some j => match fromJson? (α := Date) j with
@@ -266,7 +306,7 @@ def runExternal (x : External) : IO Json := do
         if h : s.check = true then
           match resultJson today viewer s [] (Snapshot.applyExternal today input s env h) with
           | .ok (_, _, j) => return Json.mkObj [("ok", j)]
-          | .error msg => return harnessError (Json.str msg)
+          | .error msg => return harnessError none msg
         else return protocolError "state failed Snapshot.check"
     | .error e, _, _ | _, .error e, _ => return protocolError e
     | _, _, none => return protocolError "external step requires input"

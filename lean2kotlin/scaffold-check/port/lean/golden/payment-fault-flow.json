@@ -163,8 +163,9 @@
             }
           ]
         },
-        "fault": {
-          "contract": "DispatchPaymentUseCase.markedNotSent",
+        "fault": "markedNotSent",
+        "faultContract": {
+          "name": "DispatchPaymentUseCase.markedNotSent",
           "portCalls": 0
         },
         "interactions": [],
