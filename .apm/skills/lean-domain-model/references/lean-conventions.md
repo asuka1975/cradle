@@ -125,7 +125,7 @@ def execute (actor) (fountain) (outcome) (c) (before) (hfresh) := (validate acto
 - 契約定理: validate の拒否ごと・観測ごとの拒否・成功（`execute_ok`）。`request_ok`（validate が通れば要求がある）は置くが指名しない。`execute_ok_shape` は「成功なら結果は apply の形」。
 - Port 名は `Repository` で終えない（Repository は自システムの集約の取得・保存）。外部の Aggregate を写した Repository を作らない。
 
-## 4c. 内部入力（`Application/UseCase/<X>UseCase/Observation.lean` + `UseCase.lean`）
+## 4c. 内部入力（`Application/UseCase/<X>UseCase/` の `Observation.lean` + `UseCase.lean`）
 
 提供元からの通知（決済の確定など）や worker / timer からの契機は利用者の操作ではない。第 3 の固定形として `Observation.lean`（入力語彙 `Observation`。名義は入れない）+ `UseCase.lean` に書く。`Command.lean` は持たない（同居は `lean-check` と抽出が止める）。名義（`ActorContext`）は受けない — 通知に利用者はいない。受信の認証・署名検証は境界（Adapter）の責務で、型だけで検証済みとみなさない。固定名は更新系と同じ（Port を使わない適用形は `validate` / `act` / `execute`、Port を使う配送形は `validate` / `mkRequest` / `request` / `apply` / `execute`）。validate は相関する処理の存在と現在状態を確かめる。例は回帰素材の決済（来訪の精算）。
 

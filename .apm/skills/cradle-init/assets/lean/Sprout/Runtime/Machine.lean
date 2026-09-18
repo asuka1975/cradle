@@ -4,6 +4,7 @@
   時計（today）と名義（actor）は境界の持ち物で、状態には含めない。
 -/
 import Sprout.Runtime.Command
+import Sprout.Runtime.Observation
 import Sprout.Application.UseCase.PostNoteUseCase.UseCase
 import Sprout.Application.UseCase.CloseNoteUseCase.UseCase
 
@@ -65,5 +66,11 @@ def Snapshot.applyCommand (_today : Date) (actor : Actor) (cmd : Command) (s : S
 def Snapshot.apply (today : Date) (actor : Actor) (cmd : Command) (s : Snapshot)
     (h : s.check = true) : Except DomainError Snapshot :=
   Snapshot.applyCommand today actor cmd (s.opened actor) (Snapshot.opened_check actor s h)
+
+/-- 内部入力のルーティング: 名義が無いので `opened` は通さない。内部入力を持つ UseCase を足す手順は
+    コマンドと同じ（Observation.lean → `Runtime/Observation.lean` に構成子 → ここに腕 → `Json.lean` にワイヤ）。 -/
+def Snapshot.applyObservation (_today : Date) (obs : Observation) (_s : Snapshot)
+    (_h : _s.check = true) : Except DomainError Snapshot :=
+  nomatch obs
 
 end Sprout.Runtime
