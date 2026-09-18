@@ -627,19 +627,29 @@ class EmitTests(
 		return ir.types.find { it.role == "aggregateRoot" && it.kotlin == short }
 	}
 
-	private fun collFieldOf(st: IrTypeDef): String =
-		((st.shape as IrShape.Structure).fields.single { it.type is IrType.ListOf }).name
+	/** 観測モデルの、集約の列を運ぶフィールド名(1 本の List — 形は rootCollectionOf が検査する)。 */
+	private fun collFieldOf(st: IrTypeDef, root: IrTypeDef): String =
+		k.rootCollectionOf(root)?.coll?.name
+			?: error("${st.lean}: ${root.lean} の列を運ぶ List のフィールドがありません")
 
-	/** Effect Set(State)を集約ルート部分と泉部分に分解する。 */
+	/** Effect Set(State)を集約ルート部分と泉部分に分解する。State のフィールドは観測モデル
+	    (`<Root>RepositoryState`)か泉の状態 — 集約ルートを Option / List で直接運ぶ形は読めない。 */
 	private fun decomposeState(stateLean: String): EffectSet? {
 		val stateTd = ir.typeDef(stateLean)
 		val parts = mutableListOf<RootPart>()
 		val genParts = mutableListOf<GenPart>()
 		if (stateTd.kotlin.endsWith("RepositoryState")) {
 			val root = rootOfStateType(stateTd) ?: return null
-			parts += RootPart(root, null, collFieldOf(stateTd))
+			parts += RootPart(root, null, collFieldOf(stateTd, root))
 		} else {
 			for (f in (stateTd.shape as IrShape.Structure).fields) {
+				val carried = (((f.type as? IrType.OptionOf)?.of ?: (f.type as? IrType.ListOf)?.of) as? IrType.Ref)
+					?.let { ir.typeDef(it.lean) }?.takeIf { it.role == "aggregateRoot" }
+				require(carried == null) {
+					"${stateTd.lean}.${f.name}: 集約ルート ${carried?.lean} を Option / List で直接運ぶ形は読めない — " +
+						"個体は <Root>RepositoryState の 1 本の List に全部入り、State はその観測モデルを運ぶ" +
+						"(「高々 1 件」はその列に掛かる Prop フィールド。lean-conventions §4)"
+				}
 				val ftd = (f.type as? IrType.Ref)?.let { ir.typeDef(it.lean) } ?: continue
 				val port = k.fountainPorts().find { it.stateTd.lean == ftd.lean }
 				if (port != null) {
@@ -647,7 +657,7 @@ class EmitTests(
 					continue
 				}
 				val root = rootOfStateType(ftd) ?: continue
-				parts += RootPart(root, f.name, collFieldOf(ftd))
+				parts += RootPart(root, f.name, collFieldOf(ftd, root))
 			}
 		}
 		return if (parts.isEmpty()) null else EffectSet(parts, genParts)
@@ -1400,7 +1410,7 @@ class EmitTests(
 	    割った列は引き直す。 */
 	private fun repositoryArb(td: IrTypeDef): String {
 		val rc = k.rootCollectionOf(td)
-		val keys = rc?.let { k.uniqueKeysOf(it.state, it.coll) } ?: emptyList()
+		val keys = rc?.let { k.constraintKeysOf(it.state, it.coll) } ?: emptyList()
 		val listT = IrType.ListOf(IrType.Ref(td.lean))
 		val fixture = k.fixtureName(td)
 		val shifts = nestedIdShifts(td, "i")
@@ -1408,7 +1418,7 @@ class EmitTests(
 			else ".map { xs -> xs.mapIndexed { i, x -> x.copy(${shifts.joinToString(", ")}) } }"
 		val doc = if (rc == null) "`${td.lean}` の個体の列(同一性は重複しない)。"
 			else "`${rc.state.lean}` の制約(" +
-				(keys.joinToString("・") { "${it.constraint.name}: ${it.field.name}" }.ifEmpty { "無し" }) +
+				(keys.joinToString("・") { k.constraintDoc(it) }.ifEmpty { "無し" }) +
 				")と同一性を満たす個体の列。"
 		val shiftDoc = if (shifts.isEmpty()) "" else "\n    入れ子の個体の id は列の位置で変位させる(同一性はサイト全体で一意)。"
 		return "/** ${doc}間引きで size を割った列は引き直す。$shiftDoc */\n" +

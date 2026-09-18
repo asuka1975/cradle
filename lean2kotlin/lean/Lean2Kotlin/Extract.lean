@@ -20,9 +20,11 @@
      (ドライバ引数で上書きできる。表現は仮置き — 生成は ID の中身に依存しない)。
   4. **契約定理** — `@[contract]` / `@[faultContract]` を Lean 内で評価し、期待値(オラクル)を
      IR に焼き込む。golden は生成器側で読む。
-  5. **制約** — 構造体の Prop フィールド(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup`)を
-     一意制約として IR に出す(fixture の構築規律)。Prop フィールドと def の Prop 引数は
-     データでも interface 面でもない — 形状と署名から除き、評価では decide の証明で埋める。
+  5. **制約** — 構造体の Prop フィールドのうち読める形(`(coll.map (·.f)).Nodup` /
+     `(coll.filterMap (·.f)).Nodup` の一意制約、`∀ x ∈ coll, x.f = c` の全件制約、
+     `(coll.filter p).length ≤ n` の上限制約)を IR に出す(fixture の構築規律)。
+     Prop フィールドと def の Prop 引数はデータでも interface 面でもない —
+     形状と署名から除き、評価では decide の証明で埋める。
 -/
 import Lean
 
@@ -845,10 +847,81 @@ def idFieldType (reg : MonoReg) (head : Name) (targs : Array Expr) :
         return some m
     return none
 
+/-- 要素 `x` の 1 フィールドの射影(`x.f` / `S.f x`)が指すフィールド名。 -/
+private def elemField? (x e : Expr) : MetaM (Option String) := do
+  let env ← getEnv
+  match e with
+  | .proj s i y => return if y == x then (getStructureFields env s)[i]? |>.map toString else none
+  | _ =>
+    let .const pf _ := e.getAppFn | return none
+    let some info := env.getProjectionFnInfo? pf | return none
+    unless e.getAppArgs.back? == some x do return none
+    return (getStructureFields env info.ctorName.getPrefix)[info.i]? |>.map toString
+
+/-- 述語の右辺として読める閉じた値: Nat / String のリテラル、Bool、対象の inductive の引数なし構成子。
+    JSON は valueToJson と同じ形(生成器はそのまま要素のフィールド型のリテラルに写す)。 -/
+private def closedValue? (rootNs : Name) (c : Expr) : MetaM (Option Json) := do
+  let c ← instantiateMVars c
+  if c.hasLooseBVars || c.hasFVar then return none
+  if let some n := c.nat? then return some (Json.num n)
+  match ← whnf c with
+  | .lit (.natVal n) => return some (Json.num n)
+  | .lit (.strVal s) => return some (Json.str s)
+  | .const n _ =>
+    if n == ``Bool.true then return some (Json.bool true)
+    else if n == ``Bool.false then return some (Json.bool false)
+    else
+      match (← getEnv).find? n with
+      | some (.ctorInfo ci) =>
+        if ci.numFields == 0 && rootNs.isPrefixOf ci.induct then
+          return some (Json.str (toString (n.updatePrefix Name.anonymous)))
+        else return none
+      | _ => return none
+  | _ => return none
+
+/-- 要素 `x` についての述語(Prop でも Bool でもよい)のうち読める形を (フィールド, 比較, 値) にする:
+    `x.f = c` / `x.f ≠ c` / `¬(x.f = c)` / `x.f == c` / `x.f != c` / `decide (x.f = c)` /
+    `(…) = true` / `(…) = false` / Bool フィールドの `x.f` と `!x.f`。比較は eq / ne。 -/
+private partial def readPredicate (rootNs : Name) (x b : Expr) :
+    MetaM (Option (String × String × Json)) := do
+  let b ← instantiateMVars b
+  let flip (op : String) : String := if op == "eq" then "ne" else "eq"
+  let neg (r : Option (String × String × Json)) : Option (String × String × Json) :=
+    r.map fun (f, op, v) => (f, flip op, v)
+  let eqPred (lhs rhs : Expr) (op : String) : MetaM (Option (String × String × Json)) := do
+    let some f ← elemField? x lhs | return none
+    let some v ← closedValue? rootNs rhs | return none
+    return some (f, op, v)
+  let boolField : MetaM (Option (String × String × Json)) := do
+    match ← elemField? x b with
+    | some f => return some (f, "eq", Json.bool true)
+    | none => return none
+  match b.getAppFn with
+  | .const n _ =>
+    let args := b.getAppArgs
+    if n == ``Eq && args.size == 3 then
+      -- `x.f = c` を先に読む(Bool フィールドの `x.f = false` は eq false のまま)
+      if let some r ← eqPred args[1]! args[2]! "eq" then return some r
+      -- `(x.f == c) = true` / `decide (x.f = c) = false` の形
+      if args[2]!.isConstOf ``Bool.true then readPredicate rootNs x args[1]!
+      else if args[2]!.isConstOf ``Bool.false then return neg (← readPredicate rootNs x args[1]!)
+      else return none
+    else if n == ``Ne && args.size == 3 then eqPred args[1]! args[2]! "ne"
+    else if n == ``Not && args.size == 1 then return neg (← readPredicate rootNs x args[0]!)
+    else if n == ``BEq.beq && args.size == 4 then eqPred args[2]! args[3]! "eq"
+    else if n == ``bne && args.size == 4 then eqPred args[2]! args[3]! "ne"
+    else if n == ``Bool.not && args.size == 1 then return neg (← readPredicate rootNs x args[0]!)
+    else if n == ``Decidable.decide && args.size == 2 then readPredicate rootNs x args[0]!
+    else boolField
+  | _ => boolField
+
 /-- 構造体の制約(Prop フィールド)のうち生成器が読める形を IR にする:
     `List.Nodup (List.map (fun x => x.f) coll)` は unique、
-    `List.Nodup (List.filterMap (fun x => x.f) coll)` は uniqueSome(値のあるものだけが対象)。
-    coll は同じ構造体の先行フィールド(List)、射影は `fun x => x.f` / `(·.f)` / `S.f`。
+    `List.Nodup (List.filterMap (fun x => x.f) coll)` は uniqueSome(値のあるものだけが対象)、
+    `∀ x ∈ coll, p x` は all(全要素が述語を満たす)、
+    `(coll.filter p).length ≤ n` は atMost(述語を満たす要素は高々 n 件)。
+    coll は同じ構造体の先行フィールド(List)、射影は `fun x => x.f` / `(·.f)` / `S.f`、
+    述語 p は要素の 1 フィールドと閉じた値の比較(readPredicate)。
     読めない形は note の文面にして返す。 -/
 def structConstraints (rootNs head : Name) (targs : Array Expr) :
     MetaM (Array Json × Array String) := do
@@ -867,10 +940,15 @@ def structConstraints (rootNs head : Name) (targs : Array Expr) :
         data := data + 1
         continue
       let name := toString d.userName
-      match ← uniqueForm? rootNs xs d.type with
-      | some (kind, coll, field) =>
-        out := out.push (Json.mkObj [("kind", kind), ("name", name),
-          ("collection", coll), ("field", field)])
+      let t ← instantiateMVars d.type
+      let form? ← do
+        if let some r ← uniqueForm? rootNs xs t then pure (some r)
+        else if let some r ← allForm? rootNs xs t then pure (some r)
+        else atMostForm? rootNs xs t
+      match form? with
+      | some (kind, coll, field, extra) =>
+        out := out.push (Json.mkObj ([("kind", Json.str kind), ("name", Json.str name),
+          ("collection", Json.str coll), ("field", Json.str field)] ++ extra))
       | none => unreadable := unreadable.push s!"{head}.{name}: {← ppExpr d.type}"
     -- データを運ばない構造体(validate の解決の成果物 = 証拠)には fixture が無い — note の対象外
     return (out, if data == 0 then #[] else unreadable)
@@ -883,19 +961,17 @@ where
   /-- 射影 `f : S → β` が指す S のフィールド名。 -/
   projField? (f : Expr) : MetaM (Option String) := do
     let .forallE _ dom _ _ ← whnf (← inferType f) | return none
-    withLocalDeclD `x dom fun x => do
-      let env ← getEnv
-      let e := (mkApp f x).headBeta
-      match e with
-      | .proj s i y => return if y == x then (getStructureFields env s)[i]? |>.map toString else none
-      | _ =>
-        let .const pf _ := e.getAppFn | return none
-        let some info := env.getProjectionFnInfo? pf | return none
-        unless e.getAppArgs.back? == some x do return none
-        return (getStructureFields env info.ctorName.getPrefix)[info.i]? |>.map toString
+    withLocalDeclD `x dom fun x => elemField? x (mkApp f x).headBeta
+  /-- coll が同じ構造体の先行フィールドで、要素が対象の structure(生成区分を持ち、fixture が引かれる型)なら
+      そのフィールド名。Prod の射影などは読めない形。 -/
+  collOf? (rootNs : Name) (xs : Array Expr) (coll elTy : Expr) : MetaM (Option String) := do
+    unless coll.isFVar && xs.contains coll do return none
+    let .const elHead _ := (← whnf elTy).getAppFn | return none
+    unless rootNs.isPrefixOf elHead && isStructure (← getEnv) elHead do return none
+    return some (toString (← coll.fvarId!.getDecl).userName)
   uniqueForm? (rootNs : Name) (xs : Array Expr) (t : Expr) :
-      MetaM (Option (String × String × String)) := do
-    let some inner := nodupArg? (← instantiateMVars t) | return none
+      MetaM (Option (String × String × String × List (String × Json))) := do
+    let some inner := nodupArg? t | return none
     let .const mapName _ := inner.getAppFn | return none
     let kind ← if mapName == ``List.map then pure "unique"
       else if mapName == ``List.filterMap then pure "uniqueSome"
@@ -903,13 +979,46 @@ where
     -- List.map / List.filterMap : {α β} → (α → …) → List α → List β
     let args := inner.getAppArgs
     unless args.size == 4 do return none
-    let coll := args[3]!
-    unless coll.isFVar && xs.contains coll do return none
-    -- 要素は対象の structure(生成区分を持ち、fixture が引かれる型)に限る — Prod の射影などは読めない形
-    let .const elHead _ := (← whnf args[0]!).getAppFn | return none
-    unless rootNs.isPrefixOf elHead && isStructure (← getEnv) elHead do return none
+    let some coll ← collOf? rootNs xs args[3]! args[0]! | return none
     let some field ← projField? args[2]! | return none
-    return some (kind, toString (← coll.fvarId!.getDecl).userName, field)
+    return some (kind, coll, field, [])
+  /-- `∀ x, x ∈ coll → p x`(`∀ x ∈ coll, p x` の展開形)。 -/
+  allForm? (rootNs : Name) (xs : Array Expr) (t : Expr) :
+      MetaM (Option (String × String × String × List (String × Json))) := do
+    unless t.isForall do return none
+    forallBoundedTelescope t (some 2) fun ys body => do
+      unless ys.size == 2 do return none
+      let x := ys[0]!
+      let memTy ← instantiateMVars (← inferType ys[1]!)
+      let .const memN _ := memTy.getAppFn | return none
+      unless memN == ``Membership.mem && memTy.getAppArgs.size == 5 do return none
+      let margs := memTy.getAppArgs
+      -- 容れ物と要素の並びは Lean の版に依る — 要素が x のほうを取る
+      let (coll, el) := if margs[4]! == x then (margs[3]!, margs[4]!) else (margs[4]!, margs[3]!)
+      unless el == x do return none
+      let some collName ← collOf? rootNs xs coll (← inferType x) | return none
+      let some (field, op, value) ← readPredicate rootNs x body | return none
+      return some ("all", collName, field, [("op", Json.str op), ("value", value)])
+  /-- `(List.filter p coll).length ≤ n`(n は Nat リテラル)。 -/
+  atMostForm? (rootNs : Name) (xs : Array Expr) (t : Expr) :
+      MetaM (Option (String × String × String × List (String × Json))) := do
+    let .const leN _ := t.getAppFn | return none
+    unless leN == ``LE.le && t.getAppArgs.size == 4 do return none
+    let lenE := t.getAppArgs[2]!
+    let some n := t.getAppArgs[3]!.nat? | return none
+    let .const lenN _ := lenE.getAppFn | return none
+    unless lenN == ``List.length && lenE.getAppArgs.size == 2 do return none
+    let filt := lenE.getAppArgs[1]!
+    let .const filtN _ := filt.getAppFn | return none
+    unless filtN == ``List.filter && filt.getAppArgs.size == 3 do return none
+    let fargs := filt.getAppArgs
+    let some collName ← collOf? rootNs xs fargs[2]! fargs[0]! | return none
+    unless fargs[1]!.isLambda do return none
+    lambdaBoundedTelescope fargs[1]! 1 fun ys body => do
+      unless ys.size == 1 do return none
+      let some (field, op, value) ← readPredicate rootNs ys[0]! body | return none
+      return some ("atMost", collName, field,
+        [("op", Json.str op), ("value", value), ("max", Json.num n)])
 
 elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
   let rootNs := nsStx.getString.toName
@@ -2062,7 +2171,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
       let (constraints, unreadable) ← structConstraints rootNs n targs
       for u in unreadable do
-        logInfo m!"lean2kotlin: {u} は読める制約の形((coll.map (·.f)).Nodup / (coll.filterMap (·.f)).Nodup)ではないため、生成する fixture はこの制約を満たすとは限りません"
+        logInfo m!"lean2kotlin: {u} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、生成する fixture はこの制約を満たすとは限りません"
       let collectFromShape (j : Json) : Array Name :=
         match j.getObjVal? "fields" with
         | .ok (.arr fs) => fs.foldl (fun acc f =>

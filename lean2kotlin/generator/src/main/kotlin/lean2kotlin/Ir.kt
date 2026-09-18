@@ -106,10 +106,15 @@ data class IrCtor(val name: String, val fields: List<IrField>)
 
 /**
  * 構造体の制約(Lean の Prop フィールド)。kind = "unique": collection の要素の field が重複しない
- * (`(coll.map (·.f)).Nodup`)、"uniqueSome": 値のある要素だけが対象(`(coll.filterMap (·.f)).Nodup`)。
+ * (`(coll.map (·.f)).Nodup`)、"uniqueSome": 値のある要素だけが対象(`(coll.filterMap (·.f)).Nodup`)、
+ * "all": 全要素が述語を満たす(`∀ x ∈ coll, x.f = c`)、"atMost": 述語を満たす要素は高々 max 件
+ * (`(coll.filter p).length ≤ n`)。述語は `x.field <op> value`(op は eq / ne、value は JSON オラクル値)。
  * name は Lean のフィールド名(生成 KDoc に写す)。
  */
-data class IrConstraint(val kind: String, val name: String, val collection: String, val field: String) {
+data class IrConstraint(
+	val kind: String, val name: String, val collection: String, val field: String,
+	val op: String? = null, val value: JsonElement? = null, val max: Long? = null,
+) {
 	companion object {
 		fun parse(j: JsonElement): IrConstraint {
 			val o = j.jsonObject
@@ -117,7 +122,10 @@ data class IrConstraint(val kind: String, val name: String, val collection: Stri
 				kind = o.getValue("kind").jsonPrimitive.content,
 				name = o.getValue("name").jsonPrimitive.content,
 				collection = o.getValue("collection").jsonPrimitive.content,
-				field = o.getValue("field").jsonPrimitive.content)
+				field = o.getValue("field").jsonPrimitive.content,
+				op = o["op"]?.jsonPrimitive?.content,
+				value = o["value"],
+				max = o["max"]?.jsonPrimitive?.long)
 		}
 	}
 }

@@ -41,7 +41,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 
 - interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。
 - ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState のふるまいは写さない）。
-- 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}` として型の `constraints`（name / collection / field）に出す。読めない形は note。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
+- 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}`、`∀ x ∈ coll, p x` を `{"kind":"all"}`、`(coll.filter p).length ≤ n` を `{"kind":"atMost","max":n}` として型の `constraints`（name / collection / field。all / atMost は述語 `x.field <op> value` の `op`（eq / ne）と `value`（オラクル値と同じ JSON）も）に出す。読める述語の形は lean-conventions §9。読めない形は note。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
 - 単型化: 型引数の解決は lean-conventions §9 の binder 規約（上書きは `binderOverrides`）。定数の適用形 `C a…` を受理し、Id の表現はモデルの具体化を写す（`Runtime/Ids.lean` の `structure NoteId where id : Nat` → `Long`）。
 - 印の TagAttribute は対象自身の `Domain/Annotations.lean` のものを環境から読む。印の型は普通の structure（opaque / axiom はオラクル評価が止まる）。docstring は主体ポートと IdGenerator ポートの KDoc に全文写す。メソッドの KDoc は先頭行。
 - golden: `goldenDir` の `<name>-init.json` / `<name>-flow.json` の 2 本組（CLI の init / dump 応答。init の無い flow は無視して note）。flow の各エントリの `state` / `views` の対を 1 スナップショットにする（`state` の無いエントリは飛ばす）。`*.request.json` は読み飛ばす。用途は §4。
@@ -64,7 +64,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 - Entity と fixture: 本番 interface `Note` と平行に、テスト側へ観測レコード `NoteFixture`（data class）と `Note.toFixture()` を出す。interface 化された語彙へ到達する sealed / structure にも平行 fixture が付く（fixture・Row は本番 interface を運ばない）。テストは実体化フック `note(fixture: NoteFixture): Note` で実装の値を作り、比較は `toFixture()` で行う — 実装の表現は自由。
   ふるまいの無い VO を interface にしないのは、実装内部の等値比較が同一性比較に化け、値の構築が fixture 語彙に化けて本番語彙に埋め込めないため。
 - Factory: 自分自身を取らず自分自身を返す def（`Note.post`）は `<X>Factory` interface（テスト側。採番は呼び出し側の関心）。
-- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（Factory がある）/ `update`（自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。
+- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` で直接運ぶ形は生成が理由付きで止まる（§6）。
 - 泉: `<X>IdGeneratorState` ↔ `<X>IdGenerator { nextId(): <X>Id }`（`application`）。供給値の型は泉の値型の写し。
 - UseCase: `validate` / `execute` の署名の写し。State・泉・時計・主体は署名から落ち、効果は Repository 経由で観測する。validate は本番では execute の内部第一段、公開メンバとしてはテストシーム。QueryService は `query` だけ（Row を運ぶメソッドは本番に写さない）。
 - 写さないもの: 観測モデル（RepositoryState）、State のふるまい、契約指名のない静的語彙、入力語彙のふるまい。
@@ -89,7 +89,7 @@ abstract class CloseNoteUseCaseContractTest {
 | `<X>BehaviorsContractTest`（sealed / enum の VO） | `@[contract]` | 純値形: `behaviors()` フックで `<X>Behaviors` の実装を受け、メソッド → 一致 |
 | `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測 |
 | `<X>UseCaseContractTest`（参照系） | golden の views + `@[contract]` | 値形: Row 列と主体をフックで配線し `execute` の返り値を一致。golden の views のキーは UseCase 名（先頭小文字） |
-| `<X>RepositoryContractTest` | 規約 + `constraints` | PBT: 観測モデルの制約を満たす個体の列（`arb<Root>Repository`）を add → findAll の並びと findById、列の末尾を先頭の id に写して update → 並び保持、未知 id は null |
+| `<X>RepositoryContractTest` | 規約 + `constraints` | PBT: 観測モデルの制約を満たす個体の列（`arb<Root>Repository`）を add → findAll の並びと findById、列の末尾を先頭の id に写して update → 並び保持、未知 id は null。add / update の有無は観測モデルの同名の操作から導く |
 | `ReadModelDdlContractTest` | golden の各状態 + Projection の `@[contract]` | `retrieve<X>ReadModel(ルートの fixture 列…)` で観測の Set を復元し完全一致（並び込み） |
 | `<X>FaultContractTest` | `@[faultContract]` | 同じ UseCase の execute が成功する入力 ≤ 4 件。`faultedUseCase(...)` フックが障害を仕込んだ実装を返し、業務語彙外の例外で中断すること + Repository の観測 = 定義の評価値 |
 
@@ -102,7 +102,7 @@ abstract class CloseNoteUseCaseContractTest {
 - 時計ポートを持つ UseCase は、フックが固定の today を受け取る（値は各ケースの評価と同じ日）。
 - 翻訳できない定理は note を出して飛ばす。
 
-Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` は 0..5 要素、sealed / enum は一様選択、`LocalDate` は epoch 日。同一性を持つ要素列は `distinctBy { id }`、構造体の `constraints` でも間引く（uniqueSome は値のある要素だけ）。集約の列 `arb<Root>Repository(size)` は `<Root>RepositoryState` の制約で間引き、入れ子の個体の id を列の位置 × 1000000 で変位させ、間引きで size を割った列は引き直す（一意キーの値域が size の下限より小さいモデルでは引き直しが終わらない — その一意性は業務の事実として成り立たない）。PBT は JUnit 5 上で `runBlocking { checkAll(...) }`（kotest-property と kotlinx-coroutines-core に依存）。
+Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` は 0..5 要素、sealed / enum は一様選択、`LocalDate` は epoch 日。同一性を持つ要素列は `distinctBy { id }`、構造体の `constraints` も満たす（uniqueSome は値のある要素だけ初出を残す。all は `= c` なら述語の値をフィールドに写し、`≠ c` なら満たす要素だけ残す。atMost は `= c` なら満たす要素を先頭から max 件まで残し、`≠ c` なら max 件を超えた要素に述語の値を写す。間引きに頼るのは偶然で満たしやすい形だけ — 値域の広い型の `= c` を間引きにすると列が空になる）。集約の列 `arb<Root>Repository(size)` は `<Root>RepositoryState` の制約を満たすように引き、入れ子の個体の id を列の位置 × 1000000 で変位させ、間引きで size を割った列は引き直す（一意キーの値域が size の下限より小さいモデルでは引き直しが終わらない — その一意性は業務の事実として成り立たない）。PBT は JUnit 5 上で `runBlocking { checkAll(...) }`（kotest-property と kotlinx-coroutines-core に依存）。
 
 ## 5. Gradle plugin
 
@@ -138,6 +138,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - 型引数の binder に対応する `<Root>.Runtime.<binder>` が無く、`binderOverrides` にも無い。
 - 区分を持つ型のフィールド（または Entity の `id`）に写像できない型（写像外の型定数・型適用・依存関数型）がある。署名の写像失敗は失敗ではなく note で除外される。
 - `@[repositoryState]` の `<X>RepositoryState` に対応する集約ルート `<X>` が無い。
+- 生成時: `<X>RepositoryState` が集約の列を 1 本の `List` で運んでいない（`Option` / 2 本目の `List`）、または UseCase の State が集約ルートを `Option` / `List` で直接運ぶ（個体は観測モデルの 1 本の列に入れ、「高々 1 件」はその列の Prop フィールドで書く）。
 - 同じ総称型が違う型引数で単型化される、または型引数の数が合わない。
 - Entity の `id` フィールドの型が定数の適用形に簡約できない。
 - 標準時間型の ToJson が対象の Runtime に無い。

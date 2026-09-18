@@ -14,6 +14,10 @@
 手書きの最小 IR: `<Root>RepositoryState` の `constraints` に unique（id）と uniqueSome（Option のフィールド）を持ち、集約が入れ子の個体の列を運ぶ。
 `ConstraintArbTest` が集約の列の Arb と Repository 契約テストの本文を検査する。抽出器の出力ではないので採り直しは無い。IR のスキーマが変わったら手で直す。
 
+## constrained-list/
+手書きの最小 IR: `<Root>RepositoryState` の `constraints` に unique（id）・all（Bool のフィールドの全件制約）・atMost（列挙のフィールドの上限制約）を持ち、観測モデルの `add` / `update` が behaviors にある（集約にファクトリは無い）。
+`ConstrainedListArbTest` が集約の列の Arb・Repository の操作の導出・契約テストの本文を検査する。抽出器の出力ではないので採り直しは無い。IR のスキーマが変わったら手で直す。
+
 ## computed-row/
 手書きの最小 IR（Row に「状態の要素に無いフィールド」を持たせた読み取りモデル）と golden 1 組。
 `OrderRow.total` が第一階層、`OrderRow.lines[].LineRow.amount` が入れ子の計算フィールド。
