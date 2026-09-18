@@ -345,6 +345,10 @@ data class IrService(
 	val name: String, val module: String, val methods: List<IrMethod>,
 	/** UseCase のみ: 使う Port(署名から落ちる観測引数と、モックを組む型)。 */
 	val ports: List<IrUseCasePort> = emptyList(),
+	/** UseCase のみ: 入力の種別 — command(利用者の操作)/ observation(内部入力)/ query(参照系)。 */
+	val kind: String = "command",
+	/** UseCase のみ: 入力語彙の型(lean 名)。参照系は null。 */
+	val input: String? = null,
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrService {
@@ -353,7 +357,9 @@ data class IrService(
 				name = o.getValue("name").jsonPrimitive.content,
 				module = o.getValue("module").jsonPrimitive.content,
 				methods = o.getValue("methods").jsonArray.map(IrMethod::parse),
-				ports = o["ports"]?.jsonArray?.map(IrUseCasePort::parse) ?: emptyList())
+				ports = o["ports"]?.jsonArray?.map(IrUseCasePort::parse) ?: emptyList(),
+				kind = o["kind"]?.jsonPrimitive?.content ?: "command",
+				input = o["input"]?.jsonPrimitive?.content)
 		}
 	}
 }

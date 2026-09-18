@@ -255,6 +255,7 @@ export function fail(msg, code = 1) {
 export function leanVocabulary(cfg) {
   const targets = [
     { kind: "コマンド", file: "Runtime/Command.lean", decl: /^\s*inductive\s+Command\b/, member: /^\s*\|\s*(\w+)/ },
+    { kind: "内部入力", file: "Runtime/Observation.lean", decl: /^\s*inductive\s+Observation\b/, member: /^\s*\|\s*(\w+)/ },
     { kind: "失敗", file: "Domain/Error.lean", decl: /^\s*inductive\s+DomainError\b/, member: /^\s*\|\s*(\w+)/ },
     { kind: "画面の口", file: "Runtime/Views.lean", decl: /^\s*structure\s+Views\b/, member: /^\s*(\w+)\s*:/ },
   ];

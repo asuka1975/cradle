@@ -537,12 +537,12 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
 			t.to == IrType.Nat
 		else -> false
-	} || t.leafRefs().let { refs ->
+	} || ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } != "observation" && t.leafRefs().let { refs ->
 		refs.isNotEmpty() && refs.all {
 			val td = ir.typeDef(it)
 			td.isId || td.role in setOf("aggregateRoot", "entity", "readModelRow")
 		}
-	}
+	})
 
 	/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
 	private fun docLine(doc: String): String? =
@@ -583,7 +583,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 			if (td.role == "repositoryState") continue
 			// 入力語彙(Command 系)の定理も単体面を持たない — UseCase の
 			// validate / execute テストが保証
-			if (td.role == "command") continue
+			if (k.isInputRole(td.role)) continue
 			if (k.isEntityLike(td)) emitEntityTheoremTest(td, contracts)
 			else emitBehaviorsTheoremTest(subject, contracts)
 		}
@@ -1542,7 +1542,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		for (td in ir.types) {
 			when (td.role) {
 				"repositoryState", "readModel" -> {}   // fixture は焼き込み — Arb 不要
-				"command" -> {}   // 入力語彙(data class)— 値は定理由来のケースが運ぶ、乱択不要
+				"command", "observation" -> {}   // 入力語彙(data class)— 値は定理由来のケースが運ぶ、乱択不要
 				"clockPort" -> {}   // 時計ポート — Kotlin 型を生成しないため Arb もない
 				"actorPort" -> {}   // 主体ポート — 値は定理由来のケースが運ぶ(固定 actor の注入)、乱択不要
 				else -> {

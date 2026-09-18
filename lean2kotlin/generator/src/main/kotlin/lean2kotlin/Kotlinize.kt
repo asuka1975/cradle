@@ -197,6 +197,9 @@ class Kotlinize(private val ir: Ir) {
 			?.filter { m -> m.params.none { isSubjectParam(it, td) } &&
 				m.ret.leafRefs().contains(td.lean) } ?: emptyList()
 
+	/** 入力語彙の役割: 利用者の Command と内部入力の Observation。ふるまい・Arb を持たず、値は定理由来のケースが運ぶ。 */
+	fun isInputRole(role: String): Boolean = role == "command" || role == "observation"
+
 	/** Repository の在処: ドメインの持ち物だが、Entity / ValueObject と同格の
 	    専用ディレクトリを切る。 */
 	val repositoryPackage = "domain.repository"
@@ -208,7 +211,7 @@ class Kotlinize(private val ir: Ir) {
 	fun repoOps(td: IrTypeDef): RepoOps {
 		val idLean = (td.id as? IrType.Ref)?.lean
 		val find = idLean != null && ir.types.any { c ->
-			c.role == "command" && when (val sh = c.shape) {
+			isInputRole(c.role) && when (val sh = c.shape) {
 				is IrShape.Structure -> sh.fields.any { it.type.leafRefs().contains(idLean) }
 				is IrShape.Sealed -> sh.ctors.any { ct -> ct.fields.any { it.type.leafRefs().contains(idLean) } }
 				else -> false
