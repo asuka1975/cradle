@@ -3,17 +3,20 @@
   仕様アニメーション（Cradle 標準の汎用モックアップ）。
 
   鉄則: ここにドメインの判断を 1 行も書かない。
-    - state は Lean の返答をそのまま持ち、そのまま送り返す。UI で変形しない。
+    - state と env は Lean の返答をそのまま持ち、そのまま送り返す。UI で変形しない。
     - 並び順・フィルタ・集計・可否判定は Lean の views / validate の結果を映すだけ。
-    - シナリオは必ず {"cmd":"init"} で Lean から取る。ベタ書きしない。
+    - シナリオは必ず init で Lean から取る（外部能力の経路があれば cmd external の init、無ければ cmd init）。ベタ書きしない。
     - ボタンを段階で隠さない。拒否は domainError としてその場に出す（モデルの帰結を見せる）。
+    - 環境（外部能力の台本 script と cursor）も Lean の返答そのもの。台本との不一致（harnessError）は業務の拒否と別の見た目で出す。
 
   この画面が自分で持つのは表示の都合だけ:
     - views の口ごとの表。列名は /api/meta の glossary（ユビキタス言語の英語候補 → 用語）で引く。
-    - コマンドの入力欄。/api/meta の schemas（Lean の Command 構造体の型）から生成する。
+    - 入力欄。/api/meta の schemas（Command 構造体）と observationSchemas（内部入力の構造体）から生成する。
       wire の規約: id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクト、Option の未指定は null。
       手書きの FromJson を持つ値オブジェクトは文字列 1 本（schemas の hint に人が打つ表記。出どころは Runtime/Json.lean）。
       生成した JSON は下の欄に見え、手で直せる（型から決められない形はそこで直す）。
+    - 外部能力の経路（/api/meta の external）では、環境の選択（名前か script そのもの）・内部入力の手・障害契約の指名・
+      手ごとの外部とのやり取り（interactions）の表示。golden は送った入力の列をそのまま flow に組んで保存する。
   domain-mockup スキルはこれを土台に、ドメインの語彙の画面（口ごとの画面・対象の横のフォーム・登場人物の切り替え）を作り込む。
   「誰として」の切り替えはセッションの切り替えであって名義の選択ではない — viewer と actor は必ず同時に動く。
 -->
@@ -36,12 +39,18 @@
   th, td { border: 1px solid #e5e5e5; padding: .2rem .4rem; text-align: left; vertical-align: top; }
   th { background: #f6f6f6; font-weight: 600; }
   th small { color: #888; font-weight: normal; }
+  tr.consumed td { color: #999; }
   .absent { color: #999; font-style: italic; }
   .error { background: #fdd; border: 1px solid #c00; padding: .5rem 1rem; margin: 0 1rem; }
   .ok { background: #e6f5e6; border: 1px solid #6a6; padding: .3rem 1rem; margin: 0 1rem; }
+  .refused { background: #fff0e0; border: 1px solid #d80; padding: .5rem 1rem; margin: 0 1rem; }
+  .fault { background: #efe6f8; border: 1px solid #85c; padding: .5rem 1rem; margin: 0 1rem; }
+  .harness { background: #f0f0f0; border: 2px dashed #c00; padding: .5rem 1rem; margin: 0 1rem; }
+  .harness b { color: #c00; }
   .hint { background: #fff8dc; border: 1px solid #e0c060; padding: .4rem .6rem; font-size: 12px; margin: .3rem 0; }
   textarea { width: 100%; height: 5rem; font-family: monospace; font-size: 12px; }
   button, select, input { font: inherit; }
+  button:disabled { color: #999; }
   .trace { font-family: monospace; font-size: 12px; white-space: pre-wrap; }
   form.cmd { display: grid; grid-template-columns: max-content 1fr; gap: .3rem .6rem; align-items: center; margin: .4rem 0; }
   form.cmd label { font-size: 12px; color: #444; }
@@ -49,12 +58,14 @@
   form.cmd fieldset { grid-column: 1 / -1; border: 1px dashed #ccc; padding: .3rem .6rem; display: grid; grid-template-columns: max-content 1fr; gap: .3rem .6rem; }
   form.cmd legend { font-size: 12px; color: #666; }
   .opt { display: flex; gap: .4rem; align-items: center; }
+  .row { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; font-size: 12px; margin: .3rem 0; }
   details { margin-top: .4rem; }
 </style>
 </head>
 <body>
 <header>
   <label>シナリオ <select id="scenario"></select></label>
+  <label id="envLabel" hidden>環境 <select id="environment"></select></label>
   <label>今日 <input id="today" type="date"></label>
   <label>誰として（viewer = actor） <input id="who" type="text" placeholder='{"user":{"id":1}}' size="24"></label>
   <button id="reload">開き直す</button>
@@ -62,28 +73,43 @@
 </header>
 <div id="notice" hidden></div>
 <main>
-  <section id="viewsBox"><h2>見え方（views — Lean が返した束をそのまま）</h2><div id="views">読み込み中…</div></section>
+  <div style="display:grid;gap:1rem;align-content:start">
+    <section id="viewsBox"><h2>見え方（views — Lean が返した束をそのまま）</h2><div id="views">読み込み中…</div></section>
+    <section id="envBox" hidden>
+      <h2>環境（env — 外部能力の台本。Lean が返したまま）<span id="envinfo" style="text-transform:none;letter-spacing:0;margin-left:.6rem"></span></h2>
+      <div id="envview"></div>
+      <details><summary style="font-size:12px;color:#666">script を貼って環境にする（名前の代わり。JSON の配列。次の init から効く）</summary>
+        <textarea id="envscript" placeholder='[{"port":"…","operation":"…","request":{…},"outcome":…}]'></textarea></details>
+    </section>
+  </div>
   <section>
-    <h2>操作（step）</h2>
-    <label style="font-size:12px">操作 <select id="cmd"></select></label>
+    <h2>入力（step）</h2>
+    <div class="row">
+      <label>入力 <select id="cmd"></select></label>
+      <label id="faultLabel" hidden>障害契約の指名 <input id="fault" type="text" placeholder="@[faultContract] の def 名" size="18"></label>
+    </div>
     <div id="form"></div>
     <details open><summary style="font-size:12px;color:#666">送る JSON（<code>{"&lt;構成子&gt;": &lt;ペイロード&gt;}</code>。手で直せる）</summary>
       <textarea id="rawcmd">{}</textarea></details>
     <button id="send">送る</button>
     <details><summary>state（Lean が返したまま。読むだけ）</summary><pre id="state" class="trace"></pre></details>
-    <h2 style="margin-top:.8rem">操作ログ <span id="logcount">0</span> 件 <button id="savegolden">golden として保存</button> <button id="clearlog">消す</button></h2>
+    <h2 style="margin-top:.8rem">操作ログ <span id="logcount">0</span> 件
+      <input id="goldenname" type="text" value="session" size="12" title="golden の名前（<name>-init.json / <name>-flow.json / <name>.request.json）">
+      <button id="savegolden">golden として保存</button> <button id="clearlog">消す</button></h2>
     <div id="log" class="trace"></div>
   </section>
 </main>
 <datalist id="ids"></datalist>
 <script>
 // ---- 状態: Lean の返答をそのまま保持。UI では変形しない ----
-let state = null, views = null;
-const commandLog = [];   // {actor, command}
-let meta = { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {} };
+let state = null, views = null, env = null;
+const inputLog = [];   // 旧経路: {actor, command} / 外部能力の経路: {kind, command | observation, actor?, fault?}
+let lastOk = true;     // 直前の Lean の応答のトップが ok か（golden は ok の応答だけで組む）
+let meta = { scenarios: [], environments: [], external: null, commands: [], observations: [], errors: [], schemas: {}, observationSchemas: {}, glossary: {} };
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, props); e.append(...kids); return e; };
+const external = () => !!meta.external;   // 外部能力の経路（cmd external）を CLI が持つか
 async function lean(req) {
   const res = await fetch("/api/lean", { method: "POST", body: JSON.stringify(req) });
   return res.json();
@@ -107,63 +133,157 @@ function common() {
   if ($("today").value) o.today = $("today").value;
   return o;
 }
+/** 環境の指定: script を貼ってあればそれ（cursor 0）、無ければ選んだ名前、どちらも無ければ空の環境（何も送らない）。 */
+function envSel() {
+  const t = $("envscript").value.trim();
+  if (t) { try { const script = JSON.parse(t); if (Array.isArray(script)) return { env: { script, cursor: 0 } }; } catch {} }
+  const n = $("environment").value;
+  return n ? { environment: n } : {};
+}
+/** 外部能力の経路のリクエスト（golden の sidecar と同じ並び: cmd, version, viewer, today, action, scenario, 環境, その他）。 */
+function extReq(action, extra = {}) {
+  const o = { cmd: "external", version: 1 };
+  const v = viewerOf(); if (v !== undefined) o.viewer = v;
+  if ($("today").value) o.today = $("today").value;
+  o.action = action; o.scenario = $("scenario").value;
+  return Object.assign(o, envSel(), extra);
+}
 function notice(kind, msg) {
   const n = $("notice");
-  n.className = kind; n.textContent = msg; n.hidden = !msg;
+  n.className = kind; n.replaceChildren(); n.hidden = !msg;
+  if (kind === "harness") n.append(el("b", { textContent: "ハーネスの失敗（環境と入力列の不一致）: " }), document.createTextNode(msg));
+  else n.textContent = msg;
 }
 /** 表示名: 用語集（英語候補 → 用語）にあれば「用語（識別子）」、無ければ識別子のまま。 */
 function label(name) {
   const t = meta.glossary?.[String(name).replace(/\s+/g, "").toLowerCase()];
   return t ? `${t}（${name}）` : String(name);
 }
+function fresh(r) {
+  state = r.state; views = r.views; if (r.env !== undefined) env = r.env;
+  inputLog.length = 0; $("log").textContent = ""; $("logcount").textContent = "0";
+  lastOk = true; $("savegolden").disabled = false;
+}
 
 async function init() {
-  const r = await lean({ cmd: "init", scenario: $("scenario").value, ...common() });
-  if (r.ok) { state = r.ok.state; views = r.ok.views; commandLog.length = 0; renderAll(); notice("", ""); }
+  const actor = actorOf();
+  const r = external()
+    ? await lean(extReq("init", actor !== undefined ? { actor } : {}))
+    : await lean({ cmd: "init", scenario: $("scenario").value, ...common() });
+  if (r.ok) { fresh(r.ok); renderAll(); notice("", ""); }
   else notice("error", "init 失敗: " + JSON.stringify(r));
 }
 async function reproject() {
   if (!state) return init();
-  const r = await lean({ cmd: "views", state, ...common() });
+  const r = external()
+    ? await lean({ cmd: "external", version: 1, action: "views", state, ...common() })
+    : await lean({ cmd: "views", state, ...common() });
   if (r.ok) { state = r.ok.state; views = r.ok.views; renderAll(); }
   else notice("error", "views 失敗: " + JSON.stringify(r));
 }
-async function send(command) {
+/** 選んだ入力の種類と構成子（select の値は "command:<構成子>" か "observation:<構成子>"）。 */
+function selected() {
+  const [kind, ctor] = ($("cmd").value || "command:").split(":");
+  return { kind, ctor };
+}
+async function send(payload) {
   const actor = actorOf();
+  const { kind } = selected();
+  if (!external()) return sendLegacy(payload, actor);
+  const input = kind === "observation" ? { observation: payload } : { command: payload };
+  const fault = $("fault").value.trim();
+  if (fault) input.fault = fault;
+  const r = await lean({ cmd: "external", version: 1, action: "step", state, env, input, ...common() });
+  if (r.ok) {
+    lastOk = true;
+    state = r.ok.state; views = r.ok.views; env = r.ok.env;
+    inputLog.push({ kind, [kind]: payload, ...(kind === "command" ? { actor } : {}), ...(fault ? { fault } : {}) });
+    logStep(r.ok, kind, payload, actor, fault);
+    renderAll();
+    const name = label(Object.keys(payload)[0]);
+    if (r.ok.result === "applied") notice("ok", "通りました: " + name + (r.ok.interactions?.length ? `（外部とのやり取り ${r.ok.interactions.length} 件）` : ""));
+    else if (r.ok.result === "refused") notice("refused", "業務として断られました: " + JSON.stringify(r.ok.domainError) + "（state は変わっていません。環境は cursor " + r.ok.env?.cursor + "）");
+    else notice("fault", `障害契約 ${r.ok.faultContract?.name} で中断しました（外部の呼び出し ${r.ok.faultContract?.portCalls} 回）— state は中断点の状態`);
+  } else if (r.harnessError !== undefined) {
+    lastOk = false;
+    const h = r.harnessError;
+    notice("harness", (typeof h === "object" && h ? h.message : String(h)) + (h?.step != null ? `（入力 #${h.step}）` : "") + " — state と env は変わっていません");
+  } else {
+    lastOk = false;
+    notice("error", "プロトコルエラー: " + JSON.stringify(r));
+  }
+  $("savegolden").disabled = !lastOk;
+}
+async function sendLegacy(command, actor) {
   const r = await lean({ cmd: "step", state, command, ...common() });
   if (r.ok) {
+    lastOk = true;
     state = r.ok.state; views = r.ok.views;
-    commandLog.push({ actor, command });
+    inputLog.push({ actor, command });
     log(`ok        ${JSON.stringify(command)}  by ${JSON.stringify(actor)}`);
     renderAll(); notice("ok", "通りました: " + label(Object.keys(command)[0]));
   } else if (r.domainError !== undefined) {
     log(`refused   ${JSON.stringify(command)}  → ${JSON.stringify(r.domainError)}`);
-    notice("error", "業務として断られました: " + JSON.stringify(r.domainError) + "（state は変わっていません）");
+    notice("refused", "業務として断られました: " + JSON.stringify(r.domainError) + "（state は変わっていません）");
   } else {
+    lastOk = false;
     notice("error", "プロトコルエラー: " + JSON.stringify(r));
   }
+  $("savegolden").disabled = !lastOk;
 }
-function log(line) { $("log").textContent += line + "\n"; $("logcount").textContent = commandLog.length; }
+function log(line) { $("log").textContent += line + "\n"; $("logcount").textContent = inputLog.length; }
+/** 外部能力の経路の 1 手のログ: 結果・入力・当事者・指名した障害、続けて外部とのやり取り（interactions）を 1 件 1 行。 */
+function logStep(ok, kind, payload, actor, fault) {
+  const who = kind === "command" ? `  by ${JSON.stringify(actor)}` : "";
+  const nom = fault ? `  (fault ${fault})` : "";
+  let tail = "";
+  if (ok.result === "refused") tail = `  → ${JSON.stringify(ok.domainError)}`;
+  if (ok.result === "fault") tail = `  → ${ok.faultContract?.name} (portCalls ${ok.faultContract?.portCalls})`;
+  const lines = [`${ok.result.padEnd(9)} ${kind === "observation" ? "observation " : ""}${JSON.stringify(payload)}${who}${nom}${tail}`];
+  for (const i of ok.interactions ?? []) lines.push(`          ↔ ${i.port}.${i.operation} ${JSON.stringify(i.request)} → ${JSON.stringify(i.outcome)}`);
+  log(lines.join("\n"));
+}
 
-// ---- 描画: views を写すだけ。ここで並べ替え・フィルタをしない ----
+// ---- 描画: views と env を写すだけ。ここで並べ替え・フィルタをしない ----
 function renderAll() {
   $("state").textContent = JSON.stringify(state, null, 1);
   const box = $("views"); box.replaceChildren();
-  if (!views || typeof views !== "object") { box.textContent = JSON.stringify(views); return; }
-  const outlets = Object.entries(views);
-  if (!outlets.length) {
-    box.append(el("div", { className: "hint", textContent: "この Lean モデルには画面の口（Runtime/Views.lean の Views）が無い。描くものが無いので、lean-domain-model スキルで集約ごとの一覧の口を足す。state は右の「state」で読める。" }));
-  }
-  for (const [name, v] of outlets) {
-    box.append(el("h3", {}, document.createTextNode(label(name)), el("small", { textContent: name })));
-    if (v === null) { box.append(el("div", { className: "absent", textContent: "null（そこに無い / 見られない）" })); continue; }
-    if (Array.isArray(v)) {
-      if (!v.length) { box.append(el("div", { className: "absent", textContent: "[]（見えたうえで空）" })); continue; }
-      box.append(table(v)); continue;
+  if (!views || typeof views !== "object") { box.textContent = JSON.stringify(views); }
+  else {
+    const outlets = Object.entries(views);
+    if (!outlets.length) {
+      box.append(el("div", { className: "hint", textContent: "この Lean モデルには画面の口（Runtime/Views.lean の Views）が無い。描くものが無いので、lean-domain-model スキルで集約ごとの一覧の口を足す。state は右の「state」で読める。" }));
     }
-    box.append(el("pre", { className: "trace", textContent: JSON.stringify(v, null, 1) }));
+    for (const [name, v] of outlets) {
+      box.append(el("h3", {}, document.createTextNode(label(name)), el("small", { textContent: name })));
+      if (v === null) { box.append(el("div", { className: "absent", textContent: "null（そこに無い / 見られない）" })); continue; }
+      if (Array.isArray(v)) {
+        if (!v.length) { box.append(el("div", { className: "absent", textContent: "[]（見えたうえで空）" })); continue; }
+        box.append(table(v)); continue;
+      }
+      box.append(el("pre", { className: "trace", textContent: JSON.stringify(v, null, 1) }));
+    }
   }
+  renderEnv();
   refreshIds();
+}
+function renderEnv() {
+  $("envBox").hidden = !external();
+  if (!external()) return;
+  const box = $("envview"); box.replaceChildren();
+  const script = env?.script ?? [];
+  $("envinfo").textContent = env ? `cursor ${env.cursor} / ${script.length}` : "";
+  if (!script.length) { box.append(el("div", { className: "absent", textContent: "script は空（外部能力を使う手はハーネスの失敗になる）" })); return; }
+  const t = el("table");
+  t.append(el("tr", {}, ...["#", "済", "port", "operation", "request", "outcome"].map(c => el("th", { textContent: c }))));
+  script.forEach((i, n) => {
+    const consumed = n < (env.cursor ?? 0);
+    t.append(el("tr", { className: consumed ? "consumed" : "" },
+      el("td", { textContent: String(n) }), el("td", { textContent: consumed ? "済" : "" }),
+      el("td", { textContent: String(i.port) }), el("td", { textContent: String(i.operation) }),
+      el("td", { textContent: JSON.stringify(i.request) }), el("td", { textContent: JSON.stringify(i.outcome) })));
+  });
+  box.append(t);
 }
 function table(rows) {
   const cols = [...new Set(rows.flatMap(r => (r && typeof r === "object" && !Array.isArray(r)) ? Object.keys(r) : ["value"]))];
@@ -184,7 +304,7 @@ function refreshIds() {
   $("ids").replaceChildren(...[...new Set(found)].map(n => el("option", { value: String(n) })));
 }
 
-// ---- 入力欄: schemas（Lean の Command 構造体の型）から生成。値の作り方は wire の規約だけ ----
+// ---- 入力欄: schemas / observationSchemas（Lean の構造体の型）から生成。値の作り方は wire の規約だけ ----
 function inputFor(f, onChange) {
   let inp, get;
   switch (f.kind) {
@@ -209,11 +329,13 @@ function inputFor(f, onChange) {
   return { inp: el("div", { className: "opt" }, on, inp), get: () => on.checked ? get() : null };
 }
 function labelFor(f) { return el("label", {}, document.createTextNode(label(f.name)), el("small", { textContent: ` ${f.optional ? "任意 " : ""}${f.type}` }), ...(f.hint ? [el("small", { textContent: ` ${f.hint}` })] : [])); }
-function buildForm(ctor) {
+function buildForm() {
+  const { kind, ctor } = selected();
   const box = $("form"); box.replaceChildren();
-  const schema = meta.schemas?.[ctor];
+  $("fault").value = "";
+  const schema = (kind === "observation" ? meta.observationSchemas : meta.schemas)?.[ctor];
   if (!schema || schema.fields === null) {
-    box.append(el("div", { className: "hint", textContent: "この操作のペイロードの形は型から読めなかった。下の JSON を直接書く。" }));
+    box.append(el("div", { className: "hint", textContent: "この入力のペイロードの形は型から読めなかった。下の JSON を直接書く。" }));
     $("rawcmd").value = JSON.stringify({ [ctor]: {} }, null, 1); return;
   }
   const form = el("form", { className: "cmd" });
@@ -230,23 +352,54 @@ async function loadMeta() {
   try { meta = await (await fetch("/api/meta")).json(); } catch { meta = { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {} }; }
   const sel = $("scenario"); sel.replaceChildren(...(meta.scenarios ?? []).map(s => el("option", { value: s, textContent: s })));
   if (!sel.options.length) sel.append(el("option", { value: "basic", textContent: "basic" }));
-  const cmd = $("cmd"); cmd.replaceChildren(...(meta.commands ?? []).map(c => el("option", { value: c, textContent: label(c) })));
-  if (cmd.options.length) buildForm(cmd.value);
-  $("binfo").textContent = meta.lean?.exe ? `CLI: ${meta.lean.exe}` : (meta.error ?? "");
+  // 環境の選択は外部能力の経路を持つ CLI だけ。名前があれば最初の名前を既定にする（無ければ空の環境）
+  const envs = meta.environments ?? [];
+  $("envLabel").hidden = !external();
+  $("environment").replaceChildren(el("option", { value: "", textContent: "なし（空の環境）" }), ...envs.map(n => el("option", { value: n, textContent: n })));
+  if (envs.length) $("environment").value = envs[0];
+  const cmd = $("cmd"); cmd.replaceChildren();
+  const opts = (kind, names) => names.map(c => el("option", { value: `${kind}:${c}`, textContent: label(c) }));
+  const obs = external() ? (meta.observations ?? []) : [];
+  if (obs.length) {
+    cmd.append(el("optgroup", { label: "操作（利用者の操作。名義つき）" }, ...opts("command", meta.commands ?? [])));
+    cmd.append(el("optgroup", { label: "内部入力（通知・worker。名義は無い）" }, ...opts("observation", obs)));
+  } else cmd.append(...opts("command", meta.commands ?? []));
+  $("faultLabel").hidden = !external();
+  if (cmd.options.length) buildForm();
+  $("binfo").textContent = (meta.lean?.exe ? `CLI: ${meta.lean.exe}` : (meta.error ?? "")) + (external() ? `　external v${meta.external.version}` : "");
   if (meta.error) notice("error", meta.error);
 }
 $("reload").onclick = () => reproject();
 $("scenario").onchange = () => init();
-$("cmd").onchange = () => buildForm($("cmd").value);
+$("environment").onchange = () => init();
+$("cmd").onchange = () => buildForm();
 $("send").onclick = () => { try { send(JSON.parse($("rawcmd").value)); } catch (e) { notice("error", "JSON が不正: " + e.message); } };
-$("clearlog").onclick = () => { commandLog.length = 0; $("log").textContent = ""; $("logcount").textContent = "0"; };
+$("clearlog").onclick = () => { inputLog.length = 0; $("log").textContent = ""; $("logcount").textContent = "0"; };
 $("savegolden").onclick = async () => {
-  const name = prompt("golden の名前（<name>-init.json / <name>-flow.json）", "session");
-  if (!name) return;
-  const base = { scenario: $("scenario").value, ...common() };
-  const body = { name, init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands: commandLog } };
+  const name = $("goldenname").value.trim() || "session";
+  if (!lastOk) { notice("error", "直前の応答が ok ではないので golden は組めない（開き直すか、通る手を送る）"); return; }
+  let body;
+  if (external()) {
+    const actor = actorOf();
+    const same = (a) => JSON.stringify(a) === JSON.stringify(actor);
+    // 送った入力の列をそのまま flow に。当事者は流れの既定（actor）と違うときだけ要素に添える
+    const inputs = inputLog.map(e => {
+      const o = e.kind === "observation" ? { observation: e.observation } : { command: e.command };
+      if (e.kind === "command" && e.actor !== undefined && !same(e.actor)) o.actor = e.actor;
+      if (e.fault) o.fault = e.fault;
+      return o;
+    });
+    // 環境を使い切っていなければ止めた cursor を stopAt に（使い切っていれば省く = 全消費の検査）
+    const partial = env && env.cursor < (env.script ?? []).length ? { stopAt: env.cursor } : {};
+    body = { name, init: extReq("init", actor !== undefined ? { actor } : {}), flow: extReq("flow", { ...(actor !== undefined ? { actor } : {}), inputs, ...partial }) };
+  } else {
+    const base = { scenario: $("scenario").value, ...common() };
+    body = { name, init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands: inputLog } };
+  }
   const res = await fetch("/api/golden", { method: "POST", body: JSON.stringify(body) });
-  notice("ok", "保存: " + JSON.stringify(await res.json()));
+  const j = await res.json();
+  if (res.ok) notice("ok", "保存: " + JSON.stringify(j));
+  else notice("error", "保存しませんでした: " + JSON.stringify(j));
 };
 loadMeta().then(init);
 </script>
