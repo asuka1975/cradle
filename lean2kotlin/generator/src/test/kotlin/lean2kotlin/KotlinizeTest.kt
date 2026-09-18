@@ -212,9 +212,13 @@ class KotlinizeTest {
 			IrConstraint("all", "allOpen", "notes", "closed", op = "eq", value = json("false")), closed)
 		val atMostOneUntitled = Kotlinize.ConstraintKey(
 			IrConstraint("atMost", "atMostOneUntitled", "notes", "title", op = "eq", value = json("{\"text\":\"\"}"), max = 1), titleField)
-		assertEquals("xs.filter { x -> x.closed == false }", k.constrainExpr("xs", listOf(allOpen)))
+		val allTitled = Kotlinize.ConstraintKey(
+			IrConstraint("all", "allTitled", "notes", "title", op = "ne", value = json("{\"text\":\"\"}")), titleField)
+		// = c は値を写す(引き直しに頼らない)、≠ c は間引く(ほぼ全部が満たす)
+		assertEquals("xs.map { x -> x.copy(closed = false) }", k.constrainExpr("xs", listOf(allOpen)))
+		assertEquals("xs.filter { x -> x.title != TitleFixture(text = \"\") }", k.constrainExpr("xs", listOf(allTitled)))
 		assertEquals(
-			"xs.let { ys -> var k = 0; ys.filter { x -> !(x.title == TitleFixture(text = \"\")) || k++ < 1 } }",
+			"xs.let { ys -> var k = 0L; ys.filter { x -> !(x.title == TitleFixture(text = \"\")) || k++ < 1L } }",
 			k.constrainExpr("xs", listOf(atMostOneUntitled)))
 		assertEquals("allOpen: 全件 closed = false", k.constraintDoc(allOpen))
 		assertEquals("atMostOneUntitled: title = {\"text\":\"\"} は高々 1 件", k.constraintDoc(atMostOneUntitled))

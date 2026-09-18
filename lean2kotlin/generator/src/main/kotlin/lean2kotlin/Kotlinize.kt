@@ -243,17 +243,23 @@ class Kotlinize(private val ir: Ir) {
 		}
 	}
 
-	/** all / atMost の述語 `x.f == v` / `x.f != v`(v は制約の値を要素のフィールド型のリテラルに写したもの)。 */
-	private fun predicateExpr(key: ConstraintKey): String {
+	/** all / atMost の述語の値を要素のフィールド型のリテラルに写す。 */
+	private fun valueLiteral(key: ConstraintKey): String {
 		val c = key.constraint
 		val v = c.value ?: error("${c.name}: ${c.kind} には value が要る")
+		val t = (key.field.type as? IrType.WithDefault)?.of ?: key.field.type
+		return literal(t, v)
+	}
+
+	/** all / atMost の述語 `x.f == v` / `x.f != v`。 */
+	private fun predicateExpr(key: ConstraintKey): String {
+		val c = key.constraint
 		val cmp = when (c.op) {
 			"eq" -> "=="
 			"ne" -> "!="
 			else -> error("${c.name}: 不明な比較 ${c.op}")
 		}
-		val t = (key.field.type as? IrType.WithDefault)?.of ?: key.field.type
-		return "x.${ident(key.field.name)} $cmp ${literal(t, v)}"
+		return "x.${ident(key.field.name)} $cmp ${valueLiteral(key)}"
 	}
 
 	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。 */
@@ -267,10 +273,13 @@ class Kotlinize(private val ir: Ir) {
 		}
 	}
 
-	/** 列 xs を制約どおりに間引く式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す、
-	    all は述語を満たす要素だけ残す、atMost は述語を満たす要素を先頭から max 件まで残す。 */
+	/** 列 xs を制約どおりにする式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す。
+	    all は `= c` なら述語の値をフィールドに写し、`≠ c` なら述語を満たす要素だけ残す。atMost は `= c` なら述語を満たす要素を
+	    先頭から max 件まで残し、`≠ c` なら max 件を超えた要素に述語の値を写す(列の長さを変えない)。
+	    間引き(filter)に頼るのは偶然で満たしやすい形だけ — 値域の広い型の `= c` を間引きにすると列が空になり、引き直しが終わらない。 */
 	fun constrainExpr(xs: String, keys: List<ConstraintKey>): String = keys.fold(xs) { acc, key ->
 		val f = ident(key.field.name)
+		val eq = key.constraint.op == "eq"
 		when (key.constraint.kind) {
 			"unique" -> "$acc.distinctBy { x -> x.$f }"
 			"uniqueSome" -> {
@@ -278,10 +287,11 @@ class Kotlinize(private val ir: Ir) {
 					?: error("${key.constraint.name}: uniqueSome は Option のフィールドに掛かる(${key.field.name})")
 				"$acc.let { ys -> val seen = HashSet<${typeRefFixture(inner)}>(); ys.filter { x -> x.$f == null || seen.add(x.$f) } }"
 			}
-			"all" -> "$acc.filter { x -> ${predicateExpr(key)} }"
+			"all" -> if (eq) "$acc.map { x -> x.copy($f = ${valueLiteral(key)}) }" else "$acc.filter { x -> ${predicateExpr(key)} }"
 			"atMost" -> {
 				val n = key.constraint.max ?: error("${key.constraint.name}: atMost には max が要る")
-				"$acc.let { ys -> var k = 0; ys.filter { x -> !(${predicateExpr(key)}) || k++ < $n } }"
+				if (eq) "$acc.let { ys -> var k = 0L; ys.filter { x -> !(${predicateExpr(key)}) || k++ < ${n}L } }"
+				else "$acc.let { ys -> var k = 0L; ys.map { x -> if (!(${predicateExpr(key)}) || k++ < ${n}L) x else x.copy($f = ${valueLiteral(key)}) } }"
 			}
 			else -> error("${key.constraint.name}: 不明な制約の種類 ${key.constraint.kind}")
 		}

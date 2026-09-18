@@ -102,7 +102,7 @@ abstract class CloseNoteUseCaseContractTest {
 - 時計ポートを持つ UseCase は、フックが固定の today を受け取る（値は各ケースの評価と同じ日）。
 - 翻訳できない定理は note を出して飛ばす。
 
-Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` は 0..5 要素、sealed / enum は一様選択、`LocalDate` は epoch 日。同一性を持つ要素列は `distinctBy { id }`、構造体の `constraints` でも間引く（uniqueSome は値のある要素だけ、all は述語を満たす要素だけ、atMost は述語を満たす要素を先頭から max 件まで）。集約の列 `arb<Root>Repository(size)` は `<Root>RepositoryState` の制約で間引き、入れ子の個体の id を列の位置 × 1000000 で変位させ、間引きで size を割った列は引き直す（一意キーの値域が size の下限より小さいモデルでは引き直しが終わらない — その一意性は業務の事実として成り立たない）。PBT は JUnit 5 上で `runBlocking { checkAll(...) }`（kotest-property と kotlinx-coroutines-core に依存）。
+Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` は 0..5 要素、sealed / enum は一様選択、`LocalDate` は epoch 日。同一性を持つ要素列は `distinctBy { id }`、構造体の `constraints` も満たす（uniqueSome は値のある要素だけ初出を残す。all は `= c` なら述語の値をフィールドに写し、`≠ c` なら満たす要素だけ残す。atMost は `= c` なら満たす要素を先頭から max 件まで残し、`≠ c` なら max 件を超えた要素に述語の値を写す。間引きに頼るのは偶然で満たしやすい形だけ — 値域の広い型の `= c` を間引きにすると列が空になる）。集約の列 `arb<Root>Repository(size)` は `<Root>RepositoryState` の制約を満たすように引き、入れ子の個体の id を列の位置 × 1000000 で変位させ、間引きで size を割った列は引き直す（一意キーの値域が size の下限より小さいモデルでは引き直しが終わらない — その一意性は業務の事実として成り立たない）。PBT は JUnit 5 上で `runBlocking { checkAll(...) }`（kotest-property と kotlinx-coroutines-core に依存）。
 
 ## 5. Gradle plugin
 
