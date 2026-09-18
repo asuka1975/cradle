@@ -10,7 +10,7 @@ Pi/OpenCodeでも **APMによる導入が必要**。Pi Packageだけではプロ
 ```bash
 # 消費側のプロジェクトで実行。既存のapm.ymlがあればtargetsにcodexを追加する。
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - codex\ndependencies:\n  apm: []\n' > apm.yml
-apm install asuka1975/cradle#v0.1.0-alpha.11
+apm install asuka1975/cradle#v0.1.0-alpha.12
 apm compile --single-agents
 ```
 

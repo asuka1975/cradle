@@ -26,7 +26,7 @@ Pi / OpenCode V2 の追加統合はプレビューです。[導入手順と検�
 curl -sSL https://aka.ms/apm-unix | sh          # APM CLI
 cd <your-product>
 printf 'name: my-product\nversion: "0.1.0"\ntargets:\n  - claude\ndependencies:\n  apm: []\n' > apm.yml   # Codex なら - codex（両方でもよい）
-apm install asuka1975/cradle#v0.1.0-alpha.11      # タグで固定する
+apm install asuka1975/cradle#v0.1.0-alpha.12      # タグで固定する
 apm compile --single-agents                      # Codex: 規約を 1 枚の AGENTS.md にする（Claude Code では不要）
 ```
 
