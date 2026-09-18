@@ -49,7 +49,7 @@ def Note.close (n : Note NoteId UserId) : Note NoteId UserId := { n with closed 
 - 大域状態を署名に置かない。単位は機能ではなく Entity。同一性・効果・非効果・冪等を別々の定理にする（1 定理 1 概念）。
 - 非ルート Entity は Repository・UseCase を持たない（ルート経由でのみ変わることが構文的保証）。
 - 法則が要求しない観測は署名に置かない。含めない法則・操作はコメントで宣言する。
-- DomainService = 複数の集約ルートへの関心が要る業務ルールだけ。1 件に閉じるならルートのふるまい、1 UseCase にしか現れないなら UseCase の仕様。
+- DomainService = 複数の集約ルートへの関心が要る業務ルールだけ。1 件に閉じるならルートのふるまい、1 UseCase にしか現れないなら UseCase の仕様。置き場は `Domain/DomainService/<名前>.lean` で 1 ファイル = 1 interface（Kotlin 名は `<名前>Service`）。
 
 ## 4. 更新系 UseCase（`Application/UseCase/<X>UseCase/`）
 

@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.io.path.readText
 
 class IrParseTest {
 
@@ -111,5 +112,13 @@ class IrParseTest {
 		assertEquals(3, ir.behaviors.size)
 		assertTrue(ir.domainServices.isEmpty())
 		assertTrue(ir.faultContracts.isEmpty())
+	}
+
+	@Test
+	fun `domainServices はサービスごとに name と module と methods を読む`() {
+		val ir = Ir.parse(testResources.resolve("domain-services/ir.json").readText())
+		assertEquals(listOf("DomainService", "PricingService", "TaxService"), ir.domainServices.map { it.name })
+		assertEquals(listOf("DomainService", "Pricing", "Tax"), ir.domainServices.map { it.module })
+		assertEquals(listOf("cheaper", "decidePricing", "tax"), ir.domainServices.flatMap { s -> s.methods.map { it.name } })
 	}
 }

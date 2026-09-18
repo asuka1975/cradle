@@ -60,7 +60,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | inductive | 全構成子が引数なしなら `enum class`、あれば `sealed interface` + `data class` / `data object`。契約指名のあるふるまいは `<X>Behaviors` interface に |
 | 関数フィールドを持つ structure（`Fountain σ α`）・clockPort・actorPort | 本番署名から落ちる（配線で注入） |
 
-- 名前: lean-conventions §9 の規則で機械的に決まる（`PostNoteUseCase.Command` → `PostNoteCommand`）。package = ルート名前空間と葉ファイルを除いたモジュールパスの小文字連結。`Domain/ValueObject` はディレクトリ扱い、Id は `domain.valueobject`、Repository は `domain.repository`、UseCase は `application.usecase.<x>usecase`。
+- 名前: lean-conventions §9 の規則で機械的に決まる（`PostNoteUseCase.Command` → `PostNoteCommand`）。interface の名前は UseCase ディレクトリ `<X>UseCase` から `<X>UseCase`（UseCase）と `<X>QueryService`（QueryService）、DomainService はファイル名から `Domain/DomainService/<名前>.lean` → `<名前>Service`（単一ファイル `Domain/DomainService.lean` は `DomainService`）。package = ルート名前空間と葉ファイルを除いたモジュールパスの小文字連結。`Domain/ValueObject` はディレクトリ扱い、Id は `domain.valueobject`、Repository は `domain.repository`、UseCase は `application.usecase.<x>usecase`、DomainService は `domain.domainservice`。
 - Entity と fixture: 本番 interface `Note` と平行に、テスト側へ観測レコード `NoteFixture`（data class）と `Note.toFixture()` を出す。interface 化された語彙へ到達する sealed / structure にも平行 fixture が付く（fixture・Row は本番 interface を運ばない）。テストは実体化フック `note(fixture: NoteFixture): Note` で実装の値を作り、比較は `toFixture()` で行う — 実装の表現は自由。
   ふるまいの無い VO を interface にしないのは、実装内部の等値比較が同一性比較に化け、値の構築が fixture 語彙に化けて本番語彙に埋め込めないため。
 - Factory: 自分自身を取らず自分自身を返す def（`Note.post`）は `<X>Factory` interface（テスト側。採番は呼び出し側の関心）。
@@ -134,7 +134,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 抽出が失敗する（Lean のエラー。生成物は出ない）:
 
 - 到達した型に区分が無い。
-- Kotlin 名が衝突する、または識別子として不正（Lean 側で改名する。上書きは `binderOverrides` だけ）。
+- Kotlin 名が衝突する（型どうし・interface どうし・型と interface）、または識別子として不正（Lean 側で改名する。上書きは `binderOverrides` だけ）。
 - 型引数の binder に対応する `<Root>.Runtime.<binder>` が無く、`binderOverrides` にも無い。
 - 区分を持つ型のフィールド（または Entity の `id`）に写像できない型（写像外の型定数・型適用・依存関数型）がある。署名の写像失敗は失敗ではなく note で除外される。
 - `@[repositoryState]` の `<X>RepositoryState` に対応する集約ルート `<X>` が無い。
@@ -142,5 +142,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - Entity の `id` フィールドの型が定数の適用形に簡約できない。
 - 標準時間型の ToJson が対象の Runtime に無い。
 - 印の TagAttribute が見つからない（対象の Annotations を import していない）。
+
+生成が失敗する（Kotlin は出ない）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。
 
 note（生成は続く。失敗として読む — トリアージは gradle-wiring.md）: 読めない形の制約（Prop フィールド。fixture はそれを満たすとは限らない）、golden の 2 本組違反、View→Row / View→ドメイン語彙の壁の破れ（参照系ケースと Arb を出さない）、署名を写像できない def の除外、翻訳できない契約定理、execute 面でない定理の指名、golden 回帰の引数（主体など）を合成できないスキップ、計算する Row の合成不能。設計どおりの除外（時計ポート・Row を運ぶメソッド・State と入力語彙のふるまい）も note に出る。

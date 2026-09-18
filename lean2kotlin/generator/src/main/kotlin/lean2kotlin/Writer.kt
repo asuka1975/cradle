@@ -50,6 +50,8 @@ class Output(private val dir: Path, val basePackage: String, private val indent:
 		sb.append(reindent(body.trimEnd()) ).append('\n')
 		val target = if (subpkg == null) dir else dir.resolve(subpkg.replace('.', '/'))
 		val path = target.resolve("$name.kt")
+		// 同じパスへの 2 回目の書き出しは先の生成物を黙って消す — 名前の衝突は生成の失敗にする
+		check(path !in written) { "生成物の出力先が衝突しています(同じファイルを 2 回書こうとした): $path" }
 		Files.createDirectories(path.parent)
 		Files.writeString(path, sb.toString())
 		written.add(path)
