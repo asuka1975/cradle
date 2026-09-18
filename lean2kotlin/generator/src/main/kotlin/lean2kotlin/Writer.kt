@@ -50,6 +50,13 @@ class Output(private val dir: Path, val basePackage: String, private val indent:
 		sb.append(reindent(body.trimEnd()) ).append('\n')
 		val target = if (subpkg == null) dir else dir.resolve(subpkg.replace('.', '/'))
 		val path = target.resolve("$name.kt")
+		// 同じパスへの 2 回目の書き出しは先の生成物を黙って消す — 名前の衝突は生成の失敗にする。
+		// 大文字小文字だけ違うパスも衝突 — 生成物はコミットされ、区別しないファイルシステム(macOS の既定)にも展開される
+		val clash = written.find { it.toString().equals(path.toString(), ignoreCase = true) }
+		check(clash == null) {
+			if (clash == path) "生成物の出力先が衝突しています(同じファイルを 2 回書こうとした): $path"
+			else "生成物の出力先が衝突しています(大文字小文字だけ違うファイル — 区別しないファイルシステムで上書きになる): $clash と $path"
+		}
 		Files.createDirectories(path.parent)
 		Files.writeString(path, sb.toString())
 		written.add(path)

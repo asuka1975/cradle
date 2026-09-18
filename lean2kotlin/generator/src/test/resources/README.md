@@ -18,3 +18,7 @@
 手書きの最小 IR（Row に「状態の要素に無いフィールド」を持たせた読み取りモデル）と golden 1 組。
 `OrderRow.total` が第一階層、`OrderRow.lines[].LineRow.amount` が入れ子の計算フィールド。
 抽出器の出力ではないので採り直しは無い。IR のスキーマが変わったら手で直す。
+
+## domain-services/
+手書きの最小 IR: `domainServices` に短い名前のサービス 2 つ（`PricingService` / `TaxService`）と単一ファイル `Domain/DomainService.lean` 由来の `DomainService` を持つ。
+`DomainServiceTest` がサービスごとに 1 interface が生成されることと、同名の出力先が衝突したら失敗することを検査する。抽出器の出力ではないので採り直しは無い。IR のスキーマが変わったら手で直す。

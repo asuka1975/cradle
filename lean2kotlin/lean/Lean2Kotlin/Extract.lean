@@ -1175,8 +1175,14 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let svcJs := byMod.toList.toArray.qsort (fun a b => toString a.1 < toString b.1)
         |>.map fun (dir, methods) =>
           let dirS := toString dir
-          let name := if suffix.isEmpty then dirS
-            else (dirS.dropEnd "UseCase".length).toString ++ suffix
+          -- 名前の規則: UseCase ディレクトリ `<X>UseCase` は `<X>` + suffix
+          -- (`PostNoteUseCase` → `PostNoteQueryService`、UseCase 自身は suffix 無しでそのまま)。
+          -- DomainService はファイル名がサービス名で `<名前>` + suffix(`Pricing` → `PricingService`)。
+          -- 単一ファイル `Domain/DomainService.lean` の葉はそのまま `DomainService`
+          -- (末尾の文字数で切ると短い名前が同名に潰れ、生成物が上書きで消える)
+          let name := if suffix.isEmpty || dirS == "DomainService" then dirS
+            else if dirS.endsWith "UseCase" then (dirS.dropEnd "UseCase".length).toString ++ suffix
+            else dirS ++ suffix
           Json.mkObj [("name", name), ("module", dirS),
                       ("methods", Json.arr methods)]
       return (svcJs, skipped)
@@ -1193,6 +1199,16 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       logInfo m!"lean2kotlin: 署名を写像できないため interface 面から除外: {s}"
     for s in qSkipped ++ uSkipped do
       logInfo m!"lean2kotlin: 署名を写像できないため interface 面から除外: {s}"
+    -- サービス名は生成ファイル名 — 同名は黙って上書きされるので抽出で止める
+    let serviceNames := (queryJs ++ useCaseJs ++ domainSvcJs).filterMap fun j =>
+      match j.getObjVal? "name", j.getObjVal? "module" with
+      | .ok (.str nm), .ok (.str md) => some (nm, md)
+      | _, _ => none
+    let mut seenSvc : Std.HashMap String String := {}
+    for (nm, md) in serviceNames do
+      if let some prev := seenSvc.get? nm then
+        throwError "lean2kotlin: サービス名 {nm} が衝突しています: {prev} と {md}"
+      seenSvc := seenSvc.insert nm md
     -- 4. ふるまいの interface(Entity の def・VO / 入力語彙の制約・State の観測)。
     -- 「本番に写るのは Entity のふるまい+UseCase interface」の Entity 側。
     -- 対象: ふるまいモジュール内の def で、親 namespace が分類済みの型と一致するもの。
@@ -2106,7 +2122,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     for (src, r) in allRefs do
       unless roles.contains r do
         throwError "lean2kotlin: {src} が参照する型 {r} に生成区分がありません(配置規約 or アノテーションを確認)"
+    -- Kotlin 名は型とサービス(interface)で 1 つの名前空間を分け合う
     let mut seen : Std.HashMap String Name := {}
+    for (nm, md) in serviceNames do
+      seen := seen.insert nm md.toName
     for (n, _) in roleList do
       let k := kotlinNames.get? n |>.getD ""
       if let some prev := seen.get? k then

@@ -8,6 +8,7 @@ import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -59,5 +60,26 @@ class WriterTest {
 			|""".trimMargin(),
 			dir.resolve("a/Gen.kt").readText())
 		assertEquals(listOf(dir.resolve("a/Gen.kt")), out.report())
+	}
+
+	@Test
+	fun `同じパスへの 2 回目の書き出しは失敗する`(@TempDir dir: Path) {
+		val out = Output(dir, "p", "\t")
+		out.file("a", "Gen", body = "class Gen")
+		val e = assertFailsWith<IllegalStateException> { out.file("a", "Gen", body = "class Gen2") }
+		assertTrue("a/Gen.kt" in e.message!!, e.message!!)
+		assertEquals("class Gen", dir.resolve("a/Gen.kt").readText().lines().last { it.isNotEmpty() })
+		out.file("b", "Gen", body = "class Gen")
+		assertEquals(listOf(dir.resolve("a/Gen.kt"), dir.resolve("b/Gen.kt")), out.report())
+	}
+
+	@Test
+	fun `大文字小文字だけ違うパスへの書き出しも衝突として失敗する`(@TempDir dir: Path) {
+		val out = Output(dir, "p", "\t")
+		out.file("a", "UrlService", body = "interface UrlService")
+		val e = assertFailsWith<IllegalStateException> { out.file("a", "URLService", body = "interface URLService") }
+		assertTrue("大文字小文字だけ違う" in e.message!!, e.message!!)
+		assertTrue("a/UrlService.kt" in e.message!! && "a/URLService.kt" in e.message!!, e.message!!)
+		assertEquals(listOf(dir.resolve("a/UrlService.kt")), out.report())
 	}
 }

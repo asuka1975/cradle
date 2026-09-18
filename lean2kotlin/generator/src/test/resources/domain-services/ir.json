@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "rootNamespace": "Mini",
+  "types": [
+    {"lean": "Mini.Money", "kotlin": "Money", "role": "valueObject", "module": "Mini.Domain.ValueObject",
+     "shape": {"kind": "structure", "fields": [{"name": "amount", "type": {"k": "nat"}}]}}
+  ],
+  "queryServices": [],
+  "useCases": [],
+  "domainServices": [
+    {"name": "DomainService", "module": "DomainService", "methods": [
+      {"name": "cheaper", "doc": "安いほうを選ぶ。", "params": [{"name": "a", "type": {"k": "ref", "name": "Mini.Money"}}, {"name": "b", "type": {"k": "ref", "name": "Mini.Money"}}], "ret": {"k": "ref", "name": "Mini.Money"}}]},
+    {"name": "PricingService", "module": "Pricing", "methods": [
+      {"name": "decidePricing", "doc": "値付けを決める。", "params": [{"name": "a", "type": {"k": "ref", "name": "Mini.Money"}}, {"name": "b", "type": {"k": "ref", "name": "Mini.Money"}}], "ret": {"k": "bool"}}]},
+    {"name": "TaxService", "module": "Tax", "methods": [
+      {"name": "tax", "doc": "税額を決める。", "params": [{"name": "m", "type": {"k": "ref", "name": "Mini.Money"}}], "ret": {"k": "ref", "name": "Mini.Money"}}]}
+  ],
+  "contracts": [],
+  "faultContracts": [],
+  "behaviors": []
+}
