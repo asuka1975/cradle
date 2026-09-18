@@ -17,7 +17,8 @@ function fixture(t) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
-  for (const f of ["event-timeline.md", "hotspots.md", "ux-review.md", "model-review.md"]) writeFileSync(join(root, "documents/ddd", f), `# ${f}\n`);
+  for (const f of ["hotspots.md", "ux-review.md", "model-review.md"]) writeFileSync(join(root, "documents/ddd", f), `# ${f}\n`);
+  writeFileSync(join(root, "documents/ddd/event-timeline.md"), "# event-timeline.md\n\nプロダクト: テスト用の一言\n");
   writeFileSync(join(root, "documents/ddd/ubiquitous-language.md"), "# 用語集\n\n| 用語 | 英語 | 意味 |\n|---|---|---|\n");
   mkdirSync(join(root, "lean/Example/Runtime"), { recursive: true });
   writeFileSync(join(root, "lean/Example/Runtime/Command.lean"), COMMAND);

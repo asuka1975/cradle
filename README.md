@@ -36,7 +36,7 @@ apm compile --single-agents                      # Codex: 規約を 1 枚の AGE
 | スキルの呼び方 | `/cradle-init` | `$cradle-init` |
 
 ```
-cradle-init --project MyProduct      # 骨格を敷く（cradle.json, .apm/instructions/project.instructions.md, documents/, lean/）
+cradle-init --project MyProduct --domain "<一言>"   # 骨格を敷く（cradle.json, .apm/instructions/project.instructions.md, documents/, lean/）。一言は documents/ddd/event-timeline.md の冒頭に
 apm install                          # 固有の事実を rules に写す（Codex は apm compile --single-agents で AGENTS.md に）
 cd lean && lake build
 cradle-status                        # 現在地
