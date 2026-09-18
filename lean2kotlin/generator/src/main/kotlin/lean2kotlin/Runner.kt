@@ -92,6 +92,9 @@ object Lean2KotlinGeneration {
 		val error = { e: String -> errors += e; log("error: $e") }
 		val failure = { IllegalStateException("lean2kotlin: 宣言した契約・Port が検査に至らない診断 ${errors.size} 件で生成を失敗にしました:\n" + errors.joinToString("\n")) }
 		for (d in ir.dropped) error("${d.kind} ${d.name}: ${d.reason}")
+		// 再生できない golden(外部能力の golden の脇書き欠落・版違い・ok でない応答、fault のエントリが指名した障害契約と IR の食い違い)も
+		// 抽出器の診断と同じ集め方 — 生成は続き、最後に止まる
+		for (e in golden.errors + Golden.checkFaults(golden, ir)) error(e)
 		val beforePorts = errors.size
 		for (p in ir.ports) for (op in p.operations) for (ty in listOf(op.request, op.outcome)) {
 			if (k.reachesArrow(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が関数型を運ぶ(構成子の引数・入れ子の中も含む)— 要求と観測は値で比較できる閉じたデータ型にし、外部を呼ぶ関数は UseCase に渡さない")

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "init": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "init",
+    "scenario": "basic",
+    "environment": "paymentInterrupted"
+  },
+  "flow": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "flow",
+    "scenario": "basic",
+    "environment": "paymentInterrupted",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "inputs": [
+      {
+        "command": {
+          "startPayment": {
+            "visit": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        },
+        "fault": "markedNotSent"
+      },
+      {
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "inquirePayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        }
+      }
+    ]
+  }
+}

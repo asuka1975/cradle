@@ -359,6 +359,20 @@
   {"shape":
    {"kind": "structure",
     "fields":
+    [{"type": {"name": "Lobby.Runtime.PaymentAttemptId", "k": "ref"},
+      "name": "id"},
+     {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "visit"},
+     {"type": {"k": "nat"}, "name": "amount"},
+     {"type": {"k": "nat"}, "name": "tries"},
+     {"type": {"name": "Lobby.PaymentPhase", "k": "ref"}, "name": "phase"}]},
+   "role": "viewDto",
+   "module": "Lobby.Application.View",
+   "lean": "Lobby.Application.PaymentView",
+   "kotlin": "PaymentView",
+   "doc": "決済の試みの見え方。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
     [{"type": {"k": "string"}, "name": "name"},
      {"type": {"k": "bool"}, "name": "active"}]},
    "role": "portDto",
@@ -488,6 +502,19 @@
      "kind": "atMost",
      "field": "phase",
      "collection": "visits"}]},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
+     {"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"}, "name": "host"},
+     {"type": {"k": "string"}, "name": "hostName"},
+     {"type": {"k": "string"}, "name": "visitor"},
+     {"type": {"name": "Lobby.VisitPhase", "k": "ref"}, "name": "phase"}]},
+   "role": "viewDto",
+   "module": "Lobby.Application.View",
+   "lean": "Lobby.Application.VisitView",
+   "kotlin": "VisitView",
+   "doc": "来訪の見え方。 "},
   {"shape":
    {"kind": "structure",
     "fields":

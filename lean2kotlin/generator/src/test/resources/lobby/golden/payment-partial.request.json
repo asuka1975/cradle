@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "init": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "init",
+    "scenario": "basic",
+    "environment": "paymentLost"
+  },
+  "flow": {
+    "cmd": "external",
+    "version": 1,
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "action": "flow",
+    "scenario": "basic",
+    "environment": "paymentLost",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "inputs": [
+      {
+        "command": {
+          "startPayment": {
+            "visit": {
+              "id": 0
+            }
+          }
+        }
+      },
+      {
+        "observation": {
+          "dispatchPayment": {
+            "attempt": {
+              "id": 0
+            }
+          }
+        }
+      }
+    ],
+    "stopAt": 1
+  }
+}

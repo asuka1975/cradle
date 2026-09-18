@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "init": {
+    "cmd": "external",
+    "version": 1,
+    "action": "init",
+    "scenario": "basic",
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01"
+  },
+  "flow": {
+    "cmd": "external",
+    "version": 1,
+    "action": "flow",
+    "scenario": "basic",
+    "viewer": {
+      "id": 1
+    },
+    "today": "2026-01-01",
+    "actor": {
+      "user": {
+        "id": 1
+      }
+    },
+    "inputs": [
+      {
+        "command": {
+          "postNote": {
+            "title": {
+              "text": "新しいメモ"
+            }
+          }
+        }
+      },
+      {
+        "command": {
+          "closeNote": {
+            "note": {
+              "id": 0
+            }
+          }
+        },
+        "actor": {
+          "user": {
+            "id": 2
+          }
+        }
+      },
+      {
+        "command": {
+          "closeNote": {
+            "note": {
+              "id": 0
+            }
+          }
+        }
+      }
+    ]
+  }
+}
