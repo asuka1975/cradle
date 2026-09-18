@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "rootNamespace": "Mini",
+  "types": [
+    {"lean": "Mini.Runtime.GameId", "kotlin": "GameId", "role": "valueObject", "isId": true, "module": "Mini.Runtime.Ids",
+     "shape": {"kind": "structure", "fields": [{"name": "id", "type": {"k": "nat"}}]}},
+    {"lean": "Mini.Phase", "kotlin": "Phase", "role": "valueObject", "module": "Mini.Domain.ValueObject",
+     "shape": {"kind": "enum", "ctors": ["active", "finished"]}},
+    {"lean": "Mini.Domain.Game", "kotlin": "Game", "role": "aggregateRoot", "module": "Mini.Domain.Entity.Game",
+     "id": {"k": "ref", "name": "Mini.Runtime.GameId"},
+     "shape": {"kind": "structure", "fields": [
+       {"name": "id", "type": {"k": "ref", "name": "Mini.Runtime.GameId"}},
+       {"name": "phase", "type": {"k": "ref", "name": "Mini.Phase"}},
+       {"name": "archived", "type": {"k": "bool"}}]}},
+    {"lean": "Mini.Application.GameRepositoryState", "kotlin": "GameRepositoryState", "role": "repositoryState", "module": "Mini.Application.RepositoryState",
+     "shape": {"kind": "structure", "fields": [{"name": "games", "type": {"k": "list", "of": {"k": "ref", "name": "Mini.Domain.Game"}}}]},
+     "constraints": [
+       {"kind": "unique", "name": "uniqueIds", "collection": "games", "field": "id"},
+       {"kind": "all", "name": "allArchived", "collection": "games", "field": "archived", "op": "eq", "value": true},
+       {"kind": "atMost", "name": "atMostOneActive", "collection": "games", "field": "phase", "op": "ne", "value": "finished", "max": 1}]},
+    {"lean": "Mini.Application.FinishGameUseCase.Command", "kotlin": "FinishGameCommand", "role": "command", "module": "Mini.Application.UseCase.FinishGameUseCase.Command",
+     "shape": {"kind": "structure", "fields": [{"name": "game", "type": {"k": "ref", "name": "Mini.Runtime.GameId"}}]}},
+    {"lean": "Mini.DomainError", "kotlin": "DomainError", "role": "error", "module": "Mini.Domain.Error",
+     "shape": {"kind": "enum", "ctors": ["unknownGame"]}}
+  ],
+  "queryServices": [],
+  "useCases": [],
+  "domainServices": [],
+  "contracts": [],
+  "faultContracts": [],
+  "behaviors": [
+    {"subject": "Mini.Application.GameRepositoryState", "module": "Mini.Application.RepositoryState", "methods": [
+      {"name": "add", "doc": "末尾に足す。", "params": [{"name": "s", "type": {"k": "ref", "name": "Mini.Application.GameRepositoryState"}}, {"name": "g", "type": {"k": "ref", "name": "Mini.Domain.Game"}}], "ret": {"k": "ref", "name": "Mini.Application.GameRepositoryState"}},
+      {"name": "update", "doc": "1 件を差し替える。", "params": [{"name": "s", "type": {"k": "ref", "name": "Mini.Application.GameRepositoryState"}}, {"name": "id", "type": {"k": "ref", "name": "Mini.Runtime.GameId"}}, {"name": "f", "type": {"k": "arrow", "from": {"k": "ref", "name": "Mini.Domain.Game"}, "to": {"k": "ref", "name": "Mini.Domain.Game"}}}], "ret": {"k": "ref", "name": "Mini.Application.GameRepositoryState"}}]}
+  ]
+}

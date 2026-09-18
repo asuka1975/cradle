@@ -172,12 +172,12 @@ class KotlinizeTest {
 	}
 
 	@Test
-	fun `uniqueKeysOf は観測モデルの制約を集約のフィールドへ解決する`() {
+	fun `constraintKeysOf は観測モデルの制約を集約のフィールドへ解決する`() {
 		val rc = k.rootCollectionOf(td(note))!!
-		val keys = k.uniqueKeysOf(rc.state, rc.coll)
+		val keys = k.constraintKeysOf(rc.state, rc.coll)
 		assertEquals(listOf("uniqueIds", "uniqueTitles"), keys.map { it.constraint.name })
 		assertEquals(listOf("id", "title"), keys.map { it.field.name })
-		assertTrue(k.uniqueKeysOf(td(note), (td(note).shape as IrShape.Structure).fields.first()).isEmpty())
+		assertTrue(k.constraintKeysOf(td(note), (td(note).shape as IrShape.Structure).fields.first()).isEmpty())
 	}
 
 	@Test
@@ -186,7 +186,7 @@ class KotlinizeTest {
 		assertEquals("Arb.list(arbNote(), 0..5).map { xs -> xs.distinctBy { x -> x.id }.distinctBy { x -> x.title } }",
 			k.arbOfField(rc.state, rc.coll))
 		val listT = IrType.ListOf(IrType.Ref(note))
-		val closedKey = Kotlinize.UniqueKey(
+		val closedKey = Kotlinize.ConstraintKey(
 			IrConstraint("unique", "uniqueClosed", "notes", "closed"),
 			(td(note).shape as IrShape.Structure).fields.single { it.name == "closed" })
 		assertEquals(
@@ -195,13 +195,29 @@ class KotlinizeTest {
 	}
 
 	@Test
-	fun `distinctExpr は uniqueSome を値のある要素だけの初出に写す`() {
-		val nameKey = Kotlinize.UniqueKey(
+	fun `constrainExpr は uniqueSome を値のある要素だけの初出に写す`() {
+		val nameKey = Kotlinize.ConstraintKey(
 			IrConstraint("uniqueSome", "uniqueNames", "rooms", "name"),
 			IrField("name", IrType.OptionOf(IrType.Ref(title))))
 		assertEquals(
 			"xs.let { ys -> val seen = HashSet<TitleFixture>(); ys.filter { x -> x.name == null || seen.add(x.name) } }",
-			k.distinctExpr("xs", listOf(nameKey)))
+			k.constrainExpr("xs", listOf(nameKey)))
+	}
+
+	@Test
+	fun `constrainExpr は all と atMost の述語を要素のフィールド型のリテラルで写す`() {
+		val closed = (td(note).shape as IrShape.Structure).fields.single { it.name == "closed" }
+		val titleField = (td(note).shape as IrShape.Structure).fields.single { it.name == "title" }
+		val allOpen = Kotlinize.ConstraintKey(
+			IrConstraint("all", "allOpen", "notes", "closed", op = "eq", value = json("false")), closed)
+		val atMostOneUntitled = Kotlinize.ConstraintKey(
+			IrConstraint("atMost", "atMostOneUntitled", "notes", "title", op = "eq", value = json("{\"text\":\"\"}"), max = 1), titleField)
+		assertEquals("xs.filter { x -> x.closed == false }", k.constrainExpr("xs", listOf(allOpen)))
+		assertEquals(
+			"xs.let { ys -> var k = 0; ys.filter { x -> !(x.title == TitleFixture(text = \"\")) || k++ < 1 } }",
+			k.constrainExpr("xs", listOf(atMostOneUntitled)))
+		assertEquals("allOpen: 全件 closed = false", k.constraintDoc(allOpen))
+		assertEquals("atMostOneUntitled: title = {\"text\":\"\"} は高々 1 件", k.constraintDoc(atMostOneUntitled))
 	}
 
 	@Test

@@ -189,7 +189,9 @@ class Kotlinize(private val ir: Ir) {
 	    専用ディレクトリを切る。 */
 	val repositoryPackage = "domain.repository"
 
-	/** Repository 操作の導出(ドメインの遷移から許可されるものだけ)。 */
+	/** Repository 操作の導出(ドメインの遷移から許可されるものだけ)。add / update は観測モデル
+	    (`<Root>RepositoryState`)の同名の操作(保存に要る証明を引数に取る add / update)から導く。
+	    観測モデルに操作を書かないモデルは Entity 側(ファクトリ・自分自身を返すふるまい)から導く。 */
 	data class RepoOps(val find: Boolean, val add: Boolean, val update: Boolean)
 	fun repoOps(td: IrTypeDef): RepoOps {
 		val idLean = (td.id as? IrType.Ref)?.lean
@@ -200,37 +202,74 @@ class Kotlinize(private val ir: Ir) {
 				else -> false
 			}
 		}
-		return RepoOps(find, factoryMethodsOf(td).isNotEmpty(),
-			instanceMethodsOf(td).any { m -> m.ret.leafRefs().contains(td.lean) })
+		val stateOps = rootCollectionOf(td)?.let { rc ->
+			ir.behaviors.find { it.subject == rc.state.lean }?.methods?.map { it.name }
+		} ?: emptyList()
+		return RepoOps(find, "add" in stateOps || factoryMethodsOf(td).isNotEmpty(),
+			"update" in stateOps || instanceMethodsOf(td).any { m -> m.ret.leafRefs().contains(td.lean) })
 	}
 
-	/** 集約ルートの観測モデル(命名規約 `<Root>RepositoryState`)と、その集約の列を運ぶフィールド。 */
+	/** 集約ルートの観測モデル(命名規約 `<Root>RepositoryState`)と、その集約の列を運ぶフィールド。
+	    個体は 1 本の List に全部入る — Option や単体のフィールドで個体を運ぶ形は読めない
+	    (「高々 1 件」はその列に掛かる Prop フィールド)。同一性が Unit の集約は列を持たない。 */
 	data class RootCollection(val state: IrTypeDef, val coll: IrField)
 	fun rootCollectionOf(root: IrTypeDef): RootCollection? {
 		val state = ir.types.find { it.role == "repositoryState" && it.kotlin == root.kotlin + "RepositoryState" }
 			?: return null
-		val colls = (state.shape as? IrShape.Structure)?.fields
-			?.filter { f -> ((f.type as? IrType.ListOf)?.of as? IrType.Ref)?.lean == root.lean } ?: emptyList()
-		require(colls.size <= 1) { "${state.lean}: ${root.lean} の列を運ぶフィールドが 1 つではありません(${colls.map { it.name }})" }
-		return colls.singleOrNull()?.let { RootCollection(state, it) }
+		val fields = (state.shape as? IrShape.Structure)?.fields ?: emptyList()
+		val colls = fields.filter { f -> ((f.type as? IrType.ListOf)?.of as? IrType.Ref)?.lean == root.lean }
+		val singles = fields.filter { f ->
+			((f.type as? IrType.OptionOf)?.of as? IrType.Ref)?.lean == root.lean || (f.type as? IrType.Ref)?.lean == root.lean
+		}
+		if (colls.isEmpty() && singles.isEmpty() && root.id == IrType.Unit) return null
+		require(colls.size == 1 && singles.isEmpty()) {
+			"${state.lean}: 集約 ${root.lean} の個体は 1 本の List のフィールドに全部入る(いまは List が ${colls.map { it.name }}、" +
+				"個体を直接運ぶフィールドが ${singles.map { it.name }})。「高々 1 件」はその列に掛かる Prop フィールドで書く(lean-conventions §4)"
+		}
+		return RootCollection(state, colls.single())
 	}
 
-	/** 一意制約の適用先: 制約と、それが指す要素型のフィールド。 */
-	data class UniqueKey(val constraint: IrConstraint, val field: IrField)
+	/** 制約の適用先: 制約と、それが指す要素型のフィールド。 */
+	data class ConstraintKey(val constraint: IrConstraint, val field: IrField)
 
-	/** td の List フィールド coll に掛かる一意制約を要素型のフィールドへ解決する。 */
-	fun uniqueKeysOf(td: IrTypeDef, coll: IrField): List<UniqueKey> {
+	/** td の List フィールド coll に掛かる制約を要素型のフィールドへ解決する。 */
+	fun constraintKeysOf(td: IrTypeDef, coll: IrField): List<ConstraintKey> {
 		val el = ((coll.type as? IrType.ListOf)?.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
 			?: return emptyList()
 		val fields = (el.shape as? IrShape.Structure)?.fields ?: return emptyList()
 		return td.constraints.filter { it.collection == coll.name }.map { c ->
-			UniqueKey(c, fields.find { it.name == c.field }
+			ConstraintKey(c, fields.find { it.name == c.field }
 				?: error("${td.lean}.${c.name}: ${el.lean} にフィールド ${c.field} がありません"))
 		}
 	}
 
-	/** 列 xs を制約どおりに間引く式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す。 */
-	fun distinctExpr(xs: String, keys: List<UniqueKey>): String = keys.fold(xs) { acc, key ->
+	/** all / atMost の述語 `x.f == v` / `x.f != v`(v は制約の値を要素のフィールド型のリテラルに写したもの)。 */
+	private fun predicateExpr(key: ConstraintKey): String {
+		val c = key.constraint
+		val v = c.value ?: error("${c.name}: ${c.kind} には value が要る")
+		val cmp = when (c.op) {
+			"eq" -> "=="
+			"ne" -> "!="
+			else -> error("${c.name}: 不明な比較 ${c.op}")
+		}
+		val t = (key.field.type as? IrType.WithDefault)?.of ?: key.field.type
+		return "x.${ident(key.field.name)} $cmp ${literal(t, v)}"
+	}
+
+	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。 */
+	fun constraintDoc(key: ConstraintKey): String {
+		val c = key.constraint
+		val pred = { "${key.field.name} ${if (c.op == "ne") "≠" else "="} ${c.value}" }
+		return when (c.kind) {
+			"all" -> "${c.name}: 全件 ${pred()}"
+			"atMost" -> "${c.name}: ${pred()} は高々 ${c.max} 件"
+			else -> "${c.name}: ${key.field.name}"
+		}
+	}
+
+	/** 列 xs を制約どおりに間引く式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す、
+	    all は述語を満たす要素だけ残す、atMost は述語を満たす要素を先頭から max 件まで残す。 */
+	fun constrainExpr(xs: String, keys: List<ConstraintKey>): String = keys.fold(xs) { acc, key ->
 		val f = ident(key.field.name)
 		when (key.constraint.kind) {
 			"unique" -> "$acc.distinctBy { x -> x.$f }"
@@ -238,6 +277,11 @@ class Kotlinize(private val ir: Ir) {
 				val inner = (key.field.type as? IrType.OptionOf)?.of
 					?: error("${key.constraint.name}: uniqueSome は Option のフィールドに掛かる(${key.field.name})")
 				"$acc.let { ys -> val seen = HashSet<${typeRefFixture(inner)}>(); ys.filter { x -> x.$f == null || seen.add(x.$f) } }"
+			}
+			"all" -> "$acc.filter { x -> ${predicateExpr(key)} }"
+			"atMost" -> {
+				val n = key.constraint.max ?: error("${key.constraint.name}: atMost には max が要る")
+				"$acc.let { ys -> var k = 0; ys.filter { x -> !(${predicateExpr(key)}) || k++ < $n } }"
 			}
 			else -> error("${key.constraint.name}: 不明な制約の種類 ${key.constraint.kind}")
 		}
@@ -418,16 +462,16 @@ class Kotlinize(private val ir: Ir) {
 		return "${arbFunName(kotlinName)}($args)"
 	}
 
-	/** 構造体 td のフィールド f の Arb。List のフィールドは td の一意制約で間引く。 */
+	/** 構造体 td のフィールド f の Arb。List のフィールドは td の制約で間引く。 */
 	fun arbOfField(td: IrTypeDef, f: IrField): String {
 		val t = (f.type as? IrType.WithDefault)?.of ?: f.type
-		return if (t is IrType.ListOf) listArb(t, uniqueKeysOf(td, f)) else arbOf(f.type)
+		return if (t is IrType.ListOf) listArb(t, constraintKeysOf(td, f)) else arbOf(f.type)
 	}
 
 	/** 個体の列の Arb: 同一性を持つ個体の列は id を重複させない — id 重複は業務
 	    不変条件違反で、PK 制約を持つ実 DB では insert が必ず落ちる。宣言された
-	    一意制約(keys)でも間引く。同一性フィールドは名前でなく型(td.id)で特定する(View は noteId 等)。 */
-	fun listArb(t: IrType.ListOf, keys: List<UniqueKey>, size: String = "0..5"): String {
+	    制約(keys)でも間引く。同一性フィールドは名前でなく型(td.id)で特定する(View は noteId 等)。 */
+	fun listArb(t: IrType.ListOf, keys: List<ConstraintKey>, size: String = "0..5"): String {
 		val el = (t.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
 		val base = "Arb.list(${arbOf(t.of)}, $size)"
 		val idLean = (el?.id as? IrType.Ref)?.lean
@@ -436,7 +480,7 @@ class Kotlinize(private val ir: Ir) {
 				(f.type as? IrType.Ref)?.lean == idLean
 			}
 		val start = if (idField != null) "xs.distinctBy { x -> x.${ident(idField.name)} }" else "xs"
-		val body = distinctExpr(start, keys.filter { it.field.name != idField?.name })
+		val body = constrainExpr(start, keys.filter { !(it.constraint.kind == "unique" && it.field.name == idField?.name) })
 		return if (body == "xs") base else "$base.map { xs -> $body }"
 	}
 

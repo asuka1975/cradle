@@ -53,9 +53,24 @@ def Note.close (n : Note NoteId UserId) : Note NoteId UserId := { n with closed 
 
 ## 4. 更新系 UseCase（`Application/UseCase/<X>UseCase/`）
 
-観測モデル（`Application/RepositoryState.lean`）は Repository の論理状態。表現はリスト（並びが業務の情報）。
-集約ルートが大域的に満たす制約は構造体の Prop フィールドで、構築時に保証される（`uniqueIds : (notes.map (·.id)).Nodup`、`uniqueTitles : (notes.map (·.title)).Nodup`。`Option` のフィールドで値のある個体だけの一意性なら `(coll.filterMap (·.f)).Nodup`）。
-点更新は `update`（同一性も題も変えない f とその証明）、追加は `add`（末尾。新鮮な同一性と空いている題の証明）。消す操作は無い。ID の泉は `Fountain σ α`（値型と生成器状態は抽象、具体化は Runtime）。
+観測モデル（`Application/RepositoryState.lean`）は Repository の論理状態。表現はリスト（並びが業務の情報）。集約の個体は `<Root>RepositoryState` の 1 本の `List` に全部入る — 「進行中は高々 1 件」「決着した個体はアーカイブ」のような生存期間の区別は、`Option` の現在枠や 2 本目の `List` ではなく、その列に掛かる制約と `find?` 系の射影で表す。
+集約ルートが大域的に満たす制約は構造体の Prop フィールドで、構築時に保証される（`uniqueIds : (notes.map (·.id)).Nodup`、`uniqueTitles : (notes.map (·.title)).Nodup`。`Option` のフィールドで値のある個体だけの一意性なら `(coll.filterMap (·.f)).Nodup`。全件が満たす条件は `∀ x ∈ coll, x.f = c`、件数の上限は `(coll.filter p).length ≤ n`）。
+
+```lean
+-- 生成器の回帰素材（来訪受付）の例: 受付中の来訪は高々 1 件
+@[repositoryState]
+structure VisitRepositoryState (VisitId EmployeeId : Type) where
+  visits : List (Visit VisitId EmployeeId)
+  uniqueIds : (visits.map (·.id)).Nodup
+  atMostOneExpected : (visits.filter (fun v => v.phase != .left)).length ≤ 1
+
+def VisitRepositoryState.find? [DecidableEq VisitId] (s : VisitRepositoryState VisitId EmployeeId) (id : VisitId) : Option (Visit VisitId EmployeeId) :=
+  s.visits.find? (fun v => v.id == id)
+def VisitRepositoryState.vacant (s : VisitRepositoryState VisitId EmployeeId) : Bool :=
+  decide ((s.visits.filter (fun v => v.phase != .left)).length = 0)
+```
+
+点更新は `update`（同一性も題も変えない f とその証明）、追加は `add`（末尾。新鮮な同一性と空いている題の証明）。消す操作は無い。生成器は Repository の `add` / `update` をこの観測モデルの操作から導く。ID の泉は `Fountain σ α`（値型と生成器状態は抽象、具体化は Runtime）。
 `add` が要る証明の出どころは 2 つ: 泉から汲む同一性の新鮮性 `fountain.Fresh before.noteIds before.notes.ids` は UseCase が Prop 引数で受ける（境界は `Snapshot.check` から作る）。
 入力に依る証拠（題が空いていること）は validate が決定して解決の成果物 `FreeTitle`（Prop フィールドだけの structure）として返し、act がそれを `add` に渡す。
 
@@ -113,7 +128,7 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 
 - 生成器はモデルを外から読む（規約 + アノテーション + golden）。モデルに生成配線を書かない。
 - 表現で消せる不変条件は表現で消す（ネスト・属性化）。集約横断の不変条件は表現の再検討シグナル。
-- 生成器が読める制約の形は `(coll.map (·.f)).Nodup` と `(coll.filterMap (·.f)).Nodup`（coll は同じ構造体の List のフィールド、f はその要素のフィールド）だけ。読めた制約どおりに Repository 契約テストの個体の列を引き、読めない形の Prop フィールドは抽出の note になる（fixture はそれを満たすとは限らない）。Prop フィールドと def の Prop 引数（泉の新鮮性など）は形状・署名から落ち、証拠だけの structure は data object に写る — 証明は実装の義務。
+- 生成器が読める制約の形は 4 つ: 一意性の `(coll.map (·.f)).Nodup` と `(coll.filterMap (·.f)).Nodup`、全件の `∀ x ∈ coll, p x`、上限の `(coll.filter p).length ≤ n`（coll は同じ構造体の List のフィールド、f はその要素のフィールド、n は数字のリテラル）。述語 p は要素の 1 フィールドと閉じた値の比較だけ — `x.f = c` / `x.f ≠ c` / `x.f == c` / `x.f != c` / `decide (x.f = c)` と Bool フィールドの `x.f` / `!x.f`（c は数字・文字列・Bool・引数なしの構成子）。読めた制約どおりに Repository 契約テストの個体の列を引き、読めない形の Prop フィールドは抽出の note になる（fixture はそれを満たすとは限らない）。Prop フィールドと def の Prop 引数（泉の新鮮性など）は形状・署名から落ち、証拠だけの structure は data object に写る — 証明は実装の義務。
 - 採番はドメイン状態に染み出させない（泉の抽象）。具体表現は NFR を根拠にインフラ設計が決める。
 - 型引数の binder 名は `<Root>.Runtime.<binder>` で解決される（生成器の規約）。解決できないものは生成側の binder 上書きで指定する。
   型引数で抽象のままにするのは同一性の VO（各 ID）だけで、それ以外の値オブジェクトは具体名で使う（`Command (JoinCode : Type)` は規約の外 — `Command` に `JoinCode` を直に書く）。`Runtime` に表現の無い binder を残すと生成側に `binderOverrides` が要る。

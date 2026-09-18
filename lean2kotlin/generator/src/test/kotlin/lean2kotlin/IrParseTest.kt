@@ -72,6 +72,21 @@ class IrParseTest {
 	}
 
 	@Test
+	fun `constraints は all と atMost の述語と上限を読む`() {
+		val td = IrTypeDef.parse(json("""
+			{"lean":"T.GameRepositoryState","kotlin":"GameRepositoryState","role":"repositoryState",
+			 "shape":{"kind":"structure","fields":[{"name":"games","type":{"k":"list","of":{"k":"ref","name":"T.Game"}}}]},
+			 "constraints":[{"kind":"all","name":"allArchived","collection":"games","field":"archived","op":"eq","value":true},
+			                {"kind":"atMost","name":"atMostOneActive","collection":"games","field":"phase","op":"ne","value":"finished","max":1}]}
+		""".trimIndent()))
+		assertEquals(
+			listOf(
+				IrConstraint("all", "allArchived", "games", "archived", op = "eq", value = JsonPrimitive(true)),
+				IrConstraint("atMost", "atMostOneActive", "games", "phase", op = "ne", value = JsonPrimitive("finished"), max = 1)),
+			td.constraints)
+	}
+
+	@Test
 	fun `constraints は unique と uniqueSome を読み、無ければ空`() {
 		val td = IrTypeDef.parse(json("""
 			{"lean":"T.RoomRepositoryState","kotlin":"RoomRepositoryState","role":"repositoryState",
