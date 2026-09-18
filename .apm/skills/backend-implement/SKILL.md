@@ -17,9 +17,10 @@ description: Use when it is time to make the backend follow the Lean model — r
    - QueryService: jOOQ 直叩き、並び・絞り込みは DB。共有ヘルパを作らない。
    - Repository: 契約の写し。横断不変条件の直列化点（一意制約 / `FOR UPDATE` / version）を DB に置く。
    - Entity / VO: 生成 interface の実装。不変で新インスタンスを返す。
+   - Port（`application/port/<port>/` の生成 interface）: Adapter を `infrastructure/<port>/` に手書きし、DI で UseCase に渡す。UseCase 実装は validate → 要求の決定 → Port の呼び出し → 観測の反映の順（Lean の `request` / `apply` と同じ分岐を再実装しない）。Adapter の検査の扱いは backend-kotlin 規則。
    - 性能バイパスは宣言（UseCase のディレクトリ）と実装（infrastructure）を分け、観測同値を KDoc に。
-4. **契約テストの配線**: 生成された抽象契約テスト**すべて**に具象サブクラス（本番実装を実 DB に配線。fake 禁止。骨格は `cradle contract-skeleton <生成ファイル>`）。`cradle status` の「契約テスト 配線 n/m」が m/m になるまで。
-   生成ログの note（golden 0 件・語彙の壁で生成されなかった契約）は失敗として扱い、モデルか fixture に戻す（分類と戻り先は `references/gradle-wiring.md`）。
+4. **契約テストの配線**: 生成された抽象契約テスト**すべて**に具象サブクラス（本番実装を実 DB に配線。Repository の fake 禁止。Port は渡される生成モックをそのまま配線する。骨格は `cradle contract-skeleton <生成ファイル>`）。`cradle status` の「契約テスト 配線 n/m」が m/m になるまで。
+   生成が error で止まったら（宣言した契約が検査に至らない・Port の対応が取れない・出力先の衝突）、note の分類どおりモデルか fixture に戻す（分類と戻り先は `references/gradle-wiring.md`）。note は生成が続いた情報で、失敗として読むものと設計どおりの除外を分けて読む。
    生成された PBT が実スキーマで通らない（生成値が大域不変条件を満たさない）ときは、`@Disabled` や InMemory で通さない。まずその不変条件が `<Root>RepositoryState` の Prop フィールドとして宣言されているかを見る（lean-conventions §4 / §9 — 読める形の宣言なら fixture がそれを満たす）。それでも通らなければ三択（モデルの型を見直す / 永続化の表現を変える / 配線を見送る）を ai-note に書いてユーザーに委ねる。
 5. **境界と門のテスト**: HTTP レベルで 401 / 403 / 404 / 422 の経路、トランザクションの巻き戻し（割った境界は両方向）。
 6. `./gradlew build`（ktlint 込み）。通ったら hook の指示どおり `sql-perf-review` と `backend-design-review`。High / Medium は直す。

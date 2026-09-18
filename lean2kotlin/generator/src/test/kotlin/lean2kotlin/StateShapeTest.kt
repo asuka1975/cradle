@@ -75,9 +75,55 @@ class StateShapeTest {
 			listOf(IrService("SpeakUseCase", "SpeakUseCase", listOf(execute))), emptyList(),
 			contracts = listOf(IrContract("usecase", "SpeakUseCase", "execute", "execute_ok", "", listOf(case))))
 		val e = assertFailsWith<IllegalArgumentException> {
-			EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), emptyList()) {}.emitAll()
+			EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), Output(out.resolve("adapter"), "mini", "\t"), emptyList()) {}.emitAll()
 		}
 		assertTrue("Mini.Application.SpeakUseCase.State.active" in e.message!!, e.message)
-		assertTrue("Option / List で直接運ぶ形は読めない" in e.message!!, e.message)
+		assertTrue("Option / List / 単体で直接運ぶ形は読めない" in e.message!!, e.message)
+	}
+
+	@Test
+	fun `集約ルートを単体のフィールドで直接運ぶ UseCase の State も止まる`(@TempDir out: Path) {
+		val current = IrField("current", IrType.Ref("Mini.Domain.Game"))
+		val world = IrTypeDef(
+			lean = "Mini.Application.SpeakUseCase.State", kotlin = "SpeakState", role = "repositoryState",
+			module = "Mini.Application.UseCase.SpeakUseCase.UseCase",
+			shape = IrShape.Structure(listOf(current, IrField("finished", IrType.Ref("Mini.Application.GameRepositoryState")))), id = null)
+		val ir = speakIr(world, before = """{"current":{"id":{"id":1},"closed":false},"finished":{"games":[]}}""")
+		val e = assertFailsWith<IllegalArgumentException> {
+			EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), Output(out.resolve("adapter"), "mini", "\t"), emptyList()) {}.emitAll()
+		}
+		assertTrue("Mini.Application.SpeakUseCase.State.current" in e.message!!, e.message)
+		assertTrue("Option / List / 単体で直接運ぶ形は読めない" in e.message!!, e.message)
+	}
+
+	@Test
+	fun `播種する個体があるのに Repository に add の根拠が無い契約は理由付きで止まる`(@TempDir out: Path) {
+		// Game にファクトリのふるまいは無く、観測モデルにも add が無い(behaviors 無し)— 播種できない
+		val ir = speakIr(state(games), before = """{"games":[{"id":{"id":1},"closed":false}]}""")
+		val e = assertFailsWith<IllegalArgumentException> {
+			EmitTests(ir, Kotlinize(ir), Output(out, "mini", "\t"), Output(out.resolve("adapter"), "mini", "\t"), emptyList()) {}.emitAll()
+		}
+		assertTrue("Mini.Domain.Game: 契約の State が個体を播種するが Repository に add が無い" in e.message!!, e.message)
+	}
+
+	/** SpeakUseCase の execute を 1 本の遷移契約で持つ最小 IR(before の型は stateTd)。 */
+	private fun speakIr(stateTd: IrTypeDef, before: String): Ir {
+		val command = IrTypeDef(
+			lean = "Mini.Application.SpeakUseCase.Command", kotlin = "SpeakCommand", role = "command",
+			module = "Mini.Application.UseCase.SpeakUseCase.Command", shape = IrShape.Structure(listOf(IrField("word", IrType.Str))), id = null)
+		val error = IrTypeDef(
+			lean = "Mini.DomainError", kotlin = "DomainError", role = "error", module = "Mini.Domain.Error",
+			shape = IrShape.Enum(listOf("wrongPhase")), id = null)
+		val execute = IrMethod("execute", "", listOf(
+			IrField("c", IrType.Ref("Mini.Application.SpeakUseCase.Command")),
+			IrField("before", IrType.Ref(stateTd.lean))),
+			IrType.Result(IrType.Ref("Mini.DomainError"), IrType.Unit))
+		val case = IrContractCase(
+			kind = "transition", args = mapOf("c" to Json.parseToJsonElement("""{"word":"a"}""")), error = null,
+			stateType = stateTd.lean, before = Json.parseToJsonElement(before), after = Json.parseToJsonElement(before))
+		val observed = if (stateTd.lean == "Mini.Application.GameRepositoryState") listOf(stateTd) else listOf(state(games), stateTd)
+		return Ir("Mini", listOf(gameId, game, command, error) + observed, emptyList(),
+			listOf(IrService("SpeakUseCase", "SpeakUseCase", listOf(execute))), emptyList(),
+			contracts = listOf(IrContract("usecase", "SpeakUseCase", "execute", "execute_ok", "", listOf(case))))
 	}
 }

@@ -16,6 +16,7 @@ object Lean2KotlinGeneration {
 		kotlinPackage: String,
 		mainOut: Path,
 		testOut: Path,
+		adapterTestOut: Path,
 		indent: String,
 		goldenDir: Path?,
 		log: (String) -> Unit,
@@ -27,23 +28,26 @@ object Lean2KotlinGeneration {
 		val golden =
 			if (goldenDir != null && Files.isDirectory(goldenDir)) Golden.load(goldenDir)
 			else GoldenLoad(emptyList(),
-				listOf("golden ディレクトリがありません: $goldenDir — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"))
-		generate(ir, golden, kotlinPackage, mainOut, testOut, indent, log)
+				listOf(if (goldenDir == null) "golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"
+					else "golden ディレクトリがありません: $goldenDir — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"))
+		generate(ir, golden, kotlinPackage, mainOut, testOut, adapterTestOut, indent, log)
 	}
 
-	/** 読み込み済みの IR と golden から main / test を生成する。 */
+	/** 読み込み済みの IR と golden から main / test / adapterTest(Port の Adapter の適合テスト)を生成する。 */
 	fun generate(
 		ir: Ir,
 		golden: GoldenLoad,
 		kotlinPackage: String,
 		mainOut: Path,
 		testOut: Path,
+		adapterTestOut: Path,
 		indent: String,
 		log: (String) -> Unit,
 	) {
 		val k = Kotlinize(ir)
 		val main = Output(mainOut, kotlinPackage, indent)
 		val test = Output(testOut, kotlinPackage, indent)
+		val adapterTest = Output(adapterTestOut, kotlinPackage, indent)
 		// 泉: @[repositoryState] の <X>IdGeneratorState があれば泉ごとの IdGenerator ポートへ導出する
 		val fountainPorts = k.fountainPorts()
 		if (fountainPorts.isNotEmpty()) {
@@ -81,11 +85,32 @@ object Lean2KotlinGeneration {
 					"ケースは生成されません(モデル側で View 自身の語彙を導入してください)")
 			}
 		}
+		// 「宣言したのに検査に至らない」は失敗 — 抽出器の診断・生成テスト 0 件の契約・閉じていない Port の型を
+		// 集めて最後にまとめて止める(note は生成が続いた情報で、失敗とは分ける)。
+		// 見つけた時点で error 行を出す — 生成の途中で例外が出ても、分かっていた分は読める
+		val errors = mutableListOf<String>()
+		val error = { e: String -> errors += e; log("error: $e") }
+		for (d in ir.dropped) error("${d.kind} ${d.name}: ${d.reason}")
+		for (p in ir.ports) for (op in p.operations) for (ty in listOf(op.request, op.outcome)) {
+			if (k.reachesEntityLike(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が interface 化された語彙(Entity / ふるまい持ちの VO)を運ぶ — 要求と観測は値で比較できる閉じたデータ型にする")
+		}
 		main.cleanGenerated()
 		test.cleanGenerated()
+		adapterTest.cleanGenerated()
 		EmitMain(ir, k, main, test, log).emitAll()
-		EmitTests(ir, k, test, golden.snapshots, log).emitAll()
+		val tests = EmitTests(ir, k, test, adapterTest, golden.snapshots, log)
+		tests.emitAll()
 		for (n in golden.notes) log("note: $n")
-		log("生成完了: main ${main.report().size} ファイル -> $mainOut / test ${test.report().size} ファイル -> $testOut")
+		for (c in ir.contracts) if (tests.contractKey(c) !in tests.emittedContracts) {
+			error("契約定理 ${c.useCase}.${c.theorem}(${c.target}): 生成テストが 0 件 — 契約面(execute / query・Entity / VO のふるまい・射影)越しに観測できる定理だけを指名する")
+		}
+		for (fc in ir.faultContracts) if (tests.faultKey(fc) !in tests.emittedContracts) {
+			error("障害契約 ${fc.useCase}.${fc.def}: 生成テストが 0 件")
+		}
+		log("生成完了: main ${main.report().size} ファイル -> $mainOut / test ${test.report().size} ファイル -> $testOut" +
+			(if (adapterTest.report().isEmpty()) "" else " / adapterTest ${adapterTest.report().size} ファイル -> $adapterTestOut"))
+		if (errors.isNotEmpty()) {
+			throw IllegalStateException("lean2kotlin: 宣言した契約・Port が検査に至らない診断 ${errors.size} 件で生成を失敗にしました:\n" + errors.joinToString("\n"))
+		}
 	}
 }

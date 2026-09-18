@@ -70,6 +70,9 @@ lean2kotlin {
 // どちらも compileKotlin が依存し、出力は git 管理外。
 ```
 
+外部能力の Port（`application/port/<port>/` の生成 interface）は Adapter（`infrastructure/<port>/`）を手書きして実装し、契約テストの具象クラスはフックで渡される `<Port>Mock` をそのまま UseCase に配線する（規則は backend-kotlin）。
+Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。
+
 `compileKotlin` は毎回 `extractLeanIr`（`lake build`）に依存する。Lean を触らないタスクで IR が既にあるなら `-x extractLeanIr` で飛ばしてよい。
 抽出器は対象ドメインの `lean-toolchain` でビルドされる（`apm_modules/…/lean2kotlin/lean/.lake` に落ちる。`apm install` のたびに作り直し）。
 CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm install --frozen` を走らせる。
@@ -90,6 +93,8 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
 | フィクスチャ / 期待値を構成できません | `Repr` / `DecidableEq` の deriving、契約定理の前提が Decidable か、量化変数が生成可能な型か |
 | 参照系の execute 面でない定理の契約 | `@[contract]` を外す（execute 面の系） |
+| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`Port … interface 化された語彙` は要求・観測を閉じたデータ型にする、`signature …` は固定形の署名の型を契約面の語彙にする |
+| UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
 | golden が無視された | `<name>-init.json` / `<name>-flow.json` の 2 本組か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
 | `Key <field> is missing in the map` | 読み取りの golden 回帰テストで、Row のフィールドが状態の要素に無い。同梱の生成器は合成できない Row を入れ子まで note で飛ばす（この例外は古い生成器の文言） |
 | `<型>.<field>: JSON に無い` | fixture・入力リテラルの経路で JSON に無いフィールド → golden か fixture を採り直す |
@@ -101,7 +106,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | golden … 無視 | 命名か形が規約と違う | golden を採り直す |
 | View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
-| 契約定理を翻訳できません | 前提が Decidable でない・fixture から期待値を計算できない | 定理の形を見直す（Lean） |
+| 契約定理を翻訳できません / 有効なケースを演繹できませんでした | 前提が Decidable でない・fixture から期待値を計算できない・仮定が常に偽 | 定理の形を見直す（Lean）。この note は診断にも残り、生成は失敗する |
 | … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は fixture が満たすとは限らない |
 | 参照系 … 読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean） |
 | interface のみ生成（テストなし） | fixture / golden が無い | fixture か golden を足す |

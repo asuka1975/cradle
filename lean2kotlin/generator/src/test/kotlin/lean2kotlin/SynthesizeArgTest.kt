@@ -21,7 +21,7 @@ class SynthesizeArgTest {
 		val golden = Golden.load(dir.resolve("golden"))
 		assertEquals(2, golden.snapshots.size)
 		val notes = mutableListOf<String>()
-		EmitTests(ir, Kotlinize(ir), Output(out, "shop", "\t"), golden.snapshots) { notes += it.trim() }.emitAll()
+		EmitTests(ir, Kotlinize(ir), Output(out, "shop", "\t"), Output(out.resolve("adapter"), "shop", "\t"), golden.snapshots) { notes += it.trim() }.emitAll()
 		return notes
 	}
 

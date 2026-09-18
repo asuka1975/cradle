@@ -10,7 +10,7 @@ Lean のドメインモデルから Kotlin の型・interface・契約テスト�
   │ extractLeanIr — lake build → 合成ドライバで #kotlin_ir "Sprout"（elab コマンド）
   ▼ build/lean2kotlin/lean2kotlin-ir.json
   │ generateKotlinFromLean — IR + golden → .kt
-  ▼ src/generated/kotlin-main（型・interface）/ kotlin-test（契約テスト・fixture・Arb）
+  ▼ src/generated/kotlin-main（型・interface）/ kotlin-test（契約テスト・fixture・Arb）/ kotlin-adapter-test（Port の Adapter の適合テスト）
 ```
 
 - 対象にコードを要求しない。型クラス・フィクスチャ・ドライバは無く、ドライバは plugin が設定から合成する。読むのは規約・アノテーション・golden だけ。
@@ -38,8 +38,12 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `UseCase/<X>/QueryService` の structure | viewDto | data class（Query） |
 | `UseCase/<X>/UseCase` の structure | `State` → repositoryState / `Result` → 写像外 / 他 → viewDto（validate の成果物である証拠 = Prop フィールドだけの structure は data object） | |
 | `Application/View` の structure | viewDto | data class |
+| `Application/Port/<Port>/<操作>`（`Domain/Port` も同じ）の固定名 `Request` / `Outcome` | portRequest / portOutcome | data class / sealed / enum（Kotlin 名は `<Port><操作>Request` / `<Port><操作>Outcome`。`Outcome` は `execute` の観測引数として本番署名から落ちる） |
+| 同じ操作モジュールのそれ以外の純データ | portDto | data class / sealed / enum（`<Port><操作><名前>`） |
 
 - interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。
+- Port: IR の `ports`（Port ごとに操作と要求・観測の型）。UseCase の `request`（戻りは `Except E Request`）と `execute` の観測引数（`Outcome`）の組で Port・操作を決め、`useCases[].ports` に置く（対応が無い・片方だけ・複数・別の操作・参照系での使用は失敗。型名の末尾で推測しない）。契約ケース（transition）と障害契約のケースには `ports`（Lean が同じ引数で評価した `request` の値と、定理の観測）を焼き込む。validate の拒否では要求は無い（= 呼ばれない）。
+- 診断: `diagnostics.dropped` に、IR に入らなかった契約定理・障害契約（主対象に触れない・ケースを演繹できない・翻訳できない）と写像できない固定形の署名を理由つきで残す。生成器はこれを失敗にする（§6）。
 - ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState のふるまいは写さない）。
 - 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}`、`∀ x ∈ coll, p x` を `{"kind":"all"}`、`(coll.filter p).length ≤ n` を `{"kind":"atMost","max":n}` として型の `constraints`（name / collection / field。all / atMost は述語 `x.field <op> value` の `op`（eq / ne）と `value`（オラクル値と同じ JSON）も）に出す。読める述語の形は lean-conventions §9。読めない形は note。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
 - 単型化: 型引数の解決は lean-conventions §9 の binder 規約（上書きは `binderOverrides`）。定数の適用形 `C a…` を受理し、Id の表現はモデルの具体化を写す（`Runtime/Ids.lean` の `structure NoteId where id : Nat` → `Long`）。
@@ -58,13 +62,14 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | Entity / ルート / ふるまい持ちの VO | `interface`（フィールドは `val`、ふるまいはメソッド。自分自身の引数はレシーバに畳む） |
 | ふるまいの無い VO・Command・Query・View | `data class`（フィールド 1 つの VO は value class） |
 | inductive | 全構成子が引数なしなら `enum class`、あれば `sealed interface` + `data class` / `data object`。契約指名のあるふるまいは `<X>Behaviors` interface に |
-| 関数フィールドを持つ structure（`Fountain σ α`）・clockPort・actorPort | 本番署名から落ちる（配線で注入） |
+| 関数フィールドを持つ structure（`Fountain σ α`）・clockPort・actorPort・portOutcome | 本番署名から落ちる（配線で注入。観測は実装が Port から調達する） |
+| Port（`Application/Port/<Port>/`） | `interface <Port> { fun <操作>(request: <Port><操作>Request): <Port><操作>Outcome }`（`application.port.<port>`）。Adapter は手書き（`infrastructure/<port>/`） |
 
 - 名前: lean-conventions §9 の規則で機械的に決まる（`PostNoteUseCase.Command` → `PostNoteCommand`）。interface の名前は UseCase ディレクトリ `<X>UseCase` から `<X>UseCase`（UseCase）と `<X>QueryService`（QueryService）、DomainService はファイル名から `Domain/DomainService/<名前>.lean` → `<名前>Service`（単一ファイル `Domain/DomainService.lean` は `DomainService`）。package = ルート名前空間と葉ファイルを除いたモジュールパスの小文字連結。`Domain/ValueObject` はディレクトリ扱い、Id は `domain.valueobject`、Repository は `domain.repository`、UseCase は `application.usecase.<x>usecase`、DomainService は `domain.domainservice`。
 - Entity と fixture: 本番 interface `Note` と平行に、テスト側へ観測レコード `NoteFixture`（data class）と `Note.toFixture()` を出す。interface 化された語彙へ到達する sealed / structure にも平行 fixture が付く（fixture・Row は本番 interface を運ばない）。テストは実体化フック `note(fixture: NoteFixture): Note` で実装の値を作り、比較は `toFixture()` で行う — 実装の表現は自由。
   ふるまいの無い VO を interface にしないのは、実装内部の等値比較が同一性比較に化け、値の構築が fixture 語彙に化けて本番語彙に埋め込めないため。
-- Factory: 自分自身を取らず自分自身を返す def（`Note.post`）は `<X>Factory` interface（テスト側。採番は呼び出し側の関心）。
-- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` で直接運ぶ形は生成が理由付きで止まる（§6）。
+- Factory: 自分自身を取らず自分自身を返す def（`Note.post`）は、それを指名する契約定理があるときだけ `<X>Factory` interface（テスト側。採番は呼び出し側の関心）。使い手のない interface は出さない。
+- Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` / 単体で直接運ぶ形は生成が理由付きで止まる（§6）。
 - 泉: `<X>IdGeneratorState` ↔ `<X>IdGenerator { nextId(): <X>Id }`（`application`）。供給値の型は泉の値型の写し。
 - UseCase: `validate` / `execute` の署名の写し。State・泉・時計・主体は署名から落ち、効果は Repository 経由で観測する。validate は本番では execute の内部第一段、公開メンバとしてはテストシーム。QueryService は `query` だけ（Row を運ぶメソッドは本番に写さない）。
 - 写さないもの: 観測モデル（RepositoryState）、State のふるまい、契約指名のない静的語彙、入力語彙のふるまい。
@@ -85,13 +90,15 @@ abstract class CloseNoteUseCaseContractTest {
 
 | ファミリ | 源 | 形 |
 |---|---|---|
-| `<X>EntityContractTest`（Entity / ふるまい持ちの VO） | `@[contract]` | 純値形: 実体化フック → メソッド → `toFixture()` 一致。Factory は `factory()` フック |
+| `<X>EntityContractTest`（Entity / ふるまい持ちの VO） | `@[contract]` | 純値形: 実体化フック → メソッド → `toFixture()` 一致。指名された create があれば Factory は `factory()` フック |
 | `<X>BehaviorsContractTest`（sealed / enum の VO） | `@[contract]` | 純値形: `behaviors()` フックで `<X>Behaviors` の実装を受け、メソッド → 一致 |
-| `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測 |
+| `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測。Port を使う UseCase は生成モック（`<Port>Mock` にケースの要求と観測を積む。要求が無いケースは空 = 呼ばれない）をフックに渡し、結果を `runCatching` で受けてモックの完了検査 → 返り値 → Repository の順に判定する（要求不一致で実装が途中で止まった赤を状態差分の赤で隠さない） |
+| `<Port>Mock`（テスト側。Port の package） | `ports` | 本番 Port を実装する決定的モック: 期待の列（操作ごとの `Expectation`）を消費し、違う要求・積んでいない呼び出し・別の操作は記録して `PortHarnessFailure`（AssertionError。業務語彙ではない）を投げる。`assertNoFailure` は記録、`assertComplete` は記録と未消費を検査する |
+| `<Port>AdapterContractTest`（adapterTest 側。Port の package） | `ports` | Adapter の適合テストの骨格: `adapter()` フックで stub / sandbox 相手に配線した Adapter を受け、観測の構成子ごとの `arrange<操作><構成子>()` フックで stub をその状態にしてから要求を返し、その観測が産まれることを検査する。写像の全域性は主張しない。source set `adapterTest` / タスク `adapterContractTest` に載り、`build` の門には入らない |
 | `<X>UseCaseContractTest`（参照系） | golden の views + `@[contract]` | 値形: Row 列と主体をフックで配線し `execute` の返り値を一致。golden の views のキーは UseCase 名（先頭小文字） |
 | `<X>RepositoryContractTest` | 規約 + `constraints` | PBT: 観測モデルの制約を満たす個体の列（`arb<Root>Repository`）を add → findAll の並びと findById、列の末尾を先頭の id に写して update → 並び保持、未知 id は null。add / update の有無は観測モデルの同名の操作から導く |
 | `ReadModelDdlContractTest` | golden の各状態 + Projection の `@[contract]` | `retrieve<X>ReadModel(ルートの fixture 列…)` で観測の Set を復元し完全一致（並び込み） |
-| `<X>FaultContractTest` | `@[faultContract]` | 同じ UseCase の execute が成功する入力 ≤ 4 件。`faultedUseCase(...)` フックが障害を仕込んだ実装を返し、業務語彙外の例外で中断すること + Repository の観測 = 定義の評価値 |
+| `<X>FaultContractTest` | `@[faultContract]` | 同じ UseCase の execute が成功する入力 ≤ 4 件。`faultedUseCase(...)` フックが障害を仕込んだ実装を返し、業務語彙外の例外で中断すること + Repository の観測 = 定義の評価値。Port を使う UseCase は生成モックを渡し、要求不一致・積んでいない呼び出しだけを検査する（中断がどこで起きたかは宣言の外なので、消費し切ったかは見ない） |
 
 契約定理からの演繹（抽出時）:
 - binder の分類: 型 = binder 規約で単型化、インスタンス = 合成、Prop = 仮定（ケース選択器。decide で真と決まった仮定は証明項として主対象の Prop 引数に渡す）、値 = サンプル。
@@ -100,7 +107,7 @@ abstract class CloseNoteUseCaseContractTest {
 - `Fountain σ α` の引数は、σ が単一 `Nat` フィールドの生成器状態なら counter 具体化で合成してオラクル評価する。
 - 参照系は本番の execute 面に付いた定理だけ読む。判断の定理はケース選択器で、合成した execute が validate の関門で失敗する組合せは採らない。
 - 時計ポートを持つ UseCase は、フックが固定の today を受け取る（値は各ケースの評価と同じ日）。
-- 翻訳できない定理は note を出して飛ばす。
+- 翻訳できない定理・ケースを演繹できない定理は note を出して飛ばし、`diagnostics.dropped` にも残す（生成は失敗する）。
 
 Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` は 0..5 要素、sealed / enum は一様選択、`LocalDate` は epoch 日。同一性を持つ要素列は `distinctBy { id }`、構造体の `constraints` も満たす（uniqueSome は値のある要素だけ初出を残す。all は `= c` なら述語の値をフィールドに写し、`≠ c` なら満たす要素だけ残す。atMost は `= c` なら満たす要素を先頭から max 件まで残し、`≠ c` なら max 件を超えた要素に述語の値を写す。間引きに頼るのは偶然で満たしやすい形だけ — 値域の広い型の `= c` を間引きにすると列が空になる）。集約の列 `arb<Root>Repository(size)` は `<Root>RepositoryState` の制約を満たすように引き、入れ子の個体の id を列の位置 × 1000000 で変位させ、間引きで size を割った列は引き直す（一意キーの値域が size の下限より小さいモデルでは引き直しが終わらない — その一意性は業務の事実として成り立たない）。PBT は JUnit 5 上で `runBlocking { checkAll(...) }`（kotest-property と kotlinx-coroutines-core に依存）。
 
@@ -109,7 +116,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 `generator/` を composite build で解決する（`generator/src/main/kotlin/lean2kotlin/gradle/Lean2KotlinPlugin.kt`。利用側の断片は gradle-wiring.md）。タスクは 2 つ:
 
 - `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml`。
-- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。
+- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。Port があれば source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を作る。`check` / `build` には繋がない。
 
 拡張 `lean2kotlin { }`:
 
@@ -118,7 +125,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 | `irFile` | IR。既定 `build/lean2kotlin/lean2kotlin-ir.json`（抽出を plugin に任せないときだけ指定） |
 | `kotlinPackage` | 生成パッケージの根 |
 | `goldenDir` | golden。省略時は golden 由来のケース（参照系の golden 回帰・Retrieve）を生成しない |
-| `mainOut` / `testOut` | 生成先。既定 `src/generated/kotlin-main` / `kotlin-test` |
+| `mainOut` / `testOut` / `adapterTestOut` | 生成先。既定 `src/generated/kotlin-main` / `kotlin-test` / `kotlin-adapter-test` |
 | `indent` | 既定タブ |
 | `wireSourceSets` | 既定 true |
 | `leanRootNamespace` | 対象のルート名前空間（`"Sprout"`）。指定で抽出が有効 |
@@ -138,12 +145,20 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - 型引数の binder に対応する `<Root>.Runtime.<binder>` が無く、`binderOverrides` にも無い。
 - 区分を持つ型のフィールド（または Entity の `id`）に写像できない型（写像外の型定数・型適用・依存関数型）がある。署名の写像失敗は失敗ではなく note で除外される。
 - `@[repositoryState]` の `<X>RepositoryState` に対応する集約ルート `<X>` が無い。
-- 生成時: `<X>RepositoryState` が集約の列を 1 本の `List` で運んでいない（`Option` / 2 本目の `List`）、または UseCase の State が集約ルートを `Option` / `List` で直接運ぶ（個体は観測モデルの 1 本の列に入れ、「高々 1 件」はその列の Prop フィールドで書く）。
+- 生成時: `<X>RepositoryState` が集約の列を 1 本の `List` で運んでいない（`Option` / 2 本目の `List`）、UseCase の State が集約ルートを `Option` / `List` / 単体で直接運ぶ（個体は観測モデルの 1 本の列に入れ、「高々 1 件」はその列の Prop フィールドで書く）、または個体を播種する契約のルートの Repository に `add` の根拠（観測モデルの `add` かファクトリ）が無い。
 - 同じ総称型が違う型引数で単型化される、または型引数の数が合わない。
 - Entity の `id` フィールドの型が定数の適用形に簡約できない。
 - 標準時間型の ToJson が対象の Runtime に無い。
 - 印の TagAttribute が見つからない（対象の Annotations を import していない）。
+- Port の操作に `Request` / `Outcome` が揃わない、Port の型が関数フィールドを持つ、Port 名が `Repository` で終わる、Port 名が型や interface の Kotlin 名と衝突する。
+- UseCase の `request` と `execute` の観測引数の対応が取れない（片方だけ・観測が複数・別の操作を指す・`request` の戻りが `Except E Request` でない・参照系 UseCase が Port を使う）。
 
-生成が失敗する（Kotlin は出ない）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。
+生成が失敗する（IR は読めたが、宣言したものが検査に至らない。error 行を全部出してから止まる）:
 
-note（生成は続く。失敗として読む — トリアージは gradle-wiring.md）: 読めない形の制約（Prop フィールド。fixture はそれを満たすとは限らない）、golden の 2 本組違反、View→Row / View→ドメイン語彙の壁の破れ（参照系ケースと Arb を出さない）、署名を写像できない def の除外、翻訳できない契約定理、execute 面でない定理の指名、golden 回帰の引数（主体など）を合成できないスキップ、計算する Row の合成不能。設計どおりの除外（時計ポート・Row を運ぶメソッド・State と入力語彙のふるまい）も note に出る。
+- 抽出器の診断 `diagnostics.dropped` が 1 件でもある（主対象に触れない契約定理・ケースを演繹できない定理・翻訳できない障害契約・写像できない固定形の署名）。
+- 生成テストが 0 件の契約定理・障害契約（観測モデルや入力語彙のふるまいの定理・参照系の execute 面でない定理など）。
+- Port の要求・観測が interface 化された語彙（Entity・ふるまい持ちの VO）を運ぶ（要求はモックが値で比較する）。
+
+生成が失敗する（衝突の手前まで書いた生成物は残り、次の再生成で消える）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。
+
+note（生成は続いた情報。失敗として読むものと設計どおりの除外を分けて読む — トリアージは gradle-wiring.md）: 読めない形の制約（Prop フィールド。fixture はそれを満たすとは限らない）、golden の 2 本組違反、View→Row / View→ドメイン語彙の壁の破れ（参照系ケースと Arb を出さない）、署名を写像できない def の除外、golden 回帰の引数（主体など）を合成できないスキップ、計算する Row の合成不能。設計どおりの除外（時計ポート・Row を運ぶメソッド・State と入力語彙のふるまい・golden の指定なし）も note に出る。契約が検査に至らない理由は note にも出るが、それは失敗として最後に止まる（上）。

@@ -85,8 +85,12 @@ class EmitMain(
 				// ふるまいは主体の interface に統合済み。create 系は Factory へ、
 				// 主体を取らず主体も返さない静的語彙(Date.isLeap 等)だけ Behaviors に残す
 				val factory = factoryMethodsOf(td)
-				if (factory.isNotEmpty()) {
-					// Factory の消費者はテストだけ(実装は自分の表現で構築する)— テスト専用語彙
+				// Factory の消費者は生成テストだけ(実装は自分の表現で構築する)— 指名する契約定理が
+				// 無ければ使い手がいないので出さない
+				val nominated = ir.contracts.any { c ->
+					c.target == "behaviors" && c.useCase == td.lean && factory.any { it.name == c.method }
+				}
+				if (nominated) {
 					emitFile(k.packagePathOf(td), "${td.kotlin}Factory", toTest = true,
 						usesDomainResult = factory.any { it.ret is IrType.Result }) {
 						serviceInterfaceBody(
@@ -142,6 +146,10 @@ class EmitMain(
 		// 命名規約 <X>State ↔ <X> で導出。供給値の型はモデルの具体化の写し(Long 連番 / UUID)
 		for (p in k.fountainPorts()) {
 			emitFile("application", p.port) { fountainPortBody(p) }
+		}
+		// 外部能力の Port: 操作ごとに「要求 → 観測」の 1 メソッド。Adapter(外部の呼び方)は手書き
+		for (p in ir.ports) {
+			emitFile(k.portPackage(p), p.name) { portBody(p) }
 		}
 	}
 
@@ -401,10 +409,27 @@ interface ${rootK}Repository {$ops
 			"}"
 	}
 
-	/** モデル配管(観測の Set・乱択の鍵・時計・主体)— 本番署名から落とし、実装の配線とする。 */
+	/** 外部能力の Port(`Application/Port/<Port>/<操作>`)の interface。要求と観測の語彙は Lean の写しで、
+	    外部の呼び方(HTTP・SDK・認証・再試行)は Adapter の持ち物。 */
+	private fun portBody(p: IrPort): String {
+		val ops = p.operations.joinToString("") { op ->
+			val doc = docLine(op.doc)?.let { "\t/** $it */\n" } ?: ""
+			"\n$doc\tfun ${ident(op.method)}(request: ${k.name(op.request)}): ${k.name(op.outcome)}"
+		}
+		return "/**\n" +
+			" * Lean: Port `${p.module}`(外部能力 — 自システムが必要とする能力の要求と観測)。\n" +
+			" * 操作ごとに要求(`Request`)を渡して観測(`Outcome`)を受ける。観測の構成子は外部で起き得る\n" +
+			" * ことの全部(見つからない・答えない等)で、Adapter は外部のあらゆる応答をどれかの構成子に写す。\n" +
+			" * 実装(Adapter)は AI が `infrastructure/<port>/` に別ファイルで書く。default 禁止。\n" +
+			" * 契約テストは生成モック(`${k.portMockName(p)}`)を注入し、要求の値と呼び出し回数を検査する。\n" +
+			" */\n" +
+			"interface ${p.name} {$ops\n}"
+	}
+
+	/** モデル配管(観測の Set・乱択の鍵・時計・主体・外部能力の観測)— 本番署名から落とし、実装の配線とする。 */
 	fun isPlumbing(t: IrType): Boolean = when (t) {
 		is IrType.Ref -> ir.typeDef(t.lean).role in
-			setOf("readModel", "repositoryState", "clockPort", "actorPort")
+			setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
 		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
 			t.to == IrType.Nat
 		else -> false
@@ -446,7 +471,7 @@ interface ${rootK}Repository {$ops
 			"$doc\tfun ${ident(m.name)}($ps): ${k.typeRef(m.ret)}"
 		}
 		val plumbingDoc = if (dropped)
-			"\n * 取得(読み取りストア)・乱択の鍵・調達ポート(時計・主体)・precise な入力\n * (lookup 結果・採番列)は**実装の配線**(注入ポート)— 署名には現れない\n * (証明装置を本番界面に写さない)。効果はリポジトリ経由で観測する。"
+			"\n * 取得(読み取りストア)・乱択の鍵・調達ポート(時計・主体・外部能力の観測)・precise な入力\n * (lookup 結果・採番列)は**実装の配線**(注入ポート)— 署名には現れない\n * (証明装置を本番界面に写さない)。効果はリポジトリ経由で観測する。"
 			else ""
 		return "/**\n * Lean: モジュール `${s.module}` の interface 面(署名は Lean の def の写し)。\n * $roleDoc$plumbingDoc\n * 実装は AI が別ファイルに書く。default 禁止。\n */\n" +
 			"interface ${s.name} {\n$methods\n}"

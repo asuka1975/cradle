@@ -9,3 +9,5 @@ pluginManagement {
 	repositories { gradlePluginPortal(); mavenCentral() }
 }
 rootProject.name = "scaffold-check"
+// 外部能力の Port を持つ最小ドメイン（port/lean）を同じ経路で通す回帰
+include("port")

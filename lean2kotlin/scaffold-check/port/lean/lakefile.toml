@@ -1,0 +1,6 @@
+# 生成器の回帰素材（外部能力の Port を持つ最小ドメイン「ロビーの来訪受付」）。CLI・モックアップ・golden は持たない。
+name = "lobby-lean"
+defaultTargets = ["Lobby"]
+
+[[lean_lib]]
+name = "Lobby"

@@ -26,7 +26,7 @@ if (cmd === "contract-skeleton") {
   if (!cls) { console.error("abstract class が見つかりません"); process.exit(1); }
   const sigs = [...text.matchAll(/^\s*(?:protected\s+)?abstract\s+fun\s+(\w+)\s*\(([^)]*)\)\s*:\s*([^\n={]+)/gm)];
   const outPkg = (args.indexOf("--package") >= 0 ? args[args.indexOf("--package") + 1] : pkg);
-  const lines = [`package ${outPkg}`, "", `import ${pkg}.${cls}`, "", "/** 生成された契約テストに本番実装を配線する。fake を挟まない — 本番の実装を実 DB 相手にそのまま使う。 */",
+  const lines = [`package ${outPkg}`, "", `import ${pkg}.${cls}`, "", "/** 生成された契約テストに本番実装を配線する。Repository に fake を挟まない — 本番の実装を実 DB 相手にそのまま使う。Port は渡された生成モックを配線する。 */",
     `class ${cls}Impl : ${cls}() {`];
   for (const m of sigs) lines.push(`\toverride fun ${m[1]}(${m[2].trim()}): ${m[3].trim()} = TODO("wire: 本番の実装を返す（${m[3].trim()}）")`);
   lines.push("}", "");

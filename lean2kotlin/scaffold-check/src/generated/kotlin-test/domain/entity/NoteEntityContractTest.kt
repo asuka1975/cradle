@@ -5,7 +5,6 @@ package dev.cradle.scaffold.domain.entity
 
 import dev.cradle.scaffold.NoteFixture
 import dev.cradle.scaffold.TitleFixture
-import dev.cradle.scaffold.domain.entity.NoteFactory
 import dev.cradle.scaffold.domain.valueobject.NoteId
 import dev.cradle.scaffold.domain.valueobject.Title
 import dev.cradle.scaffold.runtime.UserId
@@ -20,39 +19,7 @@ import org.junit.jupiter.api.Test
  */
 abstract class NoteEntityContractTest {
 	/** fixture の実体化(観測が一致する実装の Entity を返す)。 */
-	protected abstract fun title(fixture: TitleFixture): Title
-	/** fixture の実体化(観測が一致する実装の Entity を返す)。 */
 	protected abstract fun note(fixture: NoteFixture): Note
-	/** ファクトリの実装を返す。 */
-	protected abstract fun factory(): NoteFactory
-
-	/** メモは末尾に足される（書かれた順 = コレクションの並び）。 */
-	@Test
-	fun `post は定理 act_appends を再現する(1)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 500L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false),
-			factory().post(id = NoteId(id = 500L), author = UserId(id = 4L), title = title(TitleFixture(text = "s6"))).toFixture())
-	}
-
-	/** メモは末尾に足される（書かれた順 = コレクションの並び）。 */
-	@Test
-	fun `post は定理 act_appends を再現する(2)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 501L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false),
-			factory().post(id = NoteId(id = 501L), author = UserId(id = 4L), title = title(TitleFixture(text = "s6"))).toFixture())
-	}
-
-	/** メモは末尾に足される（書かれた順 = コレクションの並び）。 */
-	@Test
-	fun `post は定理 act_appends を再現する(3)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 502L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false),
-			factory().post(id = NoteId(id = 502L), author = UserId(id = 4L), title = title(TitleFixture(text = "s6"))).toFixture())
-	}
-
-	/** メモは末尾に足される（書かれた順 = コレクションの並び）。 */
-	@Test
-	fun `post は定理 act_appends を再現する(4)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 503L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false),
-			factory().post(id = NoteId(id = 503L), author = UserId(id = 4L), title = title(TitleFixture(text = "s6"))).toFixture())
-	}
 
 	/** 閉じたら閉じている。 */
 	@Test

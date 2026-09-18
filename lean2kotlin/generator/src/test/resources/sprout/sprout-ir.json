@@ -267,48 +267,12 @@
        "name": "rm"}],
      "name": "query",
      "doc": "本番の取得契約（固定名）。 "}]}],
+ "ports": [],
  "faultContracts": [],
  "domainServices": [],
+ "diagnostics": {"dropped": []},
  "contracts":
- [{"useCase": "Sprout.Application.NoteRepositoryState",
-   "theorem": "act_ids",
-   "target": "behaviors",
-   "method": "ids",
-   "doc": "同一性列は変わらない（フレーム — 消えない・増えない・入れ替わらない）。 ",
-   "cases":
-   [{"ok": [{"id": 91}],
-     "kind": "pure",
-     "args":
-     {"s":
-      {"notes":
-       [{"title": {"text": "s3"},
-         "id": {"id": 91},
-         "closed": true,
-         "author": {"id": 4}}]}}},
-    {"ok": [], "kind": "pure", "args": {"s": {"notes": []}}},
-    {"ok": [{"id": 93}],
-     "kind": "pure",
-     "args":
-     {"s":
-      {"notes":
-       [{"title": {"text": "s5"},
-         "id": {"id": 93},
-         "closed": true,
-         "author": {"id": 6}}]}}},
-    {"ok": [{"id": 91}, {"id": 92}],
-     "kind": "pure",
-     "args":
-     {"s":
-      {"notes":
-       [{"title": {"text": "s6"},
-         "id": {"id": 91},
-         "closed": true,
-         "author": {"id": 4}},
-        {"title": {"text": "s7"},
-         "id": {"id": 92},
-         "closed": true,
-         "author": {"id": 5}}]}}}]},
-  {"useCase": "CloseNoteUseCase",
+ [{"useCase": "CloseNoteUseCase",
    "theorem": "execute_already_closed",
    "target": "usecase",
    "method": "execute",
@@ -725,41 +689,6 @@
      [{"title": "s6", "id": {"id": 91}, "closed": false, "author": {"id": 4}}],
      "kind": "value",
      "args": {"q": {}, "actor": {"user": {"id": 4}}}}]},
-  {"useCase": "Sprout.Domain.Note",
-   "theorem": "act_appends",
-   "target": "behaviors",
-   "method": "post",
-   "doc": "メモは末尾に足される（書かれた順 = コレクションの並び）。 ",
-   "cases":
-   [{"ok":
-     {"title": {"text": "s6"},
-      "id": {"id": 500},
-      "closed": false,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args": {"title": {"text": "s6"}, "id": {"id": 500}, "author": {"id": 4}}},
-    {"ok":
-     {"title": {"text": "s6"},
-      "id": {"id": 501},
-      "closed": false,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args": {"title": {"text": "s6"}, "id": {"id": 501}, "author": {"id": 4}}},
-    {"ok":
-     {"title": {"text": "s6"},
-      "id": {"id": 502},
-      "closed": false,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args": {"title": {"text": "s6"}, "id": {"id": 502}, "author": {"id": 4}}},
-    {"ok":
-     {"title": {"text": "s6"},
-      "id": {"id": 503},
-      "closed": false,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args":
-     {"title": {"text": "s6"}, "id": {"id": 503}, "author": {"id": 4}}}]},
   {"useCase": "PostNoteUseCase",
    "theorem": "execute_invalid",
    "target": "usecase",
@@ -995,12 +924,17 @@
       "noteIds": {"next": 503}}}]},
   {"useCase": "Sprout.Application.NoteRepositoryState",
    "theorem": "noteRows_ids",
-   "target": "behaviors",
-   "method": "ids",
+   "target": "projection",
+   "rowType": "Sprout.Application.NoteRow",
+   "method": "noteRows",
    "doc": "妥当な書き込みモデルの射影は行の同一性を保つ。 ",
    "cases":
-   [{"ok": [{"id": 91}],
-     "kind": "pure",
+   [{"ok":
+     [{"title": {"text": "s0"},
+       "id": {"id": 91},
+       "closed": false,
+       "author": {"id": 4}}],
+     "kind": "projection",
      "args":
      {"s":
       {"notes":
@@ -1008,9 +942,13 @@
          "id": {"id": 91},
          "closed": false,
          "author": {"id": 4}}]}}},
-    {"ok": [], "kind": "pure", "args": {"s": {"notes": []}}},
-    {"ok": [{"id": 93}],
-     "kind": "pure",
+    {"ok": [], "kind": "projection", "args": {"s": {"notes": []}}},
+    {"ok":
+     [{"title": {"text": "s2"},
+       "id": {"id": 93},
+       "closed": true,
+       "author": {"id": 6}}],
+     "kind": "projection",
      "args":
      {"s":
       {"notes":
@@ -1018,8 +956,16 @@
          "id": {"id": 93},
          "closed": true,
          "author": {"id": 6}}]}}},
-    {"ok": [{"id": 91}, {"id": 92}],
-     "kind": "pure",
+    {"ok":
+     [{"title": {"text": "s3"},
+       "id": {"id": 91},
+       "closed": false,
+       "author": {"id": 4}},
+      {"title": {"text": "s4"},
+       "id": {"id": 92},
+       "closed": true,
+       "author": {"id": 5}}],
+     "kind": "projection",
      "args":
      {"s":
       {"notes":

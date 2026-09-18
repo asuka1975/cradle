@@ -300,6 +300,17 @@ class Kotlinize(private val ir: Ir) {
 	/** UseCase ディレクトリ名 → パッケージ(application.usecase.<小文字>)。 */
 	fun useCasePackage(dir: String): String = "application.usecase.${dir.lowercase()}"
 
+	/** Port のパッケージ = Port モジュールの写し(application.port.<port> / domain.port.<port>)。
+	    要求・観測の型も同じパッケージに出る(操作モジュールの葉を落とした先)。 */
+	fun portPackage(p: IrPort): String =
+		p.module.removePrefix(ir.rootNamespace + ".").split(".").joinToString(".") { it.lowercase() }
+
+	/** Port のモック(テスト側)の Kotlin 名。 */
+	fun portMockName(p: IrPort): String = "${p.name}Mock"
+
+	/** UseCase が使う Port を Port 名順に(契約テストのフック引数の並び)。 */
+	fun portsOf(s: IrService): List<IrPort> = s.ports.map { ir.port(it.port) }.distinctBy { it.name }.sortedBy { it.name }
+
 	/** 泉(IdGenerator ポート)の導出:
 	    @[repositoryState] の `<X>IdGeneratorState` ↔ ポート `<X>IdGenerator`
 	    (命名規約 `<X>State ↔ <X>` — RepositoryState.lean)。供給する Id 型は

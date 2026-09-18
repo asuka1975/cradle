@@ -12,6 +12,8 @@ class EmitTests(
 	private val ir: Ir,
 	private val k: Kotlinize,
 	private val out: Output,
+	/** Port の Adapter の適合テストの置き場(build の門に入らない source set adapterTest)。 */
+	private val adapterOut: Output,
 	private val goldenSnapshots: List<GoldenSnapshot>,
 	private val log: (String) -> Unit,
 ) {
@@ -24,9 +26,23 @@ class EmitTests(
 		"io.kotest.property.PropTestConfig",
 		"io.kotest.property.checkAll")
 
+	/** 生成テストが 1 件でも出た契約(`target/useCase/theorem`、障害契約は `fault/useCase/def`)。
+	    宣言した契約が検査に至ったかを Runner が突き合わせる。 */
+	val emittedContracts = linkedSetOf<String>()
+
+	fun contractKey(c: IrContract): String = "${c.target}/${c.useCase}/${c.theorem}"
+	fun faultKey(fc: IrFaultContract): String = "fault/${fc.useCase}/${fc.def}"
+
 	fun emitAll() {
 		if (ir.types.any { k.isEntityLike(it) }) {
 			emitFile(null, "GeneratedFixtures") { fixturesBody() }
+		}
+		if (ir.ports.isNotEmpty()) {
+			emitFile(null, "PortHarnessFailure") { portHarnessFailureBody }
+			for (p in ir.ports) emitFile(k.portPackage(p), k.portMockName(p),
+				framework = listOf("${out.basePackage}.PortHarnessFailure")) { portMockBody(p) }
+			for (p in ir.ports) emitFile(k.portPackage(p), "${p.name}AdapterContractTest",
+				framework = junitImports + "org.junit.jupiter.api.Assertions.assertTrue", target = adapterOut) { portAdapterTestBody(p) }
 		}
 		emitFile(null, "GeneratedArbs",
 			framework = listOf("io.kotest.property.Arb", "io.kotest.property.arbitrary.*")) { arbsBody() }
@@ -291,6 +307,118 @@ class EmitTests(
 		return sb.toString().trimEnd()
 	}
 
+	// ───────────────────────── 外部能力の Port のモック(契約テストの注入物)
+
+	private val portHarnessFailureBody = """
+/**
+ * Port モックのハーネス失敗(要求不一致・積んでいない呼び出し)。業務の失敗語彙(DomainResult)では
+ * ない — 被検査コードが捕捉しても記録は残り、assertComplete が失敗にする。
+ */
+class PortHarnessFailure(message: String) : AssertionError(message)
+""".trimIndent()
+
+	/**
+	 * Port のモック: 期待するやり取り(要求と観測)を順に積み、実装が同じ要求で呼べばその観測を返す。
+	 * 違う要求・積んでいない呼び出し・別の操作はハーネス失敗として記録して投げる。
+	 * 呼ばれなかった要求は完了検査(assertComplete)が失敗にする。
+	 */
+	private fun portMockBody(p: IrPort): String {
+		val mock = k.portMockName(p)
+		val sb = StringBuilder()
+		sb.append("/**\n")
+		sb.append(" * Lean: Port `${p.module}` の契約テスト用モック。\n")
+		sb.append(" * 期待するやり取り(Lean が評価した要求と定理の観測)を順に積み、実装が同じ要求で呼べばその観測を返す。\n")
+		sb.append(" * 違う要求・積んでいない呼び出し・別の操作は記録して PortHarnessFailure を投げる(業務の拒否とは別)。\n")
+		sb.append(" * 被検査コードが例外を捕捉しても記録は残り、assertComplete が失敗にする。\n")
+		sb.append(" */\n")
+		sb.append("class $mock(expected: List<Expectation>) : ${p.name} {\n")
+		sb.append("\t/** 期待するやり取り(操作ごとに 1 種)。 */\n")
+		sb.append("\tsealed interface Expectation\n")
+		for (op in p.operations) {
+			sb.append("\tdata class ${capitalizeFirst(op.method)}(val request: ${k.name(op.request)}, val outcome: ${k.name(op.outcome)}) : Expectation\n")
+		}
+		sb.append("\n\tprivate val queue = ArrayDeque(expected)\n")
+		sb.append("\tprivate val failures = mutableListOf<String>()\n\n")
+		sb.append("\tprivate fun fail(message: String): Nothing {\n")
+		sb.append("\t\tfailures += message\n")
+		sb.append("\t\tthrow PortHarnessFailure(\"${p.name}: \$message\")\n")
+		sb.append("\t}\n")
+		for (op in p.operations) {
+			val exp = capitalizeFirst(op.method)
+			sb.append("\n\toverride fun ${ident(op.method)}(request: ${k.name(op.request)}): ${k.name(op.outcome)} {\n")
+			sb.append("\t\tval next = queue.removeFirstOrNull() ?: fail(\"${op.method}: 積んでいない呼び出し(\$request)\")\n")
+			sb.append("\t\tif (next !is $exp) fail(\"${op.method}: 期待していた操作は \$next\")\n")
+			sb.append("\t\tif (next.request != request) fail(\"${op.method}: 要求が違う — 期待 \${next.request} / 実際 \$request\")\n")
+			sb.append("\t\treturn next.outcome\n")
+			sb.append("\t}\n")
+		}
+		sb.append("\n\t/** 記録された失敗(要求不一致・積んでいない呼び出し)が無いこと。 */\n")
+		sb.append("\tfun assertNoFailure() {\n")
+		sb.append("\t\tif (failures.isNotEmpty()) throw AssertionError(\"${p.name}: \" + failures.joinToString(\"\\n\"))\n")
+		sb.append("\t}\n\n")
+		sb.append("\t/** 失敗が無く、積んだやり取りが全部消費されたこと(呼ばれなかった要求も失敗)。 */\n")
+		sb.append("\tfun assertComplete() {\n")
+		sb.append("\t\tassertNoFailure()\n")
+		sb.append("\t\tif (queue.isNotEmpty()) throw AssertionError(\"${p.name}: 呼ばれなかったやり取りが残っている: \$queue\")\n")
+		sb.append("\t}\n")
+		sb.append("}")
+		return sb.toString()
+	}
+
+	/** ケースの Port への期待をモックの構築式に写す(要求が無い = 積まない = 呼ばれない)。 */
+	private fun portMockExpr(p: IrPort, ports: List<IrCasePort>): String {
+		val exps = ports.filter { it.port == p.name && it.request != null }.map { cp ->
+			val op = p.operations.find { it.method == cp.operation }
+				?: error("Port ${p.name} に操作 ${cp.operation} がありません")
+			"${k.portMockName(p)}.${capitalizeFirst(op.method)}(request = ${inputLiteral(IrType.Ref(op.request), cp.request!!)}, " +
+				"outcome = ${inputLiteral(IrType.Ref(op.outcome), cp.outcome ?: error("Port ${p.name}.${op.method}: 観測が無い"))})"
+		}
+		return "${k.portMockName(p)}(${if (exps.isEmpty()) "emptyList()" else "listOf(${exps.joinToString(", ")})"})"
+	}
+
+	private fun portVar(p: IrPort): String = decapitalizeFirst(p.name)
+
+	/**
+	 * Port の Adapter の適合テスト(adapterTest): 観測(Outcome)の各構成子を Adapter が一度は産めることを
+	 * 検査する骨格。stub をその観測を返す状態にする配線は具象(arrange フック)の仕事で、
+	 * 全応答への写像の正しさはここでは主張しない。通常の build には入らない(adapterContractTest タスク)。
+	 */
+	private fun portAdapterTestBody(p: IrPort): String {
+		val sb = StringBuilder()
+		sb.append("/**\n")
+		sb.append(" * Lean: Port `${p.module}` の Adapter(外部の呼び方の実装)の適合テスト。\n")
+		sb.append(" * 観測(Outcome)の各構成子を Adapter が一度は産めることを検査する — 全応答への写像の正しさは主張しない\n")
+		sb.append(" * (写像の中身は手書きの Adapter 検査の持ち物)。stub / sandbox 相手に配線した Adapter を adapter() で返し、\n")
+		sb.append(" * 各 arrange フックで stub をその観測を返す状態にしてから要求を返す。通常の build には入らない(adapterContractTest タスク)。\n")
+		sb.append(" */\n")
+		sb.append("abstract class ${p.name}AdapterContractTest {\n")
+		sb.append("\t/** 検査対象の Adapter(stub / sandbox 相手に配線したもの)。 */\n")
+		sb.append("\tprotected abstract fun adapter(): ${p.name}\n")
+		data class Probe(val op: IrPortOp, val ctor: String?, val check: (String) -> String)
+		val probes = p.operations.flatMap { op ->
+			val outK = k.name(op.outcome)
+			when (val shape = ir.typeDef(op.outcome).shape) {
+				is IrShape.Sealed -> shape.ctors.map { c -> Probe(op, c.name) { got -> "assertTrue($got is $outK.${k.ctorClassName(c.name)}, \"\$$got\")" } }
+				is IrShape.Enum -> shape.ctors.map { c -> Probe(op, c) { got -> "assertEquals($outK.${k.ctorClassName(c)}, $got)" } }
+				is IrShape.Structure -> listOf(Probe(op, null) { got -> "assertEquals($got, $got)" })
+			}
+		}
+		fun hookOf(pr: Probe) = "arrange${capitalizeFirst(pr.op.method)}${pr.ctor?.let { capitalizeFirst(it) } ?: ""}"
+		for (pr in probes) {
+			sb.append("\t/** ${pr.ctor?.let { "観測 $it を返させる要求" } ?: "要求"}。stub をその状態にしてから返す。 */\n")
+			sb.append("\tprotected abstract fun ${hookOf(pr)}(): ${k.name(pr.op.request)}\n")
+		}
+		for (pr in probes) {
+			sb.append("\n\t@Test\n")
+			sb.append("\tfun `${pr.op.method} は${pr.ctor?.let { " $it を" } ?: "観測を"}産める`() {\n")
+			sb.append("\t\tval outcome = adapter().${ident(pr.op.method)}(${hookOf(pr)}())\n")
+			sb.append("\t\t${pr.check("outcome")}\n")
+			sb.append("\t}\n")
+		}
+		sb.append("}")
+		return sb.toString()
+	}
+
 	// ───────────────────────── 読み取り(views)の golden 回帰テスト
 
 	/** 合成できないと note した Row(Kotlin 名 と 状態キー)— 同じ組は 1 回だけ出す。 */
@@ -395,7 +523,7 @@ class EmitTests(
 	 */
 	private fun isPlumbing(t: IrType): Boolean = when (t) {
 		is IrType.Ref -> ir.typeDef(t.lean).role in
-			setOf("readModel", "repositoryState", "clockPort", "actorPort")
+			setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
 		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
 			t.to == IrType.Nat
 		else -> false
@@ -536,6 +664,7 @@ class EmitTests(
 					sb.append("\t\t\t$receiver.${ident(c.method)}(" +
 						callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
 					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
 					emitted++
 				}
 			}
@@ -603,6 +732,7 @@ class EmitTests(
 					sb.append("\t\t\tbehaviors().${ident(c.method)}(" +
 						callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
 					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
 					emitted++
 				}
 			}
@@ -633,7 +763,7 @@ class EmitTests(
 			?: error("${st.lean}: ${root.lean} の列を運ぶ List のフィールドがありません")
 
 	/** Effect Set(State)を集約ルート部分と泉部分に分解する。State のフィールドは観測モデル
-	    (`<Root>RepositoryState`)か泉の状態 — 集約ルートを Option / List で直接運ぶ形は読めない。 */
+	    (`<Root>RepositoryState`)か泉の状態 — 集約ルートを Option / List / 単体で直接運ぶ形は読めない。 */
 	private fun decomposeState(stateLean: String): EffectSet? {
 		val stateTd = ir.typeDef(stateLean)
 		val parts = mutableListOf<RootPart>()
@@ -643,10 +773,10 @@ class EmitTests(
 			parts += RootPart(root, null, collFieldOf(stateTd, root))
 		} else {
 			for (f in (stateTd.shape as IrShape.Structure).fields) {
-				val carried = (((f.type as? IrType.OptionOf)?.of ?: (f.type as? IrType.ListOf)?.of) as? IrType.Ref)
+				val carried = (((f.type as? IrType.OptionOf)?.of ?: (f.type as? IrType.ListOf)?.of ?: f.type) as? IrType.Ref)
 					?.let { ir.typeDef(it.lean) }?.takeIf { it.role == "aggregateRoot" }
 				require(carried == null) {
-					"${stateTd.lean}.${f.name}: 集約ルート ${carried?.lean} を Option / List で直接運ぶ形は読めない — " +
+					"${stateTd.lean}.${f.name}: 集約ルート ${carried?.lean} を Option / List / 単体で直接運ぶ形は読めない — " +
 						"個体は <Root>RepositoryState の 1 本の List に全部入り、State はその観測モデルを運ぶ" +
 						"(「高々 1 件」はその列に掛かる Prop フィールド。lean-conventions §4)"
 				}
@@ -661,6 +791,14 @@ class EmitTests(
 			}
 		}
 		return if (parts.isEmpty()) null else EffectSet(parts, genParts)
+	}
+
+	/** 播種は Repository の `add` で行う — 観測モデルにもファクトリにも add の根拠が無いルートに個体を
+	    播種する契約は、コンパイルできない生成物を出さず理由付きで止める。 */
+	private fun requireAddForSeeding(part: RootPart, arr: JsonArray) {
+		require(arr.isEmpty() || k.repoOps(part.root).add) {
+			"${part.root.lean}: 契約の State が個体を播種するが Repository に add が無い(観測モデルの add かファクトリが要る)"
+		}
 	}
 
 	/** 状態 JSON から集約ルート部分のコレクションを取り出す。 */
@@ -751,9 +889,13 @@ class EmitTests(
 			.flatMap { it.params }
 			.filter { p -> (p.type as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "actorPort" }
 			.distinctBy { it.name }
+		// 外部能力の Port: 実装は Port 経由で観測を調達する — 契約テストは生成モックを注入し、
+		// Lean が評価した要求で 1 回呼ばれること(validate の拒否なら呼ばれないこと)を検査する
+		val portDeps = k.portsOf(s)
 		val extraImports = sortedParts.map {
 			"${out.basePackage}.${k.repositoryPackage}.${it.root.kotlin}Repository"
-		} + genParts.map { "${out.basePackage}.application.${it.port.port}" }
+		} + genParts.map { "${out.basePackage}.application.${it.port.port}" } +
+			portDeps.flatMap { p -> listOf("${out.basePackage}.${k.portPackage(p)}.${p.name}", "${out.basePackage}.${k.portPackage(p)}.${k.portMockName(p)}") }
 		emitFile(k.useCasePackage(s.module), "${ucName}ContractTest",
 			framework = junitImports + extraImports,
 			usesDomainResult = s.methods.any { it.ret is IrType.Result }) {
@@ -782,9 +924,12 @@ class EmitTests(
 				"。時計は固定の ${clockFields.joinToString("・") { it.field.name }} を配線する(Clock ポート)" else ""
 			val actorDoc = if (actorParams.isNotEmpty())
 				"。主体は固定の ${actorParams.joinToString("・") { it.name }} を配線する(主体ポート。主体依存のふるまい = 認可分岐はこの注入で検証される)" else ""
-			sb.append("\t/** 実装を、観測用リポジトリ${if (genParts.isNotEmpty()) "と泉ごとの採番ポート" else ""}を配線して返す$actorDoc$clockDoc。 */\n")
+			val portDoc = if (portDeps.isNotEmpty())
+				"。外部能力の Port は生成モック(${portDeps.joinToString("・") { k.portMockName(it) }})を配線する(要求の値と呼び出し回数はモックが検査する)" else ""
+			sb.append("\t/** 実装を、観測用リポジトリ${if (genParts.isNotEmpty()) "と泉ごとの採番ポート" else ""}を配線して返す$actorDoc$clockDoc$portDoc。 */\n")
 			sb.append("\tprotected abstract fun useCase(" +
 				sortedParts.joinToString(", ") { "${repoVar(it.root)}: ${it.root.kotlin}Repository" } +
+				portDeps.joinToString("") { ", ${portVar(it)}: ${it.name}" } +
 				genParts.joinToString("") { ", ${decapitalizeFirst(it.port.port)}: ${it.port.port}" } +
 				actorParams.joinToString("") { ", ${ident(it.name)}: ${k.typeRef(it.type)}" } +
 				clockFields.joinToString("") { ", ${ident(it.field.name)}: ${k.typeRef(it.field.type)}" } +
@@ -823,10 +968,17 @@ class EmitTests(
 					// 作用前の播種(add — 保存順)
 					for (part in sortedParts) {
 						val arr = collOf(beforeO, part) ?: continue
+						requireAddForSeeding(part, arr)
 						val mat = decapitalizeFirst(part.root.kotlin)
 						for (el in arr) {
 							sb.append("\t\t${repoVar(part.root)}.add($mat(${k.refLiteral(part.root, el)}))\n")
 						}
+					}
+					// Port のモック: 期待は当該ケース(要求が無ければ空 = 呼ばれない)
+					var portArg = ""
+					for (p in portDeps) {
+						sb.append("\t\tval ${portVar(p)} = ${portMockExpr(p, case.ports)}\n")
+						portArg += ", ${portVar(p)}"
 					}
 					// 泉ごとの決定的な供給 — 種は before の各泉の残高
 					var idGenArg = ""
@@ -851,8 +1003,12 @@ class EmitTests(
 							?: error("${c.theorem}: 時計 ${cf.field.name} の値を構成できません"))
 					}
 					sb.append("\t\tval useCase = useCase(" +
-						sortedParts.joinToString(", ") { repoVar(it.root) } + "$idGenArg$actorArgs$clockArgs)\n")
-					val call = "useCase.${ident(m.name)}(${callArgs.joinToString(", ")})"
+						sortedParts.joinToString(", ") { repoVar(it.root) } + "$portArg$idGenArg$actorArgs$clockArgs)\n")
+					// Port があるときは結果や例外を一度捕まえ、モックの失敗・完了検査を先に評価する —
+					// 要求不一致で実装が途中で止まった赤を、状態差分の赤で隠さない
+					val bare = "useCase.${ident(m.name)}(${callArgs.joinToString(", ")})"
+					val call = if (portDeps.isEmpty()) bare
+						else "runCatching { $bare }.also { ${portDeps.joinToString("; ") { "${portVar(it)}.assertComplete()" }} }.getOrThrow()"
 					val okT = (m.ret as? IrType.Result)?.ok
 					if (errT != null) {
 						if (case.error != null) {
@@ -886,6 +1042,7 @@ class EmitTests(
 							"${decapitalizeFirst(gp.port.port)}.next)\n")
 					}
 					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
 					emitted++
 				}
 			}
@@ -936,9 +1093,11 @@ class EmitTests(
 			val actorParams = m.params.filter { p ->
 				(p.type as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "actorPort"
 			}
+			val portDeps = k.portsOf(s)
 			val extraImports = sortedParts.map {
 				"${out.basePackage}.${k.repositoryPackage}.${it.root.kotlin}Repository"
-			} + genParts.map { "${out.basePackage}.application.${it.port.port}" }
+			} + genParts.map { "${out.basePackage}.application.${it.port.port}" } +
+				portDeps.flatMap { p -> listOf("${out.basePackage}.${k.portPackage(p)}.${p.name}", "${out.basePackage}.${k.portPackage(p)}.${k.portMockName(p)}") }
 			emitFile(k.useCasePackage(s.module), "${ucName}FaultContractTest",
 				framework = junitImports + extraImports) {
 				val sb = StringBuilder()
@@ -969,6 +1128,7 @@ class EmitTests(
 				sb.append("\t    Repository は渡されたものを配線すること。 */\n")
 				sb.append("\tprotected abstract fun faultedUseCase(" +
 					sortedParts.joinToString(", ") { "${repoVar(it.root)}: ${it.root.kotlin}Repository" } +
+					portDeps.joinToString("") { ", ${portVar(it)}: ${it.name}" } +
 					genParts.joinToString("") { ", ${decapitalizeFirst(it.port.port)}: ${it.port.port}" } +
 					actorParams.joinToString("") { ", ${ident(it.name)}: ${k.typeRef(it.type)}" } +
 					clockFields.joinToString("") { ", ${ident(it.field.name)}: ${k.typeRef(it.field.type)}" } +
@@ -994,10 +1154,18 @@ class EmitTests(
 						}
 						for (part in sortedParts) {
 							val arr = collOf(beforeO, part) ?: continue
+							requireAddForSeeding(part, arr)
 							val mat = decapitalizeFirst(part.root.kotlin)
 							for (el in arr) {
 								sb.append("\t\t${repoVar(part.root)}.add($mat(${k.refLiteral(part.root, el)}))\n")
 							}
+						}
+						// Port のモック: 期待は当該ケース。中断がどこで起きたかは宣言の外なので、
+						// 消費し切ったかは見ない(要求不一致・積んでいない呼び出しだけを失敗にする)
+						var portArg = ""
+						for (p in portDeps) {
+							sb.append("\t\tval ${portVar(p)} = ${portMockExpr(p, case.ports)}\n")
+							portArg += ", ${portVar(p)}"
 						}
 						var idGenArg = ""
 						for (gp in genParts) {
@@ -1018,13 +1186,14 @@ class EmitTests(
 								?: error("障害契約 ${fc.def}: 時計 ${cf.field.name} の値を構成できません"))
 						}
 						sb.append("\t\tval useCase = faultedUseCase(" +
-							sortedParts.joinToString(", ") { repoVar(it.root) } + "$idGenArg$actorArgs$clockArgs)\n")
+							sortedParts.joinToString(", ") { repoVar(it.root) } + "$portArg$idGenArg$actorArgs$clockArgs)\n")
 						sb.append("\t\tvar thrown: Throwable? = null\n")
 						sb.append("\t\ttry {\n")
 						sb.append("\t\t\tuseCase.${ident(m.name)}(${callArgs.joinToString(", ")})\n")
 						sb.append("\t\t} catch (t: Throwable) {\n")
 						sb.append("\t\t\tthrown = t\n")
 						sb.append("\t\t}\n")
+						for (p in portDeps) sb.append("\t\t${portVar(p)}.assertNoFailure()\n")
 						sb.append("\t\tif (thrown == null) throw AssertionError(\n")
 						sb.append("\t\t\t\"技術的障害が注入されていない(execute が正常終了した)\")\n")
 						// 障害後の観測 = 宣言された状態(Repository 単位の完全一致)
@@ -1044,6 +1213,7 @@ class EmitTests(
 								"${decapitalizeFirst(gp.port.port)}.next)\n")
 						}
 						sb.append("\t}\n")
+						emittedContracts += faultKey(fc)
 						emitted++
 					}
 				}
@@ -1195,6 +1365,7 @@ class EmitTests(
 					sb.append("\t\t\tuseCase(${wired.joinToString(", ")})" +
 						".${ident(m.name)}(${callArgs.joinToString(", ")}))\n")
 					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
 					emitted++
 				}
 			}
@@ -1307,6 +1478,7 @@ class EmitTests(
 						"${fieldLits.joinToString(", ")}),\n")
 					sb.append("\t\t\tretrieve${rm.kotlin}(${aggArgs.joinToString(", ")}))\n")
 					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
 					emitted++
 				}
 			}
@@ -1317,11 +1489,12 @@ class EmitTests(
 		}
 	}
 
-	/** 参照を収集し、役割別パッケージへのインポートを計算して書き出す。 */
+	/** 参照を収集し、役割別パッケージへのインポートを計算して書き出す(target は既定でテスト側)。 */
 	private fun emitFile(
 		subpkg: String?, name: String,
 		framework: List<String> = emptyList(),
 		usesDomainResult: Boolean = false,
+		target: Output = out,
 		build: () -> String,
 	) {
 		val (body, c) = k.collecting(build)
@@ -1347,7 +1520,7 @@ class EmitTests(
 		if (subpkg != null) {
 			for (kn in c.arbs) imports.add("${out.basePackage}.${k.arbFunName(kn)}")
 		}
-		out.file(subpkg, name, imports, body)
+		target.file(subpkg, name, imports, body)
 	}
 
 	// ───────────────────────── Arb(Kotest ジェネレータ)

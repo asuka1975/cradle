@@ -67,8 +67,8 @@ theorem execute_ok_shape (actor : ActorContext UserId) (c : Command NoteId)
   | error e => rw [hv] at h; cases h
   | ok n => rw [hv] at h; injection h with h; exact ⟨n, h.symm⟩
 
-/-- 同一性列は変わらない（フレーム — 消えない・増えない・入れ替わらない）。 -/
-@[contract] theorem act_ids (c : Command NoteId) (before : NoteRepositoryState NoteId UserId)
+/-- 同一性列は変わらない（フレーム — 消えない・増えない・入れ替わらない）。@[contract] は付けない — execute_ok の系。 -/
+theorem act_ids (c : Command NoteId) (before : NoteRepositoryState NoteId UserId)
     (n : Note NoteId UserId) : (act c before n).ids = before.ids :=
   NoteRepositoryState.update_ids before c.note Note.close (fun _ => rfl) (fun _ => rfl)
 

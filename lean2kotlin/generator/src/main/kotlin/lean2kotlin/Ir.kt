@@ -188,6 +188,22 @@ data class IrMethod(val name: String, val doc: String, val params: List<IrField>
 	}
 }
 
+/** 契約ケースが Port に期待するやり取り: request が null なら呼ばれない(validate の拒否)、
+ *  そうでなければその要求で 1 回呼ばれ outcome が返る。 */
+data class IrCasePort(val port: String, val operation: String, val request: JsonElement?, val outcome: JsonElement?) {
+	companion object {
+		fun parse(j: JsonElement): IrCasePort {
+			val o = j.jsonObject
+			val nullable = { e: JsonElement? -> if (e == null || e is JsonNull) null else e }
+			return IrCasePort(
+				port = o.getValue("port").jsonPrimitive.content,
+				operation = o.getValue("operation").jsonPrimitive.content,
+				request = nullable(o["request"]),
+				outcome = nullable(o["outcome"]))
+		}
+	}
+}
+
 /**
  * @[contract] 契約定理から演繹されたテストケース(期待値は抽出時の Lean 内評価)。
  * kind = "transition": 状態遷移契約 — before を fromState で播種し、
@@ -209,6 +225,8 @@ data class IrContractCase(
 	val readModelType: String? = null,
 	val readModel: JsonElement? = null,
 	val ok: JsonElement? = null,
+	/** transition: UseCase が使う Port への期待(Lean が評価した要求と定理の観測)。 */
+	val ports: List<IrCasePort> = emptyList(),
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrContractCase {
@@ -222,7 +240,8 @@ data class IrContractCase(
 				after = o["after"],
 				readModelType = o["readModelType"]?.jsonPrimitive?.content,
 				readModel = o["readModel"],
-				ok = o["ok"])
+				ok = o["ok"],
+				ports = o["ports"]?.jsonArray?.map(IrCasePort::parse) ?: emptyList())
 		}
 	}
 }
@@ -261,6 +280,7 @@ data class IrFaultCase(
 	val stateType: String,
 	val before: JsonElement,
 	val after: JsonElement,
+	val ports: List<IrCasePort> = emptyList(),
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrFaultCase {
@@ -269,7 +289,8 @@ data class IrFaultCase(
 				args = o.getValue("args").jsonObject.toMap(),
 				stateType = o.getValue("stateType").jsonPrimitive.content,
 				before = o.getValue("before"),
-				after = o.getValue("after"))
+				after = o.getValue("after"),
+				ports = o["ports"]?.jsonArray?.map(IrCasePort::parse) ?: emptyList())
 		}
 	}
 }
@@ -308,14 +329,72 @@ data class IrBehavior(
 	}
 }
 
-data class IrService(val name: String, val module: String, val methods: List<IrMethod>) {
+/** UseCase が使う Port の操作(要求・観測の型は `ports` の操作が持つ)。 */
+data class IrUseCasePort(val port: String, val operation: String) {
+	companion object {
+		fun parse(j: JsonElement): IrUseCasePort {
+			val o = j.jsonObject
+			return IrUseCasePort(
+				port = o.getValue("port").jsonPrimitive.content,
+				operation = o.getValue("operation").jsonPrimitive.content)
+		}
+	}
+}
+
+data class IrService(
+	val name: String, val module: String, val methods: List<IrMethod>,
+	/** UseCase のみ: 使う Port(署名から落ちる観測引数と、モックを組む型)。 */
+	val ports: List<IrUseCasePort> = emptyList(),
+) {
 	companion object {
 		fun parse(j: JsonElement): IrService {
 			val o = j.jsonObject
 			return IrService(
 				name = o.getValue("name").jsonPrimitive.content,
 				module = o.getValue("module").jsonPrimitive.content,
-				methods = o.getValue("methods").jsonArray.map(IrMethod::parse))
+				methods = o.getValue("methods").jsonArray.map(IrMethod::parse),
+				ports = o["ports"]?.jsonArray?.map(IrUseCasePort::parse) ?: emptyList())
+		}
+	}
+}
+
+/** 外部能力の Port の操作(`Application/Port/<Port>/<操作>`): メソッド名と要求・観測の型(lean 名)。 */
+data class IrPortOp(val method: String, val request: String, val outcome: String, val doc: String) {
+	companion object {
+		fun parse(j: JsonElement): IrPortOp {
+			val o = j.jsonObject
+			return IrPortOp(
+				method = o.getValue("method").jsonPrimitive.content,
+				request = o.getValue("request").jsonPrimitive.content,
+				outcome = o.getValue("outcome").jsonPrimitive.content,
+				doc = o["doc"]?.jsonPrimitive?.content ?: "")
+		}
+	}
+}
+
+/** 外部能力の Port。interface(main)・モック(test)・Adapter の適合テスト(adapterTest)の生成源。
+    所有層はモジュール名(`<Root>.<Application|Domain>.Port.<Port>`)が運ぶ。 */
+data class IrPort(val name: String, val module: String, val operations: List<IrPortOp>) {
+	companion object {
+		fun parse(j: JsonElement): IrPort {
+			val o = j.jsonObject
+			return IrPort(
+				name = o.getValue("name").jsonPrimitive.content,
+				module = o.getValue("module").jsonPrimitive.content,
+				operations = o.getValue("operations").jsonArray.map(IrPortOp::parse))
+		}
+	}
+}
+
+/** 抽出器の診断: 宣言した契約・固定形の署名が IR に入らなかった理由。生成器は失敗として読む。 */
+data class IrDropped(val kind: String, val name: String, val reason: String) {
+	companion object {
+		fun parse(j: JsonElement): IrDropped {
+			val o = j.jsonObject
+			return IrDropped(
+				kind = o.getValue("kind").jsonPrimitive.content,
+				name = o.getValue("name").jsonPrimitive.content,
+				reason = o.getValue("reason").jsonPrimitive.content)
 		}
 	}
 }
@@ -329,6 +408,8 @@ class Ir(
 	val contracts: List<IrContract> = emptyList(),
 	val faultContracts: List<IrFaultContract> = emptyList(),
 	val behaviors: List<IrBehavior> = emptyList(),
+	val ports: List<IrPort> = emptyList(),
+	val dropped: List<IrDropped> = emptyList(),
 ) {
 	private val byLean: Map<String, IrTypeDef> = types.associateBy { it.lean }
 
@@ -336,6 +417,8 @@ class Ir(
 		byLean[lean] ?: error("IR に型 $lean がありません")
 
 	fun kotlinName(lean: String): String = typeDef(lean).kotlin
+
+	fun port(name: String): IrPort = ports.find { it.name == name } ?: error("IR に Port $name がありません")
 
 	companion object {
 		fun parse(text: String): Ir {
@@ -350,7 +433,9 @@ class Ir(
 				domainServices = o["domainServices"]?.jsonArray?.map(IrService::parse) ?: emptyList(),
 				contracts = o["contracts"]?.jsonArray?.map(IrContract::parse) ?: emptyList(),
 				faultContracts = o["faultContracts"]?.jsonArray?.map(IrFaultContract::parse) ?: emptyList(),
-				behaviors = o["behaviors"]?.jsonArray?.map(IrBehavior::parse) ?: emptyList())
+				behaviors = o["behaviors"]?.jsonArray?.map(IrBehavior::parse) ?: emptyList(),
+				ports = o["ports"]?.jsonArray?.map(IrPort::parse) ?: emptyList(),
+				dropped = o["diagnostics"]?.jsonObject?.get("dropped")?.jsonArray?.map(IrDropped::parse) ?: emptyList())
 		}
 	}
 }
