@@ -59,4 +59,4 @@ internal fun arbVisitorName(): Arb<VisitorNameFixture> =
 
 /** `Lobby.Application.VisitRepositoryState` の制約(uniqueIds: id・atMostOneExpected: phase ≠ "left" は高々 1 件)と同一性を満たす個体の列。間引きで size を割った列は引き直す。 */
 internal fun arbVisitRepository(size: IntRange = 0..5): Arb<List<VisitFixture>> =
-	Arb.list(arbVisit(), size).map { xs -> xs.distinctBy { x -> x.id }.let { ys -> var k = 0; ys.filter { x -> !(x.phase != VisitPhase.Left) || k++ < 1 } } }.filter { it.size in size }
+	Arb.list(arbVisit(), size).map { xs -> xs.distinctBy { x -> x.id }.let { ys -> var k = 0L; ys.map { x -> if (!(x.phase != VisitPhase.Left) || k++ < 1L) x else x.copy(phase = VisitPhase.Left) } } }.filter { it.size in size }

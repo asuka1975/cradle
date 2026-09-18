@@ -119,6 +119,18 @@ class Kotlinize(private val ir: Ir) {
 		else -> false
 	}
 
+	/** 型が関数型へ shape を通じて到達するか(値で比較できない — Port の要求・観測に置けない)。 */
+	fun reachesArrow(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
+		is IrType.Arrow -> true
+		is IrType.Ref -> seen.add(t.lean) && shapeFieldTypes(ir.typeDef(t.lean)).any { reachesArrow(it, seen) }
+		is IrType.ListOf -> reachesArrow(t.of, seen)
+		is IrType.OptionOf -> reachesArrow(t.of, seen)
+		is IrType.PairOf -> reachesArrow(t.fst, seen) || reachesArrow(t.snd, seen)
+		is IrType.WithDefault -> reachesArrow(t.of, seen)
+		is IrType.Result -> reachesArrow(t.err, seen) || reachesArrow(t.ok, seen)
+		else -> false
+	}
+
 	/** fixture 側に平行な語彙(<X>Fixture)が要る**橋渡し型**: entity-like へ到達する
 	    ドメイン VO の sealed / structure(例: ふるまい持ちの VO を運ぶ sealed)。
 	    fixture(観測レコード)や Row に埋め込まれる位置で本番 interface を運ばないための

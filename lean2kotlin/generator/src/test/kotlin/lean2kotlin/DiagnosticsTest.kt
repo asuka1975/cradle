@@ -58,4 +58,27 @@ class DiagnosticsTest {
 		val (e, _) = run(ir.toString(), out)
 		assertTrue("Port Ledger.record: Mini.Application.Port.Ledger.Record.Request が interface 化された語彙" in e.message!!, e.message)
 	}
+
+	@Test
+	fun `Port の観測が構成子の引数や入れ子の中で関数型を運ぶと生成を失敗にする`(@TempDir out: Path) {
+		val base = Json.parseToJsonElement(testResources.resolve("unique-name/ir.json").readText()).jsonObject
+		val request = Json.parseToJsonElement("""{"lean":"Mini.Application.Port.Ledger.Record.Request","kotlin":"LedgerRecordRequest","role":"portRequest","module":"Mini.Application.Port.Ledger.Record",
+			"shape":{"kind":"structure","fields":[{"name":"amount","type":{"k":"nat"}}]}}""")
+		// inductive の構成子の引数が関数(`| callback (f : Nat → Nat)`)
+		val outcome = Json.parseToJsonElement("""{"lean":"Mini.Application.Port.Ledger.Record.Outcome","kotlin":"LedgerRecordOutcome","role":"portOutcome","module":"Mini.Application.Port.Ledger.Record",
+			"shape":{"kind":"sealed","ctors":[{"name":"done","fields":[]},{"name":"callback","fields":[{"name":"f","type":{"k":"arrow","from":{"k":"nat"},"to":{"k":"nat"}}}]}]}}""")
+		val ports = Json.parseToJsonElement("""[{"name":"Ledger","layer":"application","module":"Mini.Application.Port.Ledger","operations":[{"name":"Record","method":"record",
+			"request":"Mini.Application.Port.Ledger.Record.Request","outcome":"Mini.Application.Port.Ledger.Record.Outcome","doc":""}]}]""")
+		val ir = JsonObject(base + mapOf("types" to JsonArray(base.getValue("types").jsonArray + request + outcome), "ports" to ports))
+		val (e, _) = run(ir.toString(), out)
+		assertTrue("Port Ledger.record: Mini.Application.Port.Ledger.Record.Outcome が関数型を運ぶ" in e.message!!, e.message)
+		// structure の要求が Option の中に関数を持つ(`f : Option (Nat → Nat)`)
+		val nested = Json.parseToJsonElement("""{"lean":"Mini.Application.Port.Ledger.Record.Request","kotlin":"LedgerRecordRequest","role":"portRequest","module":"Mini.Application.Port.Ledger.Record",
+			"shape":{"kind":"structure","fields":[{"name":"f","type":{"k":"option","of":{"k":"arrow","from":{"k":"nat"},"to":{"k":"nat"}}}}]}}""")
+		val plain = Json.parseToJsonElement("""{"lean":"Mini.Application.Port.Ledger.Record.Outcome","kotlin":"LedgerRecordOutcome","role":"portOutcome","module":"Mini.Application.Port.Ledger.Record",
+			"shape":{"kind":"enum","ctors":["done"]}}""")
+		val ir2 = JsonObject(base + mapOf("types" to JsonArray(base.getValue("types").jsonArray + nested + plain), "ports" to ports))
+		val (e2, _) = run(ir2.toString(), out.resolve("nested"))
+		assertTrue("Port Ledger.record: Mini.Application.Port.Ledger.Record.Request が関数型を運ぶ" in e2.message!!, e2.message)
+	}
 }

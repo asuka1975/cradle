@@ -71,7 +71,7 @@ lean2kotlin {
 ```
 
 外部能力の Port（`application/port/<port>/` の生成 interface）は Adapter（`infrastructure/<port>/`）を手書きして実装し、契約テストの具象クラスはフックで渡される `<Port>Mock` をそのまま UseCase に配線する（規則は backend-kotlin）。
-Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。
+Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返す）。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。source set とタスクは Port の有無に依らず作られ、この 2 つの名前は plugin の持ち物 — プロジェクト側で同名を定義しない。
 
 `compileKotlin` は毎回 `extractLeanIr`（`lake build`）に依存する。Lean を触らないタスクで IR が既にあるなら `-x extractLeanIr` で飛ばしてよい。
 抽出器は対象ドメインの `lean-toolchain` でビルドされる（`apm_modules/…/lean2kotlin/lean/.lake` に落ちる。`apm install` のたびに作り直し）。

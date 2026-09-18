@@ -25,19 +25,22 @@ abstract class OrganizationDirectoryAdapterContractTest {
 
 	@Test
 	fun `findMember は found を産める`() {
-		val outcome = adapter().findMember(arrangeFindMemberFound())
+		val request = arrangeFindMemberFound()
+		val outcome = adapter().findMember(request)
 		assertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Found, "$outcome")
 	}
 
 	@Test
 	fun `findMember は missing を産める`() {
-		val outcome = adapter().findMember(arrangeFindMemberMissing())
+		val request = arrangeFindMemberMissing()
+		val outcome = adapter().findMember(request)
 		assertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Missing, "$outcome")
 	}
 
 	@Test
 	fun `findMember は unavailable を産める`() {
-		val outcome = adapter().findMember(arrangeFindMemberUnavailable())
+		val request = arrangeFindMemberUnavailable()
+		val outcome = adapter().findMember(request)
 		assertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Unavailable, "$outcome")
 	}
 }

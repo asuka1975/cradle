@@ -381,7 +381,8 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 	/**
 	 * Port の Adapter の適合テスト(adapterTest): 観測(Outcome)の各構成子を Adapter が一度は産めることを
 	 * 検査する骨格。stub をその観測を返す状態にする配線は具象(arrange フック)の仕事で、
-	 * 全応答への写像の正しさはここでは主張しない。通常の build には入らない(adapterContractTest タスク)。
+	 * 全応答への写像の正しさはここでは主張しない。観測が構成子を持たない structure なら「どの構成子か」の主張が無いので、
+	 * arrange フックに期待する観測も返させて等値を検査する。通常の build には入らない(adapterContractTest タスク)。
 	 */
 	private fun portAdapterTestBody(p: IrPort): String {
 		val sb = StringBuilder()
@@ -394,24 +395,33 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		sb.append("abstract class ${p.name}AdapterContractTest {\n")
 		sb.append("\t/** 検査対象の Adapter(stub / sandbox 相手に配線したもの)。 */\n")
 		sb.append("\tprotected abstract fun adapter(): ${p.name}\n")
+		// ctor が null の probe は構造体の観測 — フックは要求と期待する観測の組を返す
 		data class Probe(val op: IrPortOp, val ctor: String?, val check: (String) -> String)
 		val probes = p.operations.flatMap { op ->
 			val outK = k.name(op.outcome)
 			when (val shape = ir.typeDef(op.outcome).shape) {
 				is IrShape.Sealed -> shape.ctors.map { c -> Probe(op, c.name) { got -> "assertTrue($got is $outK.${k.ctorClassName(c.name)}, \"\$$got\")" } }
 				is IrShape.Enum -> shape.ctors.map { c -> Probe(op, c) { got -> "assertEquals($outK.${k.ctorClassName(c)}, $got)" } }
-				is IrShape.Structure -> listOf(Probe(op, null) { got -> "assertEquals($got, $got)" })
+				is IrShape.Structure -> listOf(Probe(op, null) { got -> "assertEquals(expected, $got)" })
 			}
 		}
 		fun hookOf(pr: Probe) = "arrange${capitalizeFirst(pr.op.method)}${pr.ctor?.let { capitalizeFirst(it) } ?: ""}"
 		for (pr in probes) {
-			sb.append("\t/** ${pr.ctor?.let { "観測 $it を返させる要求" } ?: "要求"}。stub をその状態にしてから返す。 */\n")
-			sb.append("\tprotected abstract fun ${hookOf(pr)}(): ${k.name(pr.op.request)}\n")
+			if (pr.ctor == null) {
+				sb.append("\t/** 要求と、それに期待する観測。stub をその状態にしてから返す。 */\n")
+				sb.append("\tprotected abstract fun ${hookOf(pr)}(): Pair<${k.name(pr.op.request)}, ${k.name(pr.op.outcome)}>\n")
+			} else {
+				sb.append("\t/** 観測 ${pr.ctor} を返させる要求。stub をその状態にしてから返す。 */\n")
+				sb.append("\tprotected abstract fun ${hookOf(pr)}(): ${k.name(pr.op.request)}\n")
+			}
 		}
 		for (pr in probes) {
 			sb.append("\n\t@Test\n")
-			sb.append("\tfun `${pr.op.method} は${pr.ctor?.let { " $it を" } ?: "観測を"}産める`() {\n")
-			sb.append("\t\tval outcome = adapter().${ident(pr.op.method)}(${hookOf(pr)}())\n")
+			sb.append("\tfun `${pr.op.method} は${pr.ctor?.let { " $it を" } ?: "期待した観測を"}産める`() {\n")
+			// arrange を先に評価してから Adapter を取る — 構築時に stub の状態を取り込む Adapter でも arrange が先に効く
+			if (pr.ctor == null) sb.append("\t\tval (request, expected) = ${hookOf(pr)}()\n")
+			else sb.append("\t\tval request = ${hookOf(pr)}()\n")
+			sb.append("\t\tval outcome = adapter().${ident(pr.op.method)}(request)\n")
 			sb.append("\t\t${pr.check("outcome")}\n")
 			sb.append("\t}\n")
 		}

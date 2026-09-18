@@ -94,7 +94,7 @@ abstract class CloseNoteUseCaseContractTest {
 | `<X>BehaviorsContractTest`（sealed / enum の VO） | `@[contract]` | 純値形: `behaviors()` フックで `<X>Behaviors` の実装を受け、メソッド → 一致 |
 | `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測。Port を使う UseCase は生成モック（`<Port>Mock` にケースの要求と観測を積む。要求が無いケースは空 = 呼ばれない）をフックに渡し、結果を `runCatching` で受けてモックの完了検査 → 返り値 → Repository の順に判定する（要求不一致で実装が途中で止まった赤を状態差分の赤で隠さない） |
 | `<Port>Mock`（テスト側。Port の package） | `ports` | 本番 Port を実装する決定的モック: 期待の列（操作ごとの `Expectation`）を消費し、違う要求・積んでいない呼び出し・別の操作は記録して `PortHarnessFailure`（AssertionError。業務語彙ではない）を投げる。`assertNoFailure` は記録、`assertComplete` は記録と未消費を検査する |
-| `<Port>AdapterContractTest`（adapterTest 側。Port の package） | `ports` | Adapter の適合テストの骨格: `adapter()` フックで stub / sandbox 相手に配線した Adapter を受け、観測の構成子ごとの `arrange<操作><構成子>()` フックで stub をその状態にしてから要求を返し、その観測が産まれることを検査する。写像の全域性は主張しない。source set `adapterTest` / タスク `adapterContractTest` に載り、`build` の門には入らない |
+| `<Port>AdapterContractTest`（adapterTest 側。Port の package） | `ports` | Adapter の適合テストの骨格: `adapter()` フックで stub / sandbox 相手に配線した Adapter を受け、観測の構成子ごとの `arrange<操作><構成子>()` フックで stub をその状態にしてから要求を返し、その観測が産まれることを検査する（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返し、等値を検査する）。写像の全域性は主張しない。source set `adapterTest` / タスク `adapterContractTest` に載り、`build` の門には入らない |
 | `<X>UseCaseContractTest`（参照系） | golden の views + `@[contract]` | 値形: Row 列と主体をフックで配線し `execute` の返り値を一致。golden の views のキーは UseCase 名（先頭小文字） |
 | `<X>RepositoryContractTest` | 規約 + `constraints` | PBT: 観測モデルの制約を満たす個体の列（`arb<Root>Repository`）を add → findAll の並びと findById、列の末尾を先頭の id に写して update → 並び保持、未知 id は null。add / update の有無は観測モデルの同名の操作から導く |
 | `ReadModelDdlContractTest` | golden の各状態 + Projection の `@[contract]` | `retrieve<X>ReadModel(ルートの fixture 列…)` で観測の Set を復元し完全一致（並び込み） |
@@ -116,7 +116,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 `generator/` を composite build で解決する（`generator/src/main/kotlin/lean2kotlin/gradle/Lean2KotlinPlugin.kt`。利用側の断片は gradle-wiring.md）。タスクは 2 つ:
 
 - `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml`。
-- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。Port があれば source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を作る。`check` / `build` には繋がない。
+- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
 
 拡張 `lean2kotlin { }`:
 

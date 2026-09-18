@@ -161,7 +161,8 @@ for (const f of files) {
         const code = stripComments(readFileSync(file, "utf8"));
         if (!/\b(structure|inductive)\s+Request\b/.test(code)) add("port", "error", file, 1, "固定名 Request（要求）が無い");
         if (!/\b(structure|inductive)\s+Outcome\b/.test(code)) add("port", "error", file, 1, "固定名 Outcome（観測）が無い");
-        for (const m of code.matchAll(/^\s+\w+\s*:\s*[^\n(]*→[^\n]*$/gm)) add("port", "error", file, 1, `関数フィールドを持つ（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
+        for (const m of code.matchAll(/^\s+\w+\s*:\s*[^\n]*→[^\n]*$/gm)) add("port", "error", file, 1, `関数フィールドを持つ（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
+        for (const m of code.matchAll(/^\s*\|\s*\w+\b[^\n]*?\(\s*\w+\s*:[^)\n]*→[^)\n]*\)/gm)) add("port", "error", file, 1, `関数を引数に取る構成子がある（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
       }
     }
   }

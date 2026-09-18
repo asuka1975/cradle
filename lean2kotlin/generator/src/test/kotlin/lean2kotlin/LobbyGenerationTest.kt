@@ -50,5 +50,8 @@ class LobbyGenerationTest {
 		assertTrue("OrganizationDirectoryMock(emptyList())" in test, test)
 		assertTrue("OrganizationDirectoryMock(listOf(OrganizationDirectoryMock.FindMember(request = OrganizationDirectoryFindMemberRequest(employee = EmployeeId(id = 4L)), outcome = OrganizationDirectoryFindMemberOutcome.Missing)))" in test, test)
 		assertTrue(".also { organizationDirectory.assertComplete() }.getOrThrow()" in test, test)
+		// 適合テストは arrange を先に評価してから Adapter を取る — 構築時に stub の状態を取り込む Adapter でも arrange が先に効く
+		val adapterTest = out.resolve("kotlin-adapter-test/application/port/organizationdirectory/OrganizationDirectoryAdapterContractTest.kt").toFile().readText()
+		assertTrue("\t\tval request = arrangeFindMemberFound()\n\t\tval outcome = adapter().findMember(request)\n\t\tassertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Found, \"\$outcome\")" in adapterTest, adapterTest)
 	}
 }

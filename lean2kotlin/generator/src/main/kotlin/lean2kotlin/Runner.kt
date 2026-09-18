@@ -90,10 +90,15 @@ object Lean2KotlinGeneration {
 		// 見つけた時点で error 行を出す — 生成の途中で例外が出ても、分かっていた分は読める
 		val errors = mutableListOf<String>()
 		val error = { e: String -> errors += e; log("error: $e") }
+		val failure = { IllegalStateException("lean2kotlin: 宣言した契約・Port が検査に至らない診断 ${errors.size} 件で生成を失敗にしました:\n" + errors.joinToString("\n")) }
 		for (d in ir.dropped) error("${d.kind} ${d.name}: ${d.reason}")
+		val beforePorts = errors.size
 		for (p in ir.ports) for (op in p.operations) for (ty in listOf(op.request, op.outcome)) {
-			if (k.reachesEntityLike(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が interface 化された語彙(Entity / ふるまい持ちの VO)を運ぶ — 要求と観測は値で比較できる閉じたデータ型にする")
+			if (k.reachesArrow(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が関数型を運ぶ(構成子の引数・入れ子の中も含む)— 要求と観測は値で比較できる閉じたデータ型にし、外部を呼ぶ関数は UseCase に渡さない")
+			else if (k.reachesEntityLike(IrType.Ref(ty))) error("Port ${p.name}.${op.method}: ${ty} が interface 化された語彙(Entity / ふるまい持ちの VO)を運ぶ — 要求と観測は値で比較できる閉じたデータ型にする")
 		}
+		// 閉じていない Port の型は要求の比較・Arb・リテラルの生成が成立しない — 生成に進まず、ここまでの診断で止める
+		if (errors.size > beforePorts) throw failure()
 		main.cleanGenerated()
 		test.cleanGenerated()
 		adapterTest.cleanGenerated()
@@ -109,8 +114,6 @@ object Lean2KotlinGeneration {
 		}
 		log("生成完了: main ${main.report().size} ファイル -> $mainOut / test ${test.report().size} ファイル -> $testOut" +
 			(if (adapterTest.report().isEmpty()) "" else " / adapterTest ${adapterTest.report().size} ファイル -> $adapterTestOut"))
-		if (errors.isNotEmpty()) {
-			throw IllegalStateException("lean2kotlin: 宣言した契約・Port が検査に至らない診断 ${errors.size} 件で生成を失敗にしました:\n" + errors.joinToString("\n"))
-		}
+		if (errors.isNotEmpty()) throw failure()
 	}
 }
