@@ -92,10 +92,11 @@ function paramMapping(params, args) {
   return Object.fromEntries(params.map((p, i) => [p, args[i]]));
 }
 
-/** 型名に合う手書き FromJson の注記。完全一致か `<Root>.` 以下の末尾一致。 */
+/** 型名に合う手書き FromJson の注記。完全一致か `<Root>.` 以下の末尾一致で、複数が合えば長い名前（より限定した書き方）を取る。 */
 export function hintOf(type, hints, root) {
   const under = type.startsWith(root + ".") ? type.slice(root.length + 1) : null;
-  return Object.entries(hints).find(([n]) => type === n || under === n || under?.endsWith("." + n))?.[1];
+  const fits = Object.keys(hints).filter(n => type === n || under === n || under?.endsWith("." + n));
+  return fits.length ? hints[fits.sort((a, b) => b.length - a.length)[0]] : undefined;
 }
 
 /** 入力欄の種類を型名から決める（表示の都合。可否はモデルが決める）。id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクトで wire に乗る。
@@ -117,10 +118,21 @@ export function kindOf(type, hints, root) {
   return { ...base, kind: "json" };
 }
 
-/** 構成子の型 `Payload → Command` からペイロードの型（無ければ null）。 */
+/** 構成子の型 `Payload → Command` を括弧の外の `→` で割った引数の型の列（引数の無い構成子は空）。 */
+function argTypesOf(ctor) {
+  const parts = [];
+  let depth = 0, cur = "";
+  for (const ch of ctor.type) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "→" && depth === 0) { parts.push(cur.trim()); cur = ""; } else cur += ch;
+  }
+  return parts;
+}
+
+/** 構成子のペイロードの型（引数の無い構成子は null）。 */
 function payloadOf(ctor) {
-  const parts = ctor.type.split("→").map(x => x.trim());
-  return parts.length > 1 ? parts[0] : null;
+  return argTypesOf(ctor)[0] ?? null;
 }
 
 /** 構成子の列から、#print すべきペイロード構造体の名前（重複なし）。 */
@@ -139,10 +151,14 @@ function fieldsOf(decl, args, hints, root) {
     printed は payloadHeads の宣言（名前 → #print の行）、printMore は 1 段展開する型の宣言を同じ形で返す。 */
 export function schemasFrom(ctors, printed, hints, root, printMore) {
   const specs = {};
-  for (const c of ctors) specs[c.name] = { arg: payloadOf(c) };
+  for (const c of ctors) specs[c.name] = { arg: payloadOf(c), arity: argTypesOf(c).length };
   const refs = new Set();
   for (const s of Object.values(specs)) {
+    const arity = s.arity;
+    delete s.arity;
     if (!s.arg) { s.fields = []; delete s.arg; continue; }
+    // Runtime の構成子は `Payload → Command` の 1 引数 — 2 つ目以降の引数は入力欄に写せない
+    if (arity > 1) { s.type = splitTypeApp(s.arg).head; s.fields = null; s.error = `構成子の引数が ${arity} 個ある（Runtime の構成子は Payload → Command の 1 引数）`; delete s.arg; continue; }
     const { head, args } = splitTypeApp(s.arg);
     const d = parseDecl(printed[head] ?? []);
     s.type = head;

@@ -34,10 +34,14 @@ test("ID の型引数は Runtime の具体名（Id で終わる）に解決さ�
   assert.deepEqual(s.postNote.fields, [{ name: "title", type: "Sprout.Title", optional: false, kind: "text", wire: "string", hint: "題の文字列をそのまま受ける" }]);
 });
 
-test("名前空間の中で短く書いた手書き FromJson の注記も <Root>. 以下の末尾一致で引ける", () => {
+test("名前空間の中で短く書いた手書き FromJson の注記も <Root>. 以下の末尾一致で引け、複数が合えば長い名前を取る", () => {
   const hints = { JoinCode: "参加コード" };
   assert.equal(hintOf("RocketChat.JoinCode", hints, "RocketChat"), "参加コード");
   assert.equal(hintOf("RocketChat.Domain.JoinCode", hints, "RocketChat"), "参加コード");
+  const layered = { JoinCode: "短い名前", "Other.JoinCode": "限定した名前" };
+  assert.equal(hintOf("RocketChat.Other.JoinCode", layered, "RocketChat"), "限定した名前");
+  assert.equal(hintOf("RocketChat.Domain.JoinCode", layered, "RocketChat"), "短い名前");
+  assert.equal(hintOf("RocketChat.Other.JoinCode", Object.fromEntries(Object.entries(layered).reverse()), "RocketChat"), "限定した名前");
   assert.equal(hintOf("Other.JoinCode", hints, "RocketChat"), undefined);
   assert.equal(kindOf("Option RocketChat.JoinCode", hints, "RocketChat").kind, "text");
   // binder 名のままの型は推測しない（呼び出し側が実引数に置き換える）
@@ -81,4 +85,14 @@ test("1 段展開する値オブジェクトも自分の型引数を実引数で
 
 test("substituteTypeParams は置き換えた実引数の語を別の binder として二重に置き換えない", () => {
   assert.equal(substituteTypeParams("Pair A B", { A: "B", B: "Sprout.Runtime.NoteId" }), "Pair B Sprout.Runtime.NoteId");
+});
+
+test("引数が 2 つ以上ある構成子は入力欄を組まず、理由を error に書く", () => {
+  const root = "Sprout";
+  const ctors = ctorsOf(root, ["Sprout.Runtime.Command.tagNote : Sprout.Application.TagNoteUseCase.Command → String → Sprout.Runtime.Command", "Sprout.Runtime.Command.ping : Sprout.Runtime.Command"]);
+  assert.deepEqual(payloadHeads(ctors), ["Sprout.Application.TagNoteUseCase.Command"]);
+  const printed = { "Sprout.Application.TagNoteUseCase.Command": structPrint("Sprout.Application.TagNoteUseCase.Command", [], [["tag", "String"]]) };
+  const s = schemasFrom(ctors, printed, {}, root, () => ({}));
+  assert.deepEqual(s.tagNote, { type: "Sprout.Application.TagNoteUseCase.Command", fields: null, error: "構成子の引数が 2 個ある（Runtime の構成子は Payload → Command の 1 引数）" });
+  assert.deepEqual(s.ping, { fields: [] });
 });
