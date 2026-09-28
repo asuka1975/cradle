@@ -1,12 +1,13 @@
 ---
 name: infra-design
-description: Use for the infrastructure design phase between domain exploration and Lean formalization — deriving non-functional requirements from the Lean model, deciding environments (test/local/prod), identity provider, database, ID representation, and the list of things NOT to build. Produces documents/infra-design with INFRA-D/A/Q entries.
+description: Use for the infrastructure design phase between domain exploration and Lean formalization — deriving non-functional requirements from the Lean model, deciding environments (test/local/prod), identity provider, the relational database's product, version and configuration (the storage kind is fixed to relational), ID representation, and the list of things NOT to build. Produces documents/infra-design with INFRA-D/A/Q entries.
 ---
 
 # インフラ設計フェーズ
 
 入力は `lean/` の実行可能仕様と `documents/ddd/` の正式ドキュメントだけ。open の UX / MQ は根拠にしない。
 成果物は `documents/infra-design/`（README + 01_model-to-infra + 02_local + 03_production + 04_operations）。実装（`infra/`）はインフラ実装フェーズ（infra-implement スキル。バックエンド追随の後）。
+保存先は関係データベース（Cradle の前提。backend の規約・生成器・ktlint ルールがこれに依る）。インフラ設計で決めるのは製品・版・構成。
 
 ## 手順
 
