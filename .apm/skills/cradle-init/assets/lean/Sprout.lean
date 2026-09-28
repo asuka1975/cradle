@@ -3,7 +3,7 @@
 --   Domain      ← 何も import しない（Prelude のみ）
 --   Application ← Domain だけ（Runtime を知らない）
 --   Runtime     ← Domain / Application（表現の仮置き・境界 — 非規範）
---   Laws        ← Runtime（保証の転送）
+--   Laws        ← Application / Runtime（保証の転送と、HS の結論を ∀ で言う保証の定理）
 import Sprout.Prelude
 import Sprout.Domain.Annotations
 import Sprout.Domain.ValueObject
@@ -31,3 +31,4 @@ import Sprout.Runtime.Views
 import Sprout.Runtime.Json
 import Sprout.Runtime.Scenarios
 import Sprout.Laws.Properties
+import Sprout.Laws.Guarantees
