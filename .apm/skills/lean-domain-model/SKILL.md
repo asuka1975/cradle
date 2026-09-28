@@ -81,6 +81,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 - 更新モジュール: …
 - ビルド: 成功 / 失敗（原因）  lean-check: OK / NG  golden-check: 全一致 / CHANGED n 件（意図: …）
 - 証明状況: sorry n 件（一覧と TODO 理由）
+- 保証の定理: resolved HS n 件中 m 件（無い HS: …。`cradle status` の Lean の段が数える）
 - 用語集に無い名前: n 件（cradle unslop --all の lean-name-unlisted）
 - 反機能の防波堤: 追加 / 更新した「存在しないこと」
 - 起票した MQ（model-review.md に起票済み）: …

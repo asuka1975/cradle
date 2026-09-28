@@ -483,6 +483,20 @@ function canonical(v) {
   return v;
 }
 
+/** 保証の定理の網羅: resolved HS（hotspots.md の状態列が resolved）のうち、`Laws/` の @[contract] でない定理の docstring が出典に引いていないもの。
+    出典を引くだけの弱い定理も数える — 定理が HS の結論を言っているかは形式化のレビューが見る。 */
+export function guaranteeCoverage(cfg) {
+  const hsFile = join(cfg.root, cfg.documents.ddd, "hotspots.md");
+  const resolved = existsSync(hsFile) ? tableRows(readFileSync(hsFile, "utf8"))
+    .filter(r => /^HS-\d{3}$/.test(r.cells[0]) && /^resolved\b/.test(r.cells[r.columns.indexOf("状態")] ?? "")).map(r => r.cells[0]) : [];
+  const lawsDir = join(cfg.lean.modelDir, "Laws");
+  const cited = new Set();
+  for (const f of existsSync(lawsDir) ? walk(lawsDir, { ext: [".lean"] }) : [])
+    for (const m of readFileSync(f, "utf8").matchAll(/\/--([\s\S]*?)-\/\s*((?:@\[[^\]]*\]\s*)*)(?:(?:private|protected)\s+)?theorem\s/g))
+      if (!/\bcontract\b/.test(m[2])) for (const id of m[1].matchAll(/\bHS-\d{3}\b/g)) cited.add(id[0]);
+  return { resolved, missing: resolved.filter(id => !cited.has(id)) };
+}
+
 /** プロダクトの一言: event-timeline.md 冒頭の `プロダクト:` 行。value は行が無ければ null、placeholder は骨格の置き場（`（一言で）`）か空のまま。 */
 export const PRODUCT_PLACEHOLDER = "（一言で）";
 export function productLine(cfg) {
