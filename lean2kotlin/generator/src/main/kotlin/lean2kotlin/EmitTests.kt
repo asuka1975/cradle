@@ -1648,6 +1648,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 	private fun dataArb(td: IrTypeDef): String {
 		val kn = k.name(td.lean)
 		val fn = k.arbFunName(kn)
+		if (td.invariants.isNotEmpty()) return sampledArb(td, fn)
 		return when (val shape = td.shape) {
 			is IrShape.Structure -> {
 				// entity-like / 橋渡し型の Arb は fixture 語彙を生成する(閉包)
@@ -1675,6 +1676,18 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 				"internal fun $fn(): Arb<$base> {\n${branches.joinToString("\n")}\n\treturn Arb.choice($choice)\n}"
 			}
 		}
+	}
+
+	/** 制約(Prop フィールド)を持つ型の Arb: Kotlin は制約を評価できないので、Lean が制約を decide して
+	    通したサンプルの中から引く。値の種類は少ないが、制約を破る個体は出ない。 */
+	private fun sampledArb(td: IrTypeDef, fn: String): String {
+		require(td.samples.isNotEmpty()) {
+			"${td.lean}: 制約(${td.invariants.joinToString(", ") { it.name }})を満たすサンプルを Lean が組めないため Arb を作れません"
+		}
+		val fixture = k.isEntityLike(td) || k.isFixtureBridged(td.lean)
+		val retT = if (fixture) "${td.kotlin}Fixture" else k.name(td.lean)
+		val doc = "/** `${td.lean}` の制約(${td.invariants.joinToString("・") { it.name }})を Lean が decide して通したサンプル。 */\n"
+		return "${doc}internal fun $fn(): Arb<$retT> =\n\tArb.element(${td.samples.joinToString(", ") { k.refLiteral(td, it) }})"
 	}
 
 	// ───────────────────────── Repository 契約テスト(規約由来 — Lean 由来ではない)

@@ -2,6 +2,8 @@ package lean2kotlin
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -103,6 +105,16 @@ class IrParseTest {
 	}
 
 	@Test
+	fun `骨格の IR は Title の制約を invariants に、制約を decide で通ったサンプルを samples に持つ`() {
+		val title = sproutIr().typeDef("Sprout.Title")
+		assertEquals(listOf(IrInvariant("nonempty", "0 < text.length")), title.invariants)
+		assertTrue(title.samples.isNotEmpty())
+		// 空文字列の variant も組み直されて、空でない題になる
+		assertTrue(title.samples.all { it.jsonObject.getValue("text").jsonPrimitive.content.isNotEmpty() }, title.samples.toString())
+		assertTrue(sproutIr().types.filter { it.lean != "Sprout.Title" }.all { it.invariants.isEmpty() && it.samples.isEmpty() })
+	}
+
+	@Test
 	fun `骨格の IR は NoteRepositoryState に uniqueIds と uniqueTitles の制約を持つ`() {
 		val ir = sproutIr()
 		assertEquals(
@@ -112,7 +124,7 @@ class IrParseTest {
 	}
 
 	@Test
-	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 17 と behaviors 3 を持つ`() {
+	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 16 と behaviors 2 を持つ`() {
 		val ir = sproutIr()
 		assertEquals("Sprout", ir.rootNamespace)
 		assertEquals(17, ir.types.size)
@@ -123,8 +135,8 @@ class IrParseTest {
 			ir.types.groupingBy { it.role }.eachCount())
 		assertEquals(3, ir.useCases.size)
 		assertEquals(1, ir.queryServices.size)
-		assertEquals(17, ir.contracts.size)
-		assertEquals(3, ir.behaviors.size)
+		assertEquals(16, ir.contracts.size)
+		assertEquals(2, ir.behaviors.size)
 		assertTrue(ir.ports.isEmpty())
 		assertTrue(ir.dropped.isEmpty())
 		assertEquals(listOf("projection"), ir.contracts.filter { it.theorem == "noteRows_ids" }.map { it.target })

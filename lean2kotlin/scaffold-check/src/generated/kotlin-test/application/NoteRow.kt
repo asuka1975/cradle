@@ -3,8 +3,8 @@
 
 package dev.cradle.scaffold.application
 
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.domain.valueobject.NoteId
+import dev.cradle.scaffold.domain.valueobject.Title
 import dev.cradle.scaffold.runtime.UserId
 
 /**
@@ -13,6 +13,6 @@ import dev.cradle.scaffold.runtime.UserId
 data class NoteRow(
 	val id: NoteId,
 	val author: UserId,
-	val title: TitleFixture,
+	val title: Title,
 	val closed: Boolean,
 )

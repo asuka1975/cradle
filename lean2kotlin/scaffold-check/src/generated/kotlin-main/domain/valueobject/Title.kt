@@ -5,9 +5,9 @@ package dev.cradle.scaffold.domain.valueobject
 
 /**
  * Lean: `Sprout.Title`(valueObject)
+ *
+ * 制約(Lean の Prop フィールド。この型は検査しない — 構築する側の義務):
+ * - nonempty: `0 < text.length`
  */
-interface Title {
-	val text: String
-	/** 妥当性（Bool の検証関数 — 実行できる制約）。 */
-	fun valid(): Boolean
-}
+@JvmInline
+value class Title(val text: String)

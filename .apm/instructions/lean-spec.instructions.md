@@ -19,6 +19,7 @@ applyTo: "lean/**/*.lean"
 
 ## 形
 
+- 状態が運ぶ VO の制約は Prop フィールドで型が持つ（不正な値は構築できない。`valid : Bool` を状態の VO に置かない）。入力の語彙（Command / Observation）は生の値を運び、validate が制約を決めて解決の成果物に証明を入れる（lean-conventions §2）。
 - 実体を宣言するのは `Domain/Entity/` の具体構造体だけ。ふるまいは def、法則は同じファイルの `@[contract]` 定理。ID は型パラメータで抽象のまま（表現は `Runtime/Ids.lean` の仮置き）。
 - 印はアノテーション: `@[aggregateRoot]`（ルートの選択）・`@[valueObject]`（場所ずれの例外）・`@[repositoryState]`・`@[contract]`・`@[actorContext]`・`@[faultContract]`。
 - 更新系 UseCase = `Command.lean`（入力語彙。名義は入れない）+ `UseCase.lean`（`validate` / `act` / `execute` 固定名。`execute = (validate …).map (act …)`）。

@@ -83,7 +83,7 @@
       {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
        "name": "before"}],
      "name": "validate",
-     "doc": "始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題が空いている証拠を返す。 "},
+     "doc": "始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題になれて空いている証拠を返す。 "},
     {"ret":
      {"ok": {"k": "unit"},
       "k": "result",
@@ -185,8 +185,7 @@
    "kotlin": "NotesReadModel"},
   {"shape":
    {"kind": "structure",
-    "fields":
-    [{"type": {"name": "Sprout.Title", "k": "ref"}, "name": "title"}]},
+    "fields": [{"type": {"k": "string"}, "name": "title"}]},
    "role": "command",
    "module": "Sprout.Application.UseCase.PostNoteUseCase.Command",
    "lean": "Sprout.Application.PostNoteUseCase.Command",
@@ -196,7 +195,7 @@
    "module": "Sprout.Application.UseCase.PostNoteUseCase.UseCase",
    "lean": "Sprout.Application.PostNoteUseCase.FreeTitle",
    "kotlin": "PostNoteFreeTitle",
-   "doc": "解決の成果物: 題が空いている証拠（値は運ばない）。 "},
+   "doc": "解決の成果物: 入力が題になれる（空でない）証拠と、その題が空いている証拠（値は運ばない）。 "},
   {"shape":
    {"kind": "structure",
     "fields":
@@ -252,11 +251,20 @@
    "doc": "利用者の同一性（発行者は認証基盤 — 泉を持たない）。 "},
   {"shape":
    {"kind": "structure", "fields": [{"type": {"k": "string"}, "name": "text"}]},
+   "samples":
+   [{"text": "s900"},
+    {"text": "s901"},
+    {"text": "s902"},
+    {"text": "s903"},
+    {"text": "s904"},
+    {"text": "a"},
+    {"text": "s905"}],
    "role": "valueObject",
    "module": "Sprout.Domain.ValueObject",
    "lean": "Sprout.Title",
    "kotlin": "Title",
-   "doc": "メモの題。制約: 空でないこと。 "}],
+   "invariants": [{"name": "nonempty", "lean": "0 < text.length"}],
+   "doc": "メモの題。空でないことは型が持つ — 空の題は構築できない（入力の検査は構築する側の validate）。 "}],
  "rootNamespace": "Sprout",
  "queryServices":
  [{"name": "NotesQueryService",
@@ -698,7 +706,7 @@
    "theorem": "execute_invalid",
    "target": "usecase",
    "method": "execute",
-   "doc": "",
+   "doc": "題が空なら書けない。 ",
    "cases":
    [{"stateType": "Sprout.Application.PostNoteUseCase.State",
      "kind": "transition",
@@ -711,7 +719,7 @@
          "closed": false,
          "author": {"id": 4}}]},
       "noteIds": {"next": 500}},
-     "args": {"c": {"title": {"text": ""}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": ""}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -724,7 +732,7 @@
      "kind": "transition",
      "error": "emptyTitle",
      "before": {"notes": {"notes": []}, "noteIds": {"next": 501}},
-     "args": {"c": {"title": {"text": ""}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": ""}, "actor": {"user": {"id": 4}}},
      "after": {"notes": {"notes": []}, "noteIds": {"next": 501}}},
     {"stateType": "Sprout.Application.PostNoteUseCase.State",
      "kind": "transition",
@@ -737,7 +745,7 @@
          "closed": true,
          "author": {"id": 6}}]},
       "noteIds": {"next": 502}},
-     "args": {"c": {"title": {"text": ""}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": ""}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -761,7 +769,7 @@
          "closed": true,
          "author": {"id": 5}}]},
       "noteIds": {"next": 503}},
-     "args": {"c": {"title": {"text": ""}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": ""}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -791,7 +799,7 @@
          "closed": false,
          "author": {"id": 4}}]},
       "noteIds": {"next": 500}},
-     "args": {"c": {"title": {"text": "s6"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s6"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -808,7 +816,7 @@
      "kind": "transition",
      "error": null,
      "before": {"notes": {"notes": []}, "noteIds": {"next": 501}},
-     "args": {"c": {"title": {"text": "s6"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s6"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -828,7 +836,7 @@
          "closed": true,
          "author": {"id": 6}}]},
       "noteIds": {"next": 502}},
-     "args": {"c": {"title": {"text": "s6"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s6"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -856,7 +864,7 @@
          "closed": true,
          "author": {"id": 5}}]},
       "noteIds": {"next": 503}},
-     "args": {"c": {"title": {"text": "s6"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s6"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -890,7 +898,7 @@
          "closed": false,
          "author": {"id": 4}}]},
       "noteIds": {"next": 500}},
-     "args": {"c": {"title": {"text": "s9"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s9"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -914,7 +922,7 @@
          "closed": true,
          "author": {"id": 5}}]},
       "noteIds": {"next": 503}},
-     "args": {"c": {"title": {"text": "s12"}}, "actor": {"user": {"id": 4}}},
+     "args": {"c": {"title": "s12"}, "actor": {"user": {"id": 4}}},
      "after":
      {"notes":
       {"notes":
@@ -1235,17 +1243,7 @@
       {"title": {"text": "s9"},
        "id": {"id": 91},
        "closed": false,
-       "author": {"id": 4}}}}]},
-  {"useCase": "Sprout.Title",
-   "theorem": "valid_iff",
-   "target": "behaviors",
-   "method": "valid",
-   "doc": "制約の特徴付け（境界値テストの生成源）。 ",
-   "cases":
-   [{"ok": true, "kind": "pure", "args": {"t": {"text": "s0"}}},
-    {"ok": true, "kind": "pure", "args": {"t": {"text": "s1"}}},
-    {"ok": true, "kind": "pure", "args": {"t": {"text": "s2"}}},
-    {"ok": true, "kind": "pure", "args": {"t": {"text": "s3"}}}]}],
+       "author": {"id": 4}}}}]}],
  "behaviors":
  [{"subject": "Sprout.Application.NoteRepositoryState",
    "module": "Sprout.Application.RepositoryState",
@@ -1307,11 +1305,4 @@
      "params":
      [{"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
      "name": "close",
-     "doc": "閉じる。 "}]},
-  {"subject": "Sprout.Title",
-   "module": "Sprout.Domain.ValueObject",
-   "methods":
-   [{"ret": {"k": "bool"},
-     "params": [{"type": {"name": "Sprout.Title", "k": "ref"}, "name": "t"}],
-     "name": "valid",
-     "doc": "妥当性（Bool の検証関数 — 実行できる制約）。 "}]}]}
+     "doc": "閉じる。 "}]}]}

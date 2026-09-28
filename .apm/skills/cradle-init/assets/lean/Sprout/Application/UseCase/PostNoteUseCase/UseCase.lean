@@ -1,7 +1,7 @@
 /-
   メモを書く — 更新系 UseCase の固定形（validate / execute）。
   State はこの UseCase が観測できる世界の最小射影（Effect Set）。
-  泉の新鮮性（ポートの契約）は Prop 引数で受け、題が空いている証拠は validate が解決の成果物として返す。
+  泉の新鮮性（ポートの契約）は Prop 引数で受け、題が空でなく空いている証拠は validate が解決の成果物として返す。
 -/
 import Sprout.Application.ActorContext
 import Sprout.Application.RepositoryState
@@ -22,22 +22,24 @@ structure State (NoteId UserId G : Type) where
   noteIds : G
 deriving Repr, DecidableEq
 
-/-- 解決の成果物: 題が空いている証拠（値は運ばない）。 -/
+/-- 解決の成果物: 入力が題になれる（空でない）証拠と、その題が空いている証拠（値は運ばない）。 -/
 structure FreeTitle (c : Command) (before : State NoteId UserId G) : Type where
-  free : c.title ∉ before.notes.titles
+  nonempty : 0 < c.title.length
+  free : (⟨c.title, nonempty⟩ : Title) ∉ before.notes.titles
 
-/-- 始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題が空いている証拠を返す。 -/
+/-- 始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題になれて空いている証拠を返す。 -/
 def validate (_actor : ActorContext UserId) (c : Command) (before : State NoteId UserId G) :
     Except DomainError (FreeTitle c before) :=
-  if !c.title.valid then .error .emptyTitle
-  else if h : c.title ∈ before.notes.titles then .error .titleTaken
-  else .ok ⟨h⟩
+  if hn : 0 < c.title.length then
+    if ht : c.title ∈ before.notes.titles.map (·.text) then .error .titleTaken
+    else .ok ⟨hn, fun hm => ht (List.mem_map_of_mem hm)⟩
+  else .error .emptyTitle
 
 /-- 解釈: 泉から同一性を汲んで末尾に足す。 -/
 def act (actor : ActorContext UserId) (fountain : Fountain G NoteId) (c : Command)
     (before : State NoteId UserId G) (hfresh : fountain.Fresh before.noteIds before.notes.ids)
     (free : FreeTitle c before) : State NoteId UserId G :=
-  { notes   := before.notes.add (Note.post (fountain.valueAt before.noteIds) actor.user c.title) hfresh free.free,
+  { notes   := before.notes.add (Note.post (fountain.valueAt before.noteIds) actor.user ⟨c.title, free.nonempty⟩) hfresh free.free,
     noteIds := fountain.next before.noteIds }
 
 /-- execute は validate を呼ぶ定義（入り口の一致は定義の系）。 -/
@@ -48,25 +50,27 @@ def execute (actor : ActorContext UserId) (fountain : Fountain G NoteId) (c : Co
 
 /-! ### 契約定理 -/
 
+/-- 題が空なら書けない。 -/
 @[contract] theorem execute_invalid (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
-    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (h : c.title.valid = false) :
+    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (h : c.title.length = 0) :
     execute actor fountain c before hfresh = .error .emptyTitle := by
   simp [execute, validate, h, Except.map]
 
 /-- 同じ題のメモがもうあれば書けない。 -/
 @[contract] theorem execute_title_taken (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
-    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (hv : c.title.valid = true)
-    (ht : c.title ∈ before.notes.titles) :
+    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (hv : 0 < c.title.length)
+    (ht : c.title ∈ before.notes.titles.map (·.text)) :
     execute actor fountain c before hfresh = .error .titleTaken := by
   simp [execute, validate, hv, ht, Except.map]
 
 @[contract] theorem execute_ok (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
-    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (hv : c.title.valid = true)
-    (ht : c.title ∉ before.notes.titles) :
-    execute actor fountain c before hfresh = .ok (act actor fountain c before hfresh ⟨ht⟩) := by
+    (hfresh : fountain.Fresh before.noteIds before.notes.ids) (hv : 0 < c.title.length)
+    (ht : c.title ∉ before.notes.titles.map (·.text)) :
+    execute actor fountain c before hfresh =
+      .ok (act actor fountain c before hfresh ⟨hv, fun hm => ht (List.mem_map_of_mem hm)⟩) := by
   simp [execute, validate, hv, ht, Except.map]
 
 /-- 成功したら、その結果は act の形（境界の可到達性が使う）。 -/
@@ -85,7 +89,7 @@ theorem act_appends (actor : ActorContext UserId) (fountain : Fountain G NoteId)
     (c : Command) (before : State NoteId UserId G)
     (hfresh : fountain.Fresh before.noteIds before.notes.ids) (free : FreeTitle c before) :
     (act actor fountain c before hfresh free).notes.notes =
-      before.notes.notes ++ [Note.post (fountain.valueAt before.noteIds) actor.user c.title] := rfl
+      before.notes.notes ++ [Note.post (fountain.valueAt before.noteIds) actor.user ⟨c.title, free.nonempty⟩] := rfl
 
 /-- 泉を 1 つ消費する（採番の消費は golden と execute_ok の泉の残高が守る）。@[contract] は付けない — execute_ok の系。 -/
 theorem act_consumes_fountain (actor : ActorContext UserId) (fountain : Fountain G NoteId)

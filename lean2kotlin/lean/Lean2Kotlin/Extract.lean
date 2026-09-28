@@ -608,6 +608,19 @@ def decideProp (p : Expr) : MetaM (Option Bool) := do
     else return none
   catch _ => return none
 
+/-- 制約(Prop フィールド)が偽のとき組み直す値フィールドの候補。先頭は元のサンプルで、
+    制約が最初の組で通れば値は変わらない。 -/
+def scalarAlternatives (ty : Expr) (orig : Expr) : MetaM (Array Expr) := do
+  let ty ← whnf ty
+  if ty.isConstOf ``Nat then
+    return #[orig] ++ (#[0, 1, 2, 3, 5, 10, 100].map mkNatLit)
+  else if ty.isConstOf ``String then
+    return #[orig, mkStrLit "a", mkStrLit "abc"]
+  else return #[orig]
+
+/-- 値フィールドの候補の組を試す上限(組は候補の混合基数で数える)。 -/
+def scalarAttempts : Nat := 64
+
 /-- サンプル値の構築。variant 0 = 通常、1 = 境界(List を空に・別 ctor を選ぶ)。
     Id 型は固定鍵 91(泉の領域 100.. と非衝突)。文字列はカウンタで一意。 -/
 partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
@@ -721,36 +734,65 @@ partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
       else if variant == 4 || variant == 6 then ii.ctors.head!
       else ii.ctors[min variant (ii.ctors.length - 1)]!
     let fnames := if isStructure env tn then getStructureFields env tn else #[]
-    -- ctor の型を binder ごとに埋めながら歩く — 制約(Prop フィールド)の型は先行フィールドの値で閉じる
-    let mut cty ← inferType (mkAppN (mkConst ctor lvls) args)
-    let mut vals : Array Expr := #[]
-    let mut i := 0
+    -- ctor の型を binder ごとに埋めながら歩く — 制約(Prop フィールド)の型は先行フィールドの値で閉じる。
+    -- 直接の値フィールド(Nat・String)は候補の列を持ち(先頭は元のサンプル)、制約が偽と決まったら
+    -- 次の組で組み直す(組は候補の混合基数で数え、上限 scalarAttempts)。最初の組で通れば元と同じ値
+    let saved ← ctr.get
+    let mut attempt := 0
     repeat
-      match ← whnf cty with
-      | .forallE _ fty fbody _ =>
-        let v ←
-          if ← Meta.isProp fty then
-            -- 制約: 組んだ値で decide し、真なら証明を作る。偽なら fixture として組めない
-            match ← decideProp fty with
-            | some true => mkDecideProof fty
-            | _ => return none
-          -- 泉の種(ids.next 規約フィールド): sampled な Id 変位(91..93)より必ず
-          -- 大きい床(500+)から払い出す — 「保存順 = id 昇順」で観測する実 DB でも
-          -- 既存(播種)< 新規(泉由来)の大小関係が成立する
-          else if i < fnames.size && fnames[i]! == `next &&
-              (← whnf fty).getAppFn.isConstOf ``Nat then
-            pure (mkNatLit (500 + variant))
-          else
-            -- variant 1 = 境界(List を空に)、variant 2 = 別 ctor・別値
-            -- (内側の inductive が第 2 構成子を選ぶ/Bool が true — .new・liked 等へ届く)
-            match ← buildValue idHeads ctr fty variant with
-            | some v => pure v
-            | none => return none
-        vals := vals.push v
-        cty := fbody.instantiate1 v
-        i := i + 1
-      | _ => break
-    return some (mkAppN (mkConst ctor lvls) (args ++ vals))
+      ctr.set saved
+      let mut cty ← inferType (mkAppN (mkConst ctor lvls) args)
+      let mut vals : Array Expr := #[]
+      let mut i := 0
+      let mut radix := 1   -- ここまでの値フィールドの候補数の積
+      let mut refuted := false
+      repeat
+        match ← whnf cty with
+        | .forallE _ fty fbody _ =>
+          let v ←
+            if ← Meta.isProp fty then
+              -- 制約: 組んだ値で decide し、真なら証明を作る。偽なら次の組、決まらなければ fixture として組めない
+              match ← decideProp fty with
+              | some true => mkDecideProof fty
+              | some false => refuted := true; break
+              | none => return none
+            -- 泉の種(ids.next 規約フィールド): sampled な Id 変位(91..93)より必ず
+            -- 大きい床(500+)から払い出す — 「保存順 = id 昇順」で観測する実 DB でも
+            -- 既存(播種)< 新規(泉由来)の大小関係が成立する
+            else if i < fnames.size && fnames[i]! == `next &&
+                (← whnf fty).getAppFn.isConstOf ``Nat then
+              pure (mkNatLit (500 + variant))
+            else
+              -- variant 1 = 境界(List を空に)、variant 2 = 別 ctor・別値
+              -- (内側の inductive が第 2 構成子を選ぶ/Bool が true — .new・liked 等へ届く)
+              match ← buildValue idHeads ctr fty variant with
+              | some v =>
+                let alts ← scalarAlternatives fty v
+                let pick := alts[(attempt / radix) % alts.size]!
+                radix := radix * alts.size
+                pure pick
+              | none => return none
+          vals := vals.push v
+          cty := fbody.instantiate1 v
+          i := i + 1
+        | _ => break
+      if !refuted then return some (mkAppN (mkConst ctor lvls) (args ++ vals))
+      attempt := attempt + 1
+      -- 候補の組を使い切った(制約より前の値フィールドの組を一巡した)か上限なら、fixture として組めない
+      if attempt ≥ min radix scalarAttempts then return none
+    return none
+
+/-- 制約(Prop フィールド)を持つ型のサンプル: variant ごとに組み、制約が decide で通った値だけを
+    valueToJson の形で返す(重複は除く)。契約のケースとは別のカウンタで組む(ケースの文字列をずらさない)。 -/
+def typeSamples (idHeads : List Name) (n : Name) (targs : Array Expr) : MetaM (Array Json) := do
+  let ty := mkAppN (← mkConstWithLevelParams n) targs
+  let ctr ← IO.mkRef 900
+  let mut out : Array Json := #[]
+  for v in [0:7] do
+    if let some e ← buildValue idHeads ctr ty v then
+      let j ← valueToJson e
+      unless out.contains j do out := out.push j
+  return out
 
 /-- List 値の要素列(ctor 正規形を歩く)。 -/
 partial def listElems (e : Expr) : MetaM (Array Expr) := do
@@ -966,9 +1008,9 @@ private partial def readPredicate (rootNs : Name) (x b : Expr) :
     `(coll.filter p).length ≤ n` は atMost(述語を満たす要素は高々 n 件)。
     coll は同じ構造体の先行フィールド(List)、射影は `fun x => x.f` / `(·.f)` / `S.f`、
     述語 p は要素の 1 フィールドと閉じた値の比較(readPredicate)。
-    読めない形は note の文面にして返す。 -/
+    読めない形は (フィールド名, 命題の表示) にして返す。 -/
 def structConstraints (rootNs head : Name) (targs : Array Expr) :
-    MetaM (Array Json × Array String) := do
+    MetaM (Array Json × Array (String × String)) := do
   let env ← getEnv
   unless isStructure env head do return (#[], #[])
   let iv ← getConstInfoInduct head
@@ -976,7 +1018,7 @@ def structConstraints (rootNs head : Name) (targs : Array Expr) :
   let ty ← instantiateForall ci.type targs
   forallTelescopeReducing ty fun xs _ => do
     let mut out : Array Json := #[]
-    let mut unreadable : Array String := #[]
+    let mut unreadable : Array (String × String) := #[]
     let mut data := 0
     for x in xs do
       let d ← x.fvarId!.getDecl
@@ -993,7 +1035,7 @@ def structConstraints (rootNs head : Name) (targs : Array Expr) :
       | some (kind, coll, field, extra) =>
         out := out.push (Json.mkObj ([("kind", Json.str kind), ("name", Json.str name),
           ("collection", Json.str coll), ("field", Json.str field)] ++ extra))
-      | none => unreadable := unreadable.push s!"{head}.{name}: {← ppExpr d.type}"
+      | none => unreadable := unreadable.push (name, toString (← ppExpr d.type))
     -- データを運ばない構造体(validate の解決の成果物 = 証拠)には fixture が無い — note の対象外
     return (out, if data == 0 then #[] else unreadable)
 where
@@ -2455,8 +2497,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let shape ← shapeOf rootNs reg n targs
       -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
       let (constraints, unreadable) ← structConstraints rootNs n targs
-      for u in unreadable do
-        logInfo m!"lean2kotlin: {u} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、生成する fixture はこの制約を満たすとは限りません"
+      let observed := role.str == "repositoryState"
+      if observed then
+        for (f, pp) in unreadable do
+          logInfo m!"lean2kotlin: {n}.{f}: {pp} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、Repository 契約テストの個体の列はこの制約を満たすとは限りません"
       let collectFromShape (j : Json) : Array Name :=
         match j.getObjVal? "fields" with
         | .ok (.arr fs) => fs.foldl (fun acc f =>
@@ -2483,6 +2527,15 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                         ("role", Json.str role.str), ("shape", shape)]
       unless constraints.isEmpty do
         entry := entry ++ [("constraints", Json.arr constraints)]
+      -- 観測モデル以外の型の制約: 生成器は KDoc に構築する側の義務として写し、Arb は
+      -- Lean が制約を decide して通したサンプルから引く(Kotlin の型は制約を検査しない)
+      unless observed || unreadable.isEmpty do
+        entry := entry ++ [("invariants", Json.arr (unreadable.map fun (f, pp) =>
+          Json.mkObj [("name", Json.str f), ("lean", Json.str pp)]))]
+        let samples ← typeSamples idTypeHeads.toList n targs
+        if samples.isEmpty then
+          logInfo m!"lean2kotlin: note: {n} の制約を満たすサンプルを組めません — この型の Arb は作れません"
+        entry := entry ++ [("samples", Json.arr samples)]
       -- 生成先パッケージの導出源: 型の在住モジュール(Lean のディレクトリ構成の写し)
       if let some m := modOf n then
         entry := entry ++ [("module", Json.str (toString m))]

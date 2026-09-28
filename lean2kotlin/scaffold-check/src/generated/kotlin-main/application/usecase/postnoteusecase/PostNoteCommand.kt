@@ -3,11 +3,9 @@
 
 package dev.cradle.scaffold.application.usecase.postnoteusecase
 
-import dev.cradle.scaffold.domain.valueobject.Title
-
 /**
  * Lean: `Sprout.Application.PostNoteUseCase.Command`(command)
  */
 data class PostNoteCommand(
-	val title: Title,
+	val title: String,
 )

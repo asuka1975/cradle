@@ -239,7 +239,11 @@ sealed interface DomainResult<out E, out A> {
 			else
 				"同一性の表現は**モデルの具体化の写し**(NFR を根拠にモデリング\n * パイプラインが決定。現在の具体化は Long 連番)。"
 			"/**\n * Lean: `${td.lean}`(${td.role})\n * $rep\n */"
-		} else
+		} else if (td.invariants.isNotEmpty())
+			// 型は制約を検査しない — 構築する側(validate など)が満たしてから作る
+			"/**\n * Lean: `${td.lean}`(${td.role})\n *\n * 制約(Lean の Prop フィールド。この型は検査しない — 構築する側の義務):\n" +
+				td.invariants.joinToString("") { " * - ${it.name}: `${it.lean}`\n" } + " */"
+		else
 			"/**\n * Lean: `${td.lean}`(${td.role})\n */"
 
 	private fun instanceMethodsOf(td: IrTypeDef) = k.instanceMethodsOf(td)

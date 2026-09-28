@@ -107,7 +107,8 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
 | 契約定理を翻訳できません / 有効なケースを演繹できませんでした | 前提が Decidable でない・fixture から期待値を計算できない・仮定が常に偽 | 定理の形を見直す（Lean）。この note は診断にも残り、生成は失敗する |
-| … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は fixture が満たすとは限らない |
+| … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は Repository 契約テストの個体の列が満たすとは限らない |
+| … の制約を満たすサンプルを組めません | VO などの Prop フィールドが、小さな値の候補（lean-conventions §9）のどれでも満たせない | 制約の形を見直す（Lean）。その型の Arb が要る生成は失敗する |
 | 参照系 … 読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean） |
 | interface のみ生成（テストなし） | fixture / golden が無い | fixture か golden を足す |
 | … の要素に無いフィールド … 合成できません | 計算する読み取りモデル（集約横断の集計・別集約からの引き） | 無し（読み取りの回帰は `cradle golden-check` と E2E が担う） |

@@ -3,6 +3,7 @@
 
 package dev.cradle.scaffold
 
+import dev.cradle.scaffold.application.NoteRow
 import dev.cradle.scaffold.application.NoteView
 import dev.cradle.scaffold.application.QueryError
 import dev.cradle.scaffold.application.usecase.notesusecase.NotesQuery
@@ -19,6 +20,9 @@ import io.kotest.property.arbitrary.*
 
 @Suppress("unused")
 private val suppressUnused = Unit
+
+internal fun arbNoteRow(): Arb<NoteRow> =
+	Arb.bind(arbNoteId(), arbUserId(), arbTitle(), Arb.boolean()) { p0, p1, p2, p3 -> NoteRow(id = p0, author = p1, title = p2, closed = p3) }
 
 internal fun arbNoteView(): Arb<NoteView> =
 	Arb.bind(arbNoteId(), arbUserId(), Arb.string(0..8, Codepoint.alphanumeric()), Arb.boolean()) { p0, p1, p2, p3 -> NoteView(id = p0, author = p1, title = p2, closed = p3) }
@@ -42,8 +46,9 @@ internal fun arbNoteId(): Arb<NoteId> =
 internal fun arbUserId(): Arb<UserId> =
 	Arb.long(0L..4096L).map { p0 -> UserId(id = p0) }
 
-internal fun arbTitle(): Arb<TitleFixture> =
-	Arb.string(0..8, Codepoint.alphanumeric()).map { p0 -> TitleFixture(text = p0) }
+/** `Sprout.Title` の制約(nonempty)を Lean が decide して通したサンプル。 */
+internal fun arbTitle(): Arb<Title> =
+	Arb.element(Title(text = "s900"), Title(text = "s901"), Title(text = "s902"), Title(text = "s903"), Title(text = "s904"), Title(text = "a"), Title(text = "s905"))
 
 /** `Sprout.Application.NoteRepositoryState` の制約(uniqueIds: id・uniqueTitles: title)と同一性を満たす個体の列。間引きで size を割った列は引き直す。 */
 internal fun arbNoteRepository(size: IntRange = 0..5): Arb<List<NoteFixture>> =
