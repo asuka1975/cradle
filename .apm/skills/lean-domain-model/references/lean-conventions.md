@@ -164,7 +164,7 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 
 ## 6. 境界（`Runtime/` — 非規範）
 
-- `Ids.lean`: ID の仮置き（`structure NoteId where id : Nat`）と泉の具体化（連番）。
+- `Ids.lean`: ID の仮置き（`structure NoteId where id : Nat`）と泉の具体化（連番）。名義の型 `UserId` は骨格の持ち物の `Main.lean` が viewer を受ける名前なので、用語集に従って改名したら `abbrev UserId := <新しい名前>` を残す（`Main.lean` を書き換えない）。
 - `Command.lean`: 合併型 + `Actor` + **反機能の一覧**（存在しない操作とその理由）。
 - `Observation.lean`: 内部入力の合併型（Observation 形の UseCase ごとに 1 構成子。無ければ構成子の無い型）。`Command.lean` には混ぜない。
 - `Environment.lean`: `Interaction`（Port 操作ごとに 1 構成子: 期待する要求と返す観測）・`Environment`（不変の有限 script と cursor）・`check`（cursor は script の範囲内）/ `next` / `consume` / `exhausted`。環境は状態と同じく応答で往復し、プロセス内に持たない。Port を持たない間、`Interaction` の構成子は無い。
