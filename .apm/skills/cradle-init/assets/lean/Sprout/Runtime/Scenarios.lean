@@ -21,7 +21,7 @@ def Scenario.today : Date := date("2026-01-01")
 /-- 基本シナリオ: alice の開いたメモ 1 件・bob の閉じたメモ 1 件。 -/
 def Scenario.basic : Snapshot :=
   { notes   := ⟨[ Note.post ⟨0⟩ alice ⟨"買い出し", by decide⟩,
-                  (Note.post ⟨1⟩ bob ⟨"打合せ", by decide⟩).close ], by decide, by decide⟩
+                  { Note.post ⟨1⟩ bob ⟨"打合せ", by decide⟩ with closed := true } ], by decide, by decide⟩
     noteIds := ⟨2⟩ }
 
 def scenarioByName : String → Option Snapshot

@@ -42,15 +42,19 @@ structure Note (NoteId UserId : Type) where
 deriving Repr, DecidableEq
 
 def Note.post (id : NoteId) (author : UserId) (title : Title) : Note NoteId UserId := { id, author, title, closed := false }
-def Note.close (n : Note NoteId UserId) : Note NoteId UserId := { n with closed := true }
+/-- もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 -/
+def Note.close (n : Note NoteId UserId) : Except DomainError (Note NoteId UserId) :=
+  if n.closed then .error .alreadyClosed else .ok { n with closed := true }
 
-@[contract] theorem Note.close_id (n : Note NoteId UserId) : n.close.id = n.id := rfl          -- 同一性
-@[contract] theorem Note.close_closed (n : Note NoteId UserId) : n.close.closed = true := rfl   -- 効果
-@[contract] theorem Note.close_frame (n : Note NoteId UserId) : n.close.author = n.author ∧ n.close.title = n.title := ⟨rfl, rfl⟩ -- 非効果
-@[contract] theorem Note.close_idem (n : Note NoteId UserId) : n.close.close = n.close := rfl   -- 冪等
+@[contract] theorem Note.close_open (n : Note NoteId UserId) (h : n.closed = false) :
+    n.close = .ok { n with closed := true } := by simp [Note.close, h]              -- 受け入れる枝（値の全体がオラクル）
+@[contract] theorem Note.close_already_closed (n : Note NoteId UserId) (h : n.closed = true) :
+    n.close = .error .alreadyClosed := by simp [Note.close, h]                       -- 断る枝
 ```
 
 - 大域状態を署名に置かない。単位は機能ではなく Entity。同一性・効果・非効果・冪等を別々の定理にする（1 定理 1 概念）。
+- 集約の状態で決まる規則（どの段階からどこへ行けるか・取り消せるか・二重にしない）はルートのふるまいが持ち、断るなら `Except DomainError <Root>` を返す。受け入れる枝・断る枝をそれぞれ定理にする（受け入れた値の全体がオラクルになり、同一性・フレームもそこに含まれる）。規則を複数の UseCase の validate に分けない — 断り忘れた UseCase を足しても何も落ちない形になる。
+- ルートが不変条件（Prop）を持つなら、断るふるまいのすべてについて保存を証明する（`n.b … = .ok n' → Inv n → Inv n'`）。ふるまいを 1 つの `apply (a : Act)` に束ねれば定理は 1 本で済む。
 - これらの `@[contract]` 定理は生成テストの源で、多くは def の言い換え（`rfl`）になる。業務の規則が守られることは §7 の保証の定理が言う。
 - 非ルート Entity は Repository・UseCase を持たない（ルート経由でのみ変わることが構文的保証）。
 - 法則が要求しない観測は署名に置かない。含めない法則・操作はコメントで宣言する。
@@ -100,7 +104,8 @@ def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before
 
 - validate の戻り値: 既存集約を変える UseCase = 解決の成果物（集約ルート）、新規追加 = `Unit` か証拠（Prop フィールドだけの structure。`: Type` を明記する）、参照系 = `Unit`。
 - 契約定理: エラー枝 1 本 = 定理 1 本（`execute_<error>`）と成功（`execute_ok`）。作用後の状態全体がオラクルになるので、追加 / 更新の等式（`act_appends` 等）・泉の消費・フレームは置いてもその系として指名しない。
-  境界の可到達性が使う `execute_ok_shape`（成功なら結果は act の形）も置く。
+  境界の可到達性が使う `execute_ok_shape`（成功なら結果は act の形 — act が断るなら受け入れたときの状態）も置く。
+- validate に置くのは宛先の解決と名義の確かめ（その人がその操作をしてよいか）まで。集約の状態で決まる拒否はルートのふるまいが断る（§3）。そのとき act はふるまいの結果を運ぶ `Except` を返し、`execute = validate … >>= act …`（骨格の CloseNote）。断らないふるまいなら act は全域で、`execute = (validate …).map (act …)`。
 - 名義（`ActorContext`）・時計・泉はポート位置（先頭）。ペイロードに混ぜない。証明の引数はポートと入力の後、validate の成果物の前（execute では末尾）。
 
 ## 4b. 外部能力の Port（`Application/Port/<Port>/<操作>.lean`）

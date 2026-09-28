@@ -30,7 +30,7 @@
       {"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
        "name": "before"}],
      "name": "validate",
-     "doc": "始まる前の拒否: 宛先が無い / 書いた本人でない / もう閉じている。成功なら作用対象を返す。 "}],
+     "doc": "始まる前の拒否: 宛先が無い / 書いた本人でない。成功なら作用対象を返す。 "}],
    "kind": "command",
    "input": "Sprout.Application.CloseNoteUseCase.Command"},
   {"name": "NotesUseCase",
@@ -991,221 +991,62 @@
          "closed": true,
          "author": {"id": 5}}]}}}]},
   {"useCase": "Sprout.Domain.Note",
-   "theorem": "close_closed",
+   "theorem": "close_already_closed",
    "target": "behaviors",
    "method": "close",
-   "doc": "閉じたら閉じている。 ",
+   "doc": "もう閉じているメモは閉じられない。 ",
+   "cases":
+   [{"ok": {"error": "alreadyClosed"},
+     "kind": "pure",
+     "args":
+     {"n":
+      {"title": {"text": "s1"},
+       "id": {"id": 92},
+       "closed": true,
+       "author": {"id": 5}}}},
+    {"ok": {"error": "alreadyClosed"},
+     "kind": "pure",
+     "args":
+     {"n":
+      {"title": {"text": "s2"},
+       "id": {"id": 93},
+       "closed": true,
+       "author": {"id": 6}}}},
+    {"ok": {"error": "alreadyClosed"},
+     "kind": "pure",
+     "args":
+     {"n":
+      {"title": {"text": "s3"},
+       "id": {"id": 91},
+       "closed": true,
+       "author": {"id": 7}}}},
+    {"ok": {"error": "alreadyClosed"},
+     "kind": "pure",
+     "args":
+     {"n":
+      {"title": {"text": "s4"},
+       "id": {"id": 92},
+       "closed": true,
+       "author": {"id": 8}}}}]},
+  {"useCase": "Sprout.Domain.Note",
+   "theorem": "close_open",
+   "target": "behaviors",
+   "method": "close",
+   "doc": "開いているメモは閉じられ、閉じたメモになる（同一性・書き手・題は変わらない）。 ",
    "cases":
    [{"ok":
-     {"title": {"text": "s0"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 4}},
+     {"ok":
+      {"title": {"text": "s0"},
+       "id": {"id": 91},
+       "closed": true,
+       "author": {"id": 4}}},
      "kind": "pure",
      "args":
      {"n":
       {"title": {"text": "s0"},
        "id": {"id": 91},
        "closed": false,
-       "author": {"id": 4}}}},
-    {"ok":
-     {"title": {"text": "s1"},
-      "id": {"id": 92},
-      "closed": true,
-      "author": {"id": 5}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s1"},
-       "id": {"id": 92},
-       "closed": true,
-       "author": {"id": 5}}}},
-    {"ok":
-     {"title": {"text": "s2"},
-      "id": {"id": 93},
-      "closed": true,
-      "author": {"id": 6}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s2"},
-       "id": {"id": 93},
-       "closed": true,
-       "author": {"id": 6}}}},
-    {"ok":
-     {"title": {"text": "s3"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 7}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s3"},
-       "id": {"id": 91},
-       "closed": true,
-       "author": {"id": 7}}}}]},
-  {"useCase": "Sprout.Domain.Note",
-   "theorem": "close_frame",
-   "target": "behaviors",
-   "method": "close",
-   "doc": "閉じても書き手と題は変わらない（フレーム）。 ",
-   "cases":
-   [{"ok":
-     {"title": {"text": "s0"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s0"},
-       "id": {"id": 91},
-       "closed": false,
-       "author": {"id": 4}}}},
-    {"ok":
-     {"title": {"text": "s1"},
-      "id": {"id": 92},
-      "closed": true,
-      "author": {"id": 5}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s1"},
-       "id": {"id": 92},
-       "closed": true,
-       "author": {"id": 5}}}},
-    {"ok":
-     {"title": {"text": "s2"},
-      "id": {"id": 93},
-      "closed": true,
-      "author": {"id": 6}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s2"},
-       "id": {"id": 93},
-       "closed": true,
-       "author": {"id": 6}}}},
-    {"ok":
-     {"title": {"text": "s3"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 7}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s3"},
-       "id": {"id": 91},
-       "closed": true,
-       "author": {"id": 7}}}}]},
-  {"useCase": "Sprout.Domain.Note",
-   "theorem": "close_id",
-   "target": "behaviors",
-   "method": "close",
-   "doc": "閉じても同一性は変わらない。 ",
-   "cases":
-   [{"ok":
-     {"title": {"text": "s0"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s0"},
-       "id": {"id": 91},
-       "closed": false,
-       "author": {"id": 4}}}},
-    {"ok":
-     {"title": {"text": "s1"},
-      "id": {"id": 92},
-      "closed": true,
-      "author": {"id": 5}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s1"},
-       "id": {"id": 92},
-       "closed": true,
-       "author": {"id": 5}}}},
-    {"ok":
-     {"title": {"text": "s2"},
-      "id": {"id": 93},
-      "closed": true,
-      "author": {"id": 6}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s2"},
-       "id": {"id": 93},
-       "closed": true,
-       "author": {"id": 6}}}},
-    {"ok":
-     {"title": {"text": "s3"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 7}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s3"},
-       "id": {"id": 91},
-       "closed": true,
-       "author": {"id": 7}}}}]},
-  {"useCase": "Sprout.Domain.Note",
-   "theorem": "close_idem",
-   "target": "behaviors",
-   "method": "close",
-   "doc": "閉じるのは冪等。 ",
-   "cases":
-   [{"ok":
-     {"title": {"text": "s0"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 4}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s0"},
-       "id": {"id": 91},
-       "closed": true,
-       "author": {"id": 4}}}},
-    {"ok":
-     {"title": {"text": "s1"},
-      "id": {"id": 92},
-      "closed": true,
-      "author": {"id": 5}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s1"},
-       "id": {"id": 92},
-       "closed": true,
-       "author": {"id": 5}}}},
-    {"ok":
-     {"title": {"text": "s2"},
-      "id": {"id": 93},
-      "closed": true,
-      "author": {"id": 6}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s2"},
-       "id": {"id": 93},
-       "closed": true,
-       "author": {"id": 6}}}},
-    {"ok":
-     {"title": {"text": "s3"},
-      "id": {"id": 91},
-      "closed": true,
-      "author": {"id": 7}},
-     "kind": "pure",
-     "args":
-     {"n":
-      {"title": {"text": "s3"},
-       "id": {"id": 91},
-       "closed": true,
-       "author": {"id": 7}}}}]},
+       "author": {"id": 4}}}}]},
   {"useCase": "Sprout.Domain.Note",
    "theorem": "post_isOpen",
    "target": "behaviors",
@@ -1301,8 +1142,11 @@
       {"type": {"name": "Sprout.Title", "k": "ref"}, "name": "title"}],
      "name": "post",
      "doc": "書く（採番は呼び出し側の関心）。 "},
-    {"ret": {"name": "Sprout.Domain.Note", "k": "ref"},
+    {"ret":
+     {"ok": {"name": "Sprout.Domain.Note", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Sprout.DomainError", "k": "ref"}},
      "params":
      [{"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
      "name": "close",
-     "doc": "閉じる。 "}]}]}
+     "doc": "閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 "}]}]}

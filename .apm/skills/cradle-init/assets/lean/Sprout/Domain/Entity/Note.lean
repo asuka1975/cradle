@@ -5,6 +5,7 @@
 -/
 import Sprout.Domain.Annotations
 import Sprout.Domain.ValueObject
+import Sprout.Domain.Error
 
 namespace Sprout.Domain
 
@@ -25,28 +26,35 @@ variable {NoteId UserId : Type}
 def Note.post (id : NoteId) (author : UserId) (title : Title) : Note NoteId UserId :=
   { id, author, title, closed := false }
 
-/-- 閉じる。 -/
-def Note.close (n : Note NoteId UserId) : Note NoteId UserId := { n with closed := true }
+/-- 閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 -/
+def Note.close (n : Note NoteId UserId) : Except DomainError (Note NoteId UserId) :=
+  if n.closed then .error .alreadyClosed else .ok { n with closed := true }
 
 def Note.isOpen (n : Note NoteId UserId) : Bool := !n.closed
 
-/-! ### 契約定理（効果・非効果・同一性 — 1 定理 1 概念） -/
+/-! ### 契約定理（受け入れる枝・断る枝 — 1 定理 1 概念。受け入れた値の全体がオラクルなので、同一性・書き手・題が変わらないことも含む） -/
 
 /-- 書いた直後は開いている。 -/
 @[contract] theorem Note.post_isOpen (id : NoteId) (a : UserId) (t : Title) :
     (Note.post id a t).isOpen = true := rfl
 
-/-- 閉じても同一性は変わらない。 -/
-@[contract] theorem Note.close_id (n : Note NoteId UserId) : n.close.id = n.id := rfl
+/-- 開いているメモは閉じられ、閉じたメモになる（同一性・書き手・題は変わらない）。 -/
+@[contract] theorem Note.close_open (n : Note NoteId UserId) (h : n.closed = false) :
+    n.close = .ok { n with closed := true } := by
+  simp [Note.close, h]
 
-/-- 閉じたら閉じている。 -/
-@[contract] theorem Note.close_closed (n : Note NoteId UserId) : n.close.closed = true := rfl
+/-- もう閉じているメモは閉じられない。 -/
+@[contract] theorem Note.close_already_closed (n : Note NoteId UserId) (h : n.closed = true) :
+    n.close = .error .alreadyClosed := by
+  simp [Note.close, h]
 
-/-- 閉じても書き手と題は変わらない（フレーム）。 -/
-@[contract] theorem Note.close_frame (n : Note NoteId UserId) :
-    n.close.author = n.author ∧ n.close.title = n.title := ⟨rfl, rfl⟩
+/-- 閉じるを適用し、断られたらそのままにしても同一性は変わらない（観測モデルの点更新に渡す形）。
+    @[contract] は付けない — 証明の分解装置。 -/
+theorem Note.close_getD_id (n : Note NoteId UserId) : (n.close.toOption.getD n).id = n.id := by
+  unfold Note.close; split <;> rfl
 
-/-- 閉じるのは冪等。 -/
-@[contract] theorem Note.close_idem (n : Note NoteId UserId) : n.close.close = n.close := rfl
+/-- 同じく題も変わらない。@[contract] は付けない — 証明の分解装置。 -/
+theorem Note.close_getD_title (n : Note NoteId UserId) : (n.close.toOption.getD n).title = n.title := by
+  unfold Note.close; split <;> rfl
 
 end Sprout.Domain

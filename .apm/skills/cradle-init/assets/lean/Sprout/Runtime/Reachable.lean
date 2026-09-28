@@ -125,10 +125,10 @@ theorem check_of_apply (s s' : Snapshot) (today : Date) (actor : Actor) (cmd : C
   | closeNote c =>
     simp only [Snapshot.apply, Snapshot.applyCommand, Snapshot.opened] at hs
     obtain ⟨st, hst, hs'⟩ := except_map_eq_ok hs
-    obtain ⟨n, hn⟩ := CloseNoteUseCase.execute_ok_shape _ _ _ _ hst
+    have hn := CloseNoteUseCase.execute_ok_shape _ _ _ _ hst
     subst hs'
     rw [hn]
-    exact check_of_note_update s c.note Note.close (fun _ => rfl) (fun _ => rfl) hc
+    exact check_of_note_update s c.note _ Note.close_getD_id Note.close_getD_title hc
 
 /-! ### 芯は 1 本 -/
 

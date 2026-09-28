@@ -124,7 +124,7 @@ class IrParseTest {
 	}
 
 	@Test
-	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 16 と behaviors 2 を持つ`() {
+	fun `骨格の IR は types 17 と useCases 3 と queryServices 1 と contracts 14 と behaviors 2 を持つ`() {
 		val ir = sproutIr()
 		assertEquals("Sprout", ir.rootNamespace)
 		assertEquals(17, ir.types.size)
@@ -135,7 +135,7 @@ class IrParseTest {
 			ir.types.groupingBy { it.role }.eachCount())
 		assertEquals(3, ir.useCases.size)
 		assertEquals(1, ir.queryServices.size)
-		assertEquals(16, ir.contracts.size)
+		assertEquals(14, ir.contracts.size)
 		assertEquals(2, ir.behaviors.size)
 		assertTrue(ir.ports.isEmpty())
 		assertTrue(ir.dropped.isEmpty())

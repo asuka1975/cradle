@@ -18,7 +18,7 @@ import dev.cradle.scaffold.domain.entity.Note
 interface CloseNoteUseCase {
 	fun execute(c: CloseNoteCommand): DomainResult<DomainError, Unit>
 	/**
-	 * 始まる前の拒否: 宛先が無い / 書いた本人でない / もう閉じている。成功なら作用対象を返す。
+	 * 始まる前の拒否: 宛先が無い / 書いた本人でない。成功なら作用対象を返す。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
 	 * validate を呼ぶ」形に一本化する — 分岐条件を再実装しない)。
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。

@@ -557,6 +557,9 @@ partial def valueToJson (e : Expr) : MetaM Json := do
       return Json.arr (#[hd] ++ tl)
     else if cn == ``Option.none then return Json.null
     else if cn == ``Option.some then valueToJson args[1]!
+    -- 断るふるまいの結果(Except): {"ok": 値} か {"error": 失敗}(生成器は DomainResult に写す)
+    else if cn == ``Except.ok then return Json.mkObj [("ok", ← valueToJson args[2]!)]
+    else if cn == ``Except.error then return Json.mkObj [("error", ← valueToJson args[2]!)]
     else if cn == ``Prod.mk then
       return Json.arr #[← valueToJson args[2]!, ← valueToJson args[3]!]
     else do

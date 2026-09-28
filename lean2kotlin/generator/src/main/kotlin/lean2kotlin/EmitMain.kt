@@ -201,7 +201,7 @@ class EmitMain(
 	) {
 		val (body, c) = k.collecting(build)
 		val imports = mutableListOf<String>()
-		if (usesDomainResult && subpkg != null) imports.add("${out.basePackage}.DomainResult")
+		if ((usesDomainResult || DOMAIN_RESULT_REF.containsMatchIn(body)) && subpkg != null) imports.add("${out.basePackage}.DomainResult")
 		for (lean in c.refs) {
 			val td = ir.typeDef(lean)
 			val target = k.packagePathOf(td)

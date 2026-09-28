@@ -70,7 +70,7 @@ class GenerationTest {
 			"note: NotesUseCase.execute: 引数を合成できないため external-flow #2 をスキップ",
 			"note: 契約テスト: NotesUseCase — golden+定理で 12 ケース(参照系)",
 			"note: 契約定理テスト: PostNoteUseCase — 定理 3 本から 10 ケース(遷移形 — Repository 直参照)",
-			"note: 契約定理テスト: Note(Entity)— 定理 5 本から 20 ケース",
+			"note: 契約定理テスト: Note(Entity)— 定理 3 本から 9 ケース",
 		)
 		val notes = generate(out)
 		assertEquals(expected, notes.toSet())
