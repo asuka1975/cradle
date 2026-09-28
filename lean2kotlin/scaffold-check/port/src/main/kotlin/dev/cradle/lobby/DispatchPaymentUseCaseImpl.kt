@@ -1,7 +1,6 @@
 package dev.cradle.lobby
 
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGateway
-import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeOutcome
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeRequest
 import dev.cradle.lobby.application.usecase.dispatchpaymentusecase.DispatchPaymentObservation
 import dev.cradle.lobby.application.usecase.dispatchpaymentusecase.DispatchPaymentUseCase
@@ -9,9 +8,8 @@ import dev.cradle.lobby.domain.DomainError
 import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.repository.PaymentAttemptRepository
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
-import dev.cradle.lobby.domain.valueobject.PaymentResult
 
-/** `Lobby.Application.DispatchPaymentUseCase` の写し。validate → 送る印を保存 → 要求（`mkRequest`）→ Port → 観測の反映（`reflect`）の順。印を保存してから送るので、中断しても同じ冪等キーで再開できる。 */
+/** `Lobby.Application.DispatchPaymentUseCase` の写し。validate → 送る印を保存 → 要求（`mkRequest`）→ Port → 観測の反映（判断 `reflect` は `DispatchPaymentRulesImpl`）の順。印を保存してから送るので、中断しても同じ冪等キーで再開できる。 */
 class DispatchPaymentUseCaseImpl(
 	private val paymentAttemptRepository: PaymentAttemptRepository,
 	private val paymentGateway: PaymentGateway,
@@ -28,14 +26,8 @@ class DispatchPaymentUseCaseImpl(
 				val a = v.value
 				val marked = a.markSending()
 				paymentAttemptRepository.update(marked)
-				val reflected = when (paymentGateway.authorize(PaymentGatewayAuthorizeRequest(attempt = a.id, amount = a.amount, attemptNo = marked.tries))) {
-					PaymentGatewayAuthorizeOutcome.Authorized -> marked.settle(PaymentResult.Authorized)
-					PaymentGatewayAuthorizeOutcome.Declined -> marked.settle(PaymentResult.Declined)
-					PaymentGatewayAuthorizeOutcome.Accepted -> marked.awaitConfirmation()
-					PaymentGatewayAuthorizeOutcome.Unavailable -> marked.resetPending()
-					PaymentGatewayAuthorizeOutcome.Unknown -> marked.lose()
-				}
-				paymentAttemptRepository.update(reflected)
+				val outcome = paymentGateway.authorize(PaymentGatewayAuthorizeRequest(attempt = a.id, amount = a.amount, attemptNo = marked.tries))
+				paymentAttemptRepository.update(DispatchPaymentRulesImpl.reflect(outcome, a))
 				DomainResult.Ok(Unit)
 			}
 		}

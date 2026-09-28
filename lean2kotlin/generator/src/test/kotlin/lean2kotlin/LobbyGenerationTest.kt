@@ -43,6 +43,7 @@ class LobbyGenerationTest {
 			"note: 契約定理テスト: PaymentAttempt(Entity)— 定理 12 本から 48 ケース",
 			"note: 契約定理テスト: Visit(Entity)— 定理 4 本から 16 ケース",
 			"note: 契約定理テスト: VisitorName(Entity)— 定理 1 本から 4 ケース",
+			"note: 契約定理テスト: DispatchPaymentRules — 定理 5 本から 20 ケース(純値形)",
 			"note: 障害契約テスト: BookVisitUseCase — 1 宣言から 4 ケース(障害注入フックつき)",
 			"note: 障害契約テスト: DispatchPaymentUseCase — 3 宣言から 12 ケース(障害注入フックつき)",
 			"note: 障害契約テスト: StartPaymentUseCase — 1 宣言から 2 ケース(障害注入フックつき)",
@@ -63,6 +64,13 @@ class LobbyGenerationTest {
 		assertTrue("fun execute(o: DispatchPaymentObservation): DomainResult<DomainError, Unit>" in dispatch, dispatch)
 		val dispatchTest = out.resolve("kotlin-test/application/usecase/dispatchpaymentusecase/DispatchPaymentUseCaseContractTest.kt").toFile().readText()
 		assertTrue("protected abstract fun useCase(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase" in dispatchTest, dispatchTest)
+		// UseCase の判断: 契約が指名した補助 def だけが `<X>Rules` に写り、引数(観測・集約ルート)は配線として落ちない
+		val rules = out.resolve("kotlin-main/application/usecase/dispatchpaymentusecase/DispatchPaymentRules.kt").toFile().readText()
+		assertTrue("fun reflect(outcome: PaymentGatewayAuthorizeOutcome, a: PaymentAttempt): PaymentAttempt" in rules, rules)
+		assertTrue("fun mkRequest" !in rules && "fun apply" !in rules && "fun validate" !in rules, rules)
+		val rulesTest = out.resolve("kotlin-test/application/usecase/dispatchpaymentusecase/DispatchPaymentRulesContractTest.kt").toFile().readText()
+		assertTrue("protected abstract fun rules(): DispatchPaymentRules" in rulesTest, rulesTest)
+		assertTrue("rules().reflect(outcome = PaymentGatewayAuthorizeOutcome.Unknown, a = paymentAttempt(" in rulesTest, rulesTest)
 		// 障害契約テスト: 定義ごとのフックと、消費位置の検査(送る前の中断は呼ばれない、応答を得た後の中断は消費し切る)
 		val faultTest = out.resolve("kotlin-test/application/usecase/dispatchpaymentusecase/DispatchPaymentUseCaseFaultContractTest.kt").toFile().readText()
 		for (hook in listOf("faultedMarkedNotSent", "faultedSentNoAnswer", "faultedAppliedNotCommitted")) assertTrue("protected abstract fun $hook(paymentAttemptRepository: PaymentAttemptRepository, paymentGateway: PaymentGateway): DispatchPaymentUseCase" in faultTest, faultTest)

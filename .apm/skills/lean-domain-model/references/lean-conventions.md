@@ -58,7 +58,7 @@ def Note.close (n : Note NoteId UserId) : Except DomainError (Note NoteId UserId
 - これらの `@[contract]` 定理は生成テストの源で、多くは def の言い換え（`rfl`）になる。業務の規則が守られることは §7 の保証の定理が言う。
 - 非ルート Entity は Repository・UseCase を持たない（ルート経由でのみ変わることが構文的保証）。
 - 法則が要求しない観測は署名に置かない。含めない法則・操作はコメントで宣言する。
-- DomainService = 複数の集約ルートへの関心が要る業務ルールだけ。1 件に閉じるならルートのふるまい、1 UseCase にしか現れないなら UseCase の仕様。置き場は `Domain/DomainService/<名前>.lean` で 1 ファイル = 1 interface（Kotlin 名は `<名前>Service`）。
+- DomainService = 複数の集約ルートへの関心が要る業務ルールだけ。1 件に閉じるならルートのふるまい、1 UseCase にしか現れないなら UseCase の仕様。UseCase の仕様にある判断（validate / apply が呼ぶ純粋な補助 def。例は回帰素材 Lobby の `DispatchPaymentUseCase.reflect`）に `@[contract]` を付けると、生成器は UseCase と同じパッケージに `<X>Rules` interface と契約テストを出す — 手書きの UseCase はそれを呼び、分岐条件を再実装しない。指名しない補助は Lean だけの語彙。置き場は `Domain/DomainService/<名前>.lean` で 1 ファイル = 1 interface（Kotlin 名は `<名前>Service`）。
 
 ## 4. 更新系 UseCase（`Application/UseCase/<X>UseCase/`）
 
@@ -225,6 +225,7 @@ theorem post_then_close … (hpost : PostNoteUseCase.execute author fountain c b
 - 指名する: 契約面（execute / query）越しに観測できる定理。状態の等式・decidable な検査・多重集合一致。
 - 指名しない: 内部関数への言及・他の指名定理の系・証明の分解装置。迷った跡は docstring に「@[contract] は付けない — ◯◯の系」。
 - Entity・VO のふるまいの定理群も漏れなく指名（効果・非効果・冪等・同一性）。
+- UseCase の判断（§3 の補助 def）は、観測ごと・入力の場合ごとに 1 定理 1 概念で指名する（`reflect .authorized a = a.markSending.settle .authorized`）。生成テストは `<X>Rules` の実装を `rules()` で受け、オラクル値と完全一致で比べる。
 - 保証の定理（§7）は指名しない。
 - `@[faultContract]` は def に付ける: 技術的障害で中断されたとき観測されるべき状態の定義（証明対象ではない）。Port を使う UseCase では def が観測（`Outcome`）を引数に取るかどうかが消費位置の宣言 — 取らなければ「外部を呼ぶ前の中断」（Port は呼ばれない）、取れば「応答を得た後の中断」（Port は 1 回呼ばれる）。1 つの UseCase に中断点ごとの def を置く（例: 配送の `markedNotSent`（印を保存した後・送る前）/ `sentNoAnswer`（外部は成立したかもしれないが応答を失った）/ `appliedNotCommitted`（応答を得た後・反映の commit 前）。後の 2 つは観測される状態が同じでも別の中断点として名前を持つ）。生成テストは def ごとにフック `faulted<定義名>` を要求し、モックの消費位置 → 例外 → Repository の観測の順に検査する。
 - 指名して検査に至らない契約は生成の失敗になる（観測モデルのふるまい・入力語彙のふるまい・`act` の状態の等式・Port の `request` の定理は Kotlin に面が無い — 指名しない）。

@@ -42,7 +42,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `Application/Port/<Port>/<操作>`（`Domain/Port` も同じ）の固定名 `Request` / `Outcome` | portRequest / portOutcome | data class / sealed / enum（Kotlin 名は `<Port><操作>Request` / `<Port><操作>Outcome`。`Outcome` は `execute` の観測引数として本番署名から落ちる） |
 | 同じ操作モジュールのそれ以外の純データ | portDto | data class / sealed / enum（`<Port><操作><名前>`） |
 
-- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。`useCases[]` は入力の種別 `kind`（`command` = 利用者の操作 / `observation` = 内部入力 / `query` = 参照系）と入力型 `input` を持つ。Command と Observation の同居、Observation 形の `execute` が名義（`@[actorContext]`）を受ける形は抽出の失敗。
+- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。加えて、`UseCase/<X>/UseCase` の固定名（validate / act / execute / request / mkRequest / apply）でも障害契約でもない def のうち `@[contract]` が指名したもの（UseCase の判断）を IR の `useCaseRules`（`<X>Rules`）に写す。指名の無い補助は写さない。`useCases[]` は入力の種別 `kind`（`command` = 利用者の操作 / `observation` = 内部入力 / `query` = 参照系）と入力型 `input` を持つ。Command と Observation の同居、Observation 形の `execute` が名義（`@[actorContext]`）を受ける形は抽出の失敗。
 - Port: IR の `ports`（Port ごとに操作と要求・観測の型）。UseCase の `request`（戻りは `Except E Request`）と `execute` の観測引数（`Outcome`）の組で Port・操作を決め、`useCases[].ports` に置く（対応が無い・片方だけ・複数・別の操作・参照系での使用は失敗。型名の末尾で推測しない）。契約ケース（transition）と障害契約のケースには `ports`（Lean が同じ引数で評価した `request` の値と、定理の観測）を焼き込む。validate の拒否では要求は無い（= 呼ばれない）。
 - 診断: `diagnostics.dropped` に、IR に入らなかった契約定理・障害契約（主対象に触れない・ケースを演繹できない・翻訳できない）と写像できない固定形の署名を理由つきで残す。生成器はこれを失敗にする（§6）。
 - ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command / Observation の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState と入力語彙のふるまいは写さない）。
@@ -65,6 +65,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | ふるまいの無い VO・Command・Query・View | `data class`（フィールド 1 つの VO は value class） |
 | inductive | 全構成子が引数なしなら `enum class`、あれば `sealed interface` + `data class` / `data object`。契約指名のあるふるまいは `<X>Behaviors` interface に |
 | 関数フィールドを持つ structure（`Fountain σ α`）・clockPort・actorPort・portOutcome | 本番署名から落ちる（配線で注入。観測は実装が Port から調達する） |
+| UseCase の判断（指名された補助 def） | `interface <X>Rules`（UseCase と同じパッケージ。引数は観測・集約ルートも含めてすべて判断の入力で、配線として落とさない）。UseCase の実装がそれを呼ぶ（実装自身が実装してもよい） |
 | Port（`Application/Port/<Port>/`） | `interface <Port> { fun <操作>(request: <Port><操作>Request): <Port><操作>Outcome }`（`application.port.<port>`）。Adapter は手書き（`infrastructure/<port>/`） |
 
 - 名前: lean-conventions §9 の規則で機械的に決まる（`PostNoteUseCase.Command` → `PostNoteCommand`）。interface の名前は UseCase ディレクトリ `<X>UseCase` から `<X>UseCase`（UseCase）と `<X>QueryService`（QueryService）、DomainService はファイル名から `Domain/DomainService/<名前>.lean` → `<名前>Service`（単一ファイル `Domain/DomainService.lean` は `DomainService`）。package = ルート名前空間と葉ファイルを除いたモジュールパスの小文字連結。`Domain/ValueObject` はディレクトリ扱い、Id は `domain.valueobject`、Repository は `domain.repository`、UseCase は `application.usecase.<x>usecase`、DomainService は `domain.domainservice`。
@@ -94,6 +95,7 @@ abstract class CloseNoteUseCaseContractTest {
 |---|---|---|
 | `<X>EntityContractTest`（Entity / ふるまい持ちの VO） | `@[contract]` | 純値形: 実体化フック → メソッド → `toFixture()` 一致。断るふるまい（`DomainResult` を返す）は受け入れた値だけを `toFixture()` に写し、拒否はそのまま比べる（オラクル値は `{"ok": 値}` / `{"error": 失敗}`）。指名された create があれば Factory は `factory()` フック |
 | `<X>BehaviorsContractTest`（sealed / enum の VO） | `@[contract]` | 純値形: `behaviors()` フックで `<X>Behaviors` の実装を受け、メソッド → 一致 |
+| `<X>RulesContractTest`（UseCase の判断） | `@[contract]`（契約の target は `rules`） | 純値形: `rules()` フックで `<X>Rules` の実装を受け、entity-like の引数は実体化フックで作り、メソッド → `toFixture()` 一致。契約の分類は射影 → 判断 → UseCase の判断 → ふるまいの順（判断の定理は結論にふるまいを含む） |
 | `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測。Port を使う UseCase は生成モック（`<Port>Mock` にケースの要求と観測を積む。要求が無いケースは空 = 呼ばれない）をフックに渡し、結果を `runCatching` で受けてモックの完了検査 → 返り値 → Repository の順に判定する（要求不一致で実装が途中で止まった赤を状態差分の赤で隠さない） |
 | `<Port>Mock`（テスト側。Port の package） | `ports` | 本番 Port を実装する決定的モック: 期待の列（操作ごとの `Expectation`）を消費し、違う要求・積んでいない呼び出し・別の操作は記録して `PortHarnessFailure`（AssertionError。業務語彙ではない）を投げる。`assertNoFailure` は記録、`assertComplete` は記録と未消費を検査する |
 | `<Port>AdapterContractTest`（adapterTest 側。Port の package） | `ports` | Adapter の適合テストの骨格: `adapter()` フックで stub / sandbox 相手に配線した Adapter を受け、観測の構成子ごとの `arrange<操作><構成子>()` フックで stub をその状態にしてから要求を返し、その観測が産まれることを検査する（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返し、等値を検査する）。写像の全域性は主張しない。source set `adapterTest` / タスク `adapterContractTest` に載り、`build` の門には入らない |

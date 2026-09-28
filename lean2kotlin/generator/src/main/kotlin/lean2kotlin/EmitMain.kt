@@ -75,6 +75,13 @@ class EmitMain(
 				"アプリケーション層の UseCase(固定形 validate / execute)。",
 				fixedForm = true) }
 		}
+		for (s in ir.useCaseRules) {
+			// 純粋な判断 — 引数はすべて判断の入力(観測・集約ルートも配線ではない)
+			emitFile(k.useCasePackage(s.module), s.name,
+				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+				"UseCase の判断(validate / apply が呼ぶ純粋な補助)。UseCase の実装はこれを呼び、分岐条件を再実装しない。",
+				raw = true) }
+		}
 		for (s in ir.domainServices) {
 			emitFile("domain.domainservice", s.name,
 				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
