@@ -29,12 +29,14 @@ description: Use to create, update or verify the Lean 4 executable specification
 4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。
 5. `cradle lean-check`、`lake exe <exe> <<< '{"cmd":"init","scenario":"basic","viewer":…}'` で疎通。
 6. golden を採る（モックアップの「golden として保存」— 脇書き `<name>.request.json` も書く — か、`cradle spec-query raw` で流した init / flow の応答をそのまま保存 + 脇書き。外部能力を使う流れは環境つきの `external` で採る）。
+7. lean-model-review で形式化を別の目で resolved HS と突き合わせ、High / Medium を直す。
 
 ### 差分更新（セッション後）
 
 1. `git diff` で documents の変更点（新 resolved HS・新イベント・却下 / 反映された UX・MQ の状態変化）を特定する。
 2. 影響するモジュールだけを更新する。resolved が状態 `撤回` になったか結論が変わったら、旧結論に基づく型・定理を必ず削除・改訂する（出典 ID を grep）。
 3. `lake build` → `cradle lean-check` → `cradle golden-check`。証明が壊れたら、それは documents とモデルの不整合の検知が機能した瞬間なので報告に含める。golden の変化は意図したものだけ `--update`。
+4. lean-model-review で形式化を別の目で resolved HS と突き合わせ、High / Medium を直す。
 
 ### コマンド（更新系）を増やす
 
@@ -70,7 +72,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 ## MQ の起票
 
 型にしようとして初めて露呈する曖昧さは最大の副産物。勝手に決めず、作業を最後まで進めてから**バッチで** `model-review.md` に起票する
-（種別: 曖昧 / 対立 / 未決、「形式化で詰まった箇所」「モデルの暫定解釈」必須）。モデル側はゆるい解釈を採り `-- 起票候補: [MQ-xxx]` を残す。
+（種別: 曖昧 / 対立 / 未決 / 表現の選択、「形式化で詰まった箇所」「モデルの暫定解釈」必須）。表現の選択 = documents に裏付けの無い表現（状態を 1 つの列挙に畳む・集約の切り方など）で、迷わず決めたものも lean-model-review が拾えば起票する。モデル側はゆるい解釈を採り `-- 起票候補: [MQ-xxx]` を残す。
 報告本文にしか書かない起票は禁止。既存 MQ と重複しない。
 
 ## 報告

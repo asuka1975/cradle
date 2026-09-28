@@ -3,7 +3,7 @@
 //   hook pre-guard   PreToolUse(Edit|Write|MultiEdit|NotebookEdit|Agent|Bash。Codex では apply_patch / spawn_agent が同じ matcher に掛かる):
 //                    生成物・保護領域・golden・探索ドキュメントへの直接編集を止める。Bash は探索役（Codex の agent_type）が中継の道具を触るのを止めるだけ
 //   hook post-edit   PostToolUse(Edit|Write|MultiEdit): 契約・Lean・ai-notes を編集したあとの促し
-//   hook post-bash   PostToolUse(Bash): ビルド成功のあとにレビューを促す（gradle build → SQL 性能 + backend 設計、lake build → golden 回帰）
+//   hook post-bash   PostToolUse(Bash): ビルド成功のあとにレビューを促す（gradle build → SQL 性能 + backend 設計、lake build → golden 回帰 + 形式化レビュー）
 //   hook stop        Stop: 作業ツリーの差分に unslop 違反があれば一度だけ差し戻す
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -91,7 +91,7 @@ if (mode === "post-bash") {
     out({ decision: "block", reason: "ビルドが成功しました。次に (1) sql-perf-review スキルで現在のブランチの SQL・スキーマ変更を性能観点でレビューし、(2) backend-design-review スキルで認証・認可・外部連携・ログ設計を点検すること。High/Medium の指摘は提示するだけで終わらせず、その場で直す。どちらのスキルも対象なしと判断すればそれで終えてよい。" });
   }
   if (isLakeBuild && !failed) {
-    out({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "lake build が通りました。モデルを変えたなら `cradle golden-check` を走らせ、変えるつもりのなかった流れ（golden）が変わっていないことを確かめてから先へ進むこと。変わっていたら意図した変更かを判断し、意図したものだけ --update で更新する。" } });
+    out({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "lake build が通りました。モデルを変えたなら `cradle golden-check` を走らせ、変えるつもりのなかった流れ（golden）が変わっていないことを確かめてから先へ進むこと。変わっていたら意図した変更かを判断し、意図したものだけ --update で更新する。定理・規則・集約の形を変えたなら lean-model-review スキルで、形式化を resolved HS と突き合わせる（保証の定理の有無と中身・表現の選択）。" } });
   }
   const isFrontendCheck = /(^|[;&|]\s*)(pnpm|npm|yarn)\s+(run\s+)?(build|test|typecheck|lint)\b/.test(command);
   if (isFrontendCheck && !failed && !/error|failed|✗/i.test(text)) {
