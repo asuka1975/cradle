@@ -44,7 +44,9 @@ lean/
     │   ├── Views.lean         射影と画面の束（viewer と today を受け取る）
     │   ├── Json.lean          JSON の後付け（ワイヤ形式はここで固定）
     │   └── Scenarios.lean     名前付き初期状態 + #guard
-    └── Laws/Properties.lean   保証の境界への転送（仮定は Reachable が放電）
+    └── Laws/
+        ├── Properties.lean    保証の境界への転送（仮定は Reachable が放電）
+        └── Guarantees.lean    保証の定理（resolved HS の結論を ∀ で言う。生成器に渡さない）
 ```
 
 ## CLI プロトコル
