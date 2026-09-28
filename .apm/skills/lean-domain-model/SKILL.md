@@ -13,7 +13,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 | ファイル | 寄与 |
 |---|---|
 | `ubiquitous-language.md` | 型名・フィールド名の源（英語候補をそのまま識別子に）。「確定」だけ型にする |
-| `event-timeline.md` | 更新系イベント 1 つ = UseCase 1 ディレクトリ。主体「サイト」のイベントは execute の帰結 |
+| `event-timeline.md` | 更新系イベント 1 つ = UseCase 1 ディレクトリ。主体「サイト」のイベントは execute の帰結。方針の表: 「同時」はきっかけの UseCase の execute の帰結、「あとで」は内部入力（契機）の UseCase。まとまりの表: 集約ルート（`@[aggregateRoot]`）の切り方の源 |
 | `hotspots.md` | resolved の結論だけを不変条件に。状態 `撤回` の結論は使わない。open はモデル化しない |
 | `ux-review.md` | 「却下」は反機能として固定。「反映済」は二重取り込みに注意。open は不可 |
 | `model-review.md` | 自分の起票の帳簿。反映済 / 却下になった MQ の暫定解釈を確定し `-- 起票候補` を出典参照に置き換える |
@@ -75,7 +75,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 - 確定した用語は英語候補で型・フィールドに。英語候補が空の用語は文脈から命名し、日本語の原語を docstring に残す。作った名前は用語集に無いので、docstring の 1 文目がそのまま暫定の呼び名として探索に戻る（`cradle unslop` の lean-name-unlisted が列挙し、`naming.md` に写る）。用語集の英語候補が識別子と違う行を見つけたら識別子を改名する（用語集 → Lean の一方向）。
 - 名義の型（骨格の `UserId`。`ActorContext` が運ぶ）の名前は用語集の「名義」の行の英語候補に従う。業務の語の英語候補と綴りが重なる（業務の「ユーザー」が `User` で、名義が `UserId`）なら、名義を業務の集約の同一性と取り違えないよう、MQ（種別: 表現の選択）で名義の英語候補を問う。改名の仕方は lean-conventions §6。
 - 同一性が探索で確定しているものは構造で表す（同名の並存は「防がない」のではなく「同一性に関与しないから当然」）。`rfl` で閉じる定理は、文が def を言い換えていることを示すだけで、def が正しい証拠にはならない。
-- resolved HS は (a) 型で表現不能にする (b) `<Root>RepositoryState` の Prop フィールド（一意制約）にする (c) 集約ローカルの定理にする、の順で割り当てる。そのうえで HS の結論は保証の定理が ∀ で言う。1 HS 1 定理にせず、モデリングで抽象化した少数の定理が複数の HS をまとめて保証する。置き場は事実が閉じる単位（ルート → Entity、1 UseCase → その `UseCase.lean`、UseCase をまたぐ → `Application/Composition/`。`@[contract]` は付けない。形は lean-conventions §7）。
+- resolved HS は (a) 型で表現不能にする (b) `<Root>RepositoryState` の Prop フィールド（一意制約）にする (c) 集約ローカルの定理にする、の順で割り当てる。(d) 1 つの集約に収まらない HS は、探索のまとまりと方針の表に答えがあればそれに従い、無ければ一人で決めず MQ（種別: 表現の選択）で問う（同じ瞬間に揃えるか・方針としてあとで揃えるか・1 つのまとまりに寄せるか）。そのうえで HS の結論は保証の定理が ∀ で言う。1 HS 1 定理にせず、モデリングで抽象化した少数の定理が複数の HS をまとめて保証する。置き場は事実が閉じる単位（ルート → Entity、1 UseCase → その `UseCase.lean`、UseCase をまたぐ → `Application/Composition/`。`@[contract]` は付けない。形は lean-conventions §7）。
 - 却下された UX 提案は反機能として `Runtime/Command.lean` の一覧に書き、コマンドが無いこととフレーム定理で固定する。
 - すべての型・定理・分岐の docstring に出典（`[HS-xxx]` `[イベント#n]`）。ステータス語は書かない。導出した事実は「(導出)」。
 
