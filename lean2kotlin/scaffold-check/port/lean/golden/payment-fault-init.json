@@ -18,7 +18,12 @@
           "outcome": "authorized",
           "port": "PaymentGateway",
           "request": {
-            "amount": 1,
+            "amount": {
+              "value": {
+                "denominator": 2,
+                "numerator": 3
+              }
+            },
             "attempt": {
               "id": 0
             },

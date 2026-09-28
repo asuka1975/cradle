@@ -3,6 +3,7 @@
 
 package dev.cradle.lobby.application
 
+import dev.cradle.lobby.Rational
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.VisitId
@@ -13,7 +14,7 @@ import dev.cradle.lobby.domain.valueobject.VisitId
 data class PaymentView(
 	val id: PaymentAttemptId,
 	val visit: VisitId,
-	val amount: Long,
+	val amount: Rational,
 	val tries: Long,
 	val phase: PaymentPhase,
 )

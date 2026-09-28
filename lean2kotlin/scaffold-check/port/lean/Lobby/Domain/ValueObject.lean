@@ -1,5 +1,5 @@
 /-
-  値の市民。来訪者の名前は空でない。来訪の段階は受付中か退出済みか。
+  値の市民。来訪者の名前は空でない。金額は端数を持ち、負にならない。来訪の段階は受付中か退出済みか。
 -/
 import Lobby.Domain.Annotations
 
@@ -14,6 +14,12 @@ def VisitorName.valid (n : VisitorName) : Bool := decide (0 < n.text.length)
 
 @[contract] theorem VisitorName.valid_iff (n : VisitorName) : n.valid = true ↔ 0 < n.text.length := by
   simp [VisitorName.valid]
+
+/-- 金額。端数を持つ（按分の結果 — 10 進では持てない 1/3 も）。負にならないことは型が持つ。 -/
+structure Money where
+  value : Rat
+  nonneg : 0 ≤ value
+deriving Repr, DecidableEq
 
 /-- 来訪の段階。受付中（expected）か退出済み（left）か。 -/
 inductive VisitPhase where

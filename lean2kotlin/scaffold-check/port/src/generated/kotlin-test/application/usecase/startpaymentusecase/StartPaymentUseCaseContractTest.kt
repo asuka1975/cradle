@@ -5,6 +5,7 @@ package dev.cradle.lobby.application.usecase.startpaymentusecase
 
 import dev.cradle.lobby.DomainResult
 import dev.cradle.lobby.PaymentAttemptFixture
+import dev.cradle.lobby.Rational
 import dev.cradle.lobby.VisitFixture
 import dev.cradle.lobby.VisitorNameFixture
 import dev.cradle.lobby.application.ActorContext
@@ -14,6 +15,7 @@ import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.entity.Visit
 import dev.cradle.lobby.domain.repository.PaymentAttemptRepository
 import dev.cradle.lobby.domain.repository.VisitRepository
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.VisitId
@@ -53,13 +55,13 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_in_progress を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 93L), host = EmployeeId(id = 6L), hostName = "s11", visitor = VisitorNameFixture(text = "s12"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(502L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.PaymentInProgress),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 93L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 93L), host = EmployeeId(id = 6L), hostName = "s11", visitor = VisitorNameFixture(text = "s12"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -71,13 +73,13 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_not_yet_left を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s9", visitor = VisitorNameFixture(text = "s10"), phase = VisitPhase.Expected)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(500L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotYetLeft),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 91L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s9", visitor = VisitorNameFixture(text = "s10"), phase = VisitPhase.Expected)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -89,15 +91,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_not_yet_left を再現する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(503L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotYetLeft),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 91L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -109,15 +111,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_not_yet_left を再現する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(504L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotYetLeft),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 91L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -129,13 +131,13 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_not_yet_left を再現する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Expected)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(505L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotYetLeft),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 91L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Expected)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -147,15 +149,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_ok を再現する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(503L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 503L), visit = VisitId(id = 92L), amount = 1L, tries = 0L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 503L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(3L, 2L)), tries = 0L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -167,15 +169,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_ok を再現する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(504L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 504L), visit = VisitId(id = 92L), amount = 1L, tries = 0L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 504L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(3L, 2L)), tries = 0L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -187,15 +189,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_ok を再現する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(503L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 5L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 503L), visit = VisitId(id = 92L), amount = 1L, tries = 0L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 503L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(3L, 2L)), tries = 0L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s12", visitor = VisitorNameFixture(text = "s13"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s14", visitor = VisitorNameFixture(text = "s15"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -207,15 +209,15 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_ok を再現する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(504L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 5L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 504L), visit = VisitId(id = 92L), amount = 1L, tries = 0L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized), PaymentAttemptFixture(id = PaymentAttemptId(id = 504L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(3L, 2L)), tries = 0L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s13", visitor = VisitorNameFixture(text = "s14"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s15", visitor = VisitorNameFixture(text = "s16"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -243,13 +245,13 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_unknown_visit を再現する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 93L), host = EmployeeId(id = 6L), hostName = "s11", visitor = VisitorNameFixture(text = "s12"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(502L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.UnknownVisit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 91L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 93L), host = EmployeeId(id = 6L), hostName = "s11", visitor = VisitorNameFixture(text = "s12"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -277,13 +279,13 @@ abstract class StartPaymentUseCaseContractTest {
 	fun `execute は定理 execute_unknown_visit を再現する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s9", visitor = VisitorNameFixture(text = "s10"), phase = VisitPhase.Expected)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(500L)
 		val useCase = useCase(paymentAttemptRepository, visitRepository, paymentAttemptIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.UnknownVisit),
 			useCase.execute(c = StartPaymentCommand(visit = VisitId(id = 92L))))
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s9", visitor = VisitorNameFixture(text = "s10"), phase = VisitPhase.Expected)),
 			visitRepository.findAll().map { it.toFixture() })

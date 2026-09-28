@@ -16,6 +16,7 @@ class EmitMain(
 
 	fun emitAll() {
 		emitFile(null, "DomainResult") { domainResultBody }
+		if (ir.usesRat) emitFile(null, "Rational") { rationalBody }
 		for (td in ir.types) {
 			when (td.role) {
 				// Row はテスト専用の概念(DB スキーマ → Read Model の変換可能性の
@@ -217,6 +218,7 @@ class EmitMain(
 		if (subpkg != null && body.contains(".toFixture(")) {
 			imports.add("${out.basePackage}.toFixture")
 		}
+		if (subpkg != null && RATIONAL_REF.containsMatchIn(body)) imports.add("${out.basePackage}.Rational")
 		(if (toTest) testOut else out).file(subpkg, name, imports, body)
 	}
 
@@ -227,6 +229,42 @@ class EmitMain(
 sealed interface DomainResult<out E, out A> {
 	data class Ok<out A>(val value: A) : DomainResult<Nothing, A>
 	data class Err<out E>(val error: E) : DomainResult<E, Nothing>
+}
+""".trimIndent()
+
+	/** 有理数(Lean の `Rat`)の表現の型。標準ライブラリに無いので生成する(業務の実装ではない)。 */
+	private val rationalBody = """
+import java.math.BigInteger
+
+/**
+ * 有理数(Lean の `Rat` の写し)。分母は正、分子と分母は既約、符号は分子が持つ —
+ * Lean の `Rat` と同じ正規形なので、等値は値の等しさになる。構築は [of] だけ。
+ * 演算は Lean と同じ意味(0 で割ると 0)で、桁は溢れない(BigInteger)。
+ */
+class Rational private constructor(val numerator: BigInteger, val denominator: BigInteger) : Comparable<Rational> {
+	operator fun plus(o: Rational): Rational = of(numerator * o.denominator + o.numerator * denominator, denominator * o.denominator)
+	operator fun minus(o: Rational): Rational = of(numerator * o.denominator - o.numerator * denominator, denominator * o.denominator)
+	operator fun times(o: Rational): Rational = of(numerator * o.numerator, denominator * o.denominator)
+	operator fun div(o: Rational): Rational = of(numerator * o.denominator, denominator * o.numerator)
+	operator fun unaryMinus(): Rational = Rational(-numerator, denominator)
+	override fun compareTo(other: Rational): Int = (numerator * other.denominator).compareTo(other.numerator * denominator)
+	override fun equals(other: Any?): Boolean = other is Rational && numerator == other.numerator && denominator == other.denominator
+	override fun hashCode(): Int = 31 * numerator.hashCode() + denominator.hashCode()
+	override fun toString(): String = if (denominator == BigInteger.ONE) "${'$'}numerator" else "${'$'}numerator/${'$'}denominator"
+
+	companion object {
+		val ZERO: Rational = Rational(BigInteger.ZERO, BigInteger.ONE)
+
+		/** 正規形にして作る。分母が 0 なら 0(Lean の `mkRat` と同じ)。 */
+		fun of(numerator: BigInteger, denominator: BigInteger = BigInteger.ONE): Rational {
+			if (denominator.signum() == 0) return ZERO
+			val g = numerator.gcd(denominator)
+			val sign = denominator.signum().toBigInteger()
+			return Rational(numerator / g * sign, denominator / g * sign)
+		}
+
+		fun of(numerator: Long, denominator: Long = 1L): Rational = of(BigInteger.valueOf(numerator), BigInteger.valueOf(denominator))
+	}
 }
 """.trimIndent()
 

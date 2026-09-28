@@ -1,6 +1,7 @@
 package dev.cradle.lobby
 
 import dev.cradle.lobby.domain.entity.PaymentAttempt
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.PaymentResult
@@ -10,7 +11,7 @@ import dev.cradle.lobby.domain.valueobject.VisitId
 data class PaymentAttemptImpl(
 	override val id: PaymentAttemptId,
 	override val visit: VisitId,
-	override val amount: Long,
+	override val amount: Money,
 	override val tries: Long,
 	override val phase: PaymentPhase,
 ) : PaymentAttempt {
@@ -25,7 +26,7 @@ data class PaymentAttemptImpl(
 
 	companion object {
 		/** `PaymentAttempt.start` の写し: 送れる状態で、まだ 1 度も送っていない。 */
-		fun start(id: PaymentAttemptId, visit: VisitId, amount: Long): PaymentAttemptImpl =
+		fun start(id: PaymentAttemptId, visit: VisitId, amount: Money): PaymentAttemptImpl =
 			PaymentAttemptImpl(id, visit, amount, tries = 0L, phase = PaymentPhase.Pending)
 
 		/** 確定結果が導く段階（`settle` / `settledAs` の match）。 */

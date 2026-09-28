@@ -23,6 +23,8 @@ sealed interface IrType {
 	    Kotlin 表現は java.util.UUID。IR には現れず、wire="uuid" の Id 型の
 	    単一フィールドをパース時に置き換える。 */
 	data object Uuid : IrType
+	/** 有理数(Lean core の `Rat`)。Kotlin は生成型 `Rational`、オラクル値とワイヤは {"numerator": 整数, "denominator": 正の整数}(既約)。 */
+	data object Rat : IrType
 	data class ListOf(val of: IrType) : IrType
 	data class OptionOf(val of: IrType) : IrType
 	data class PairOf(val fst: IrType, val snd: IrType) : IrType
@@ -44,6 +46,7 @@ sealed interface IrType {
 				"date" -> Date
 				"datetime" -> DateTime
 				"zoned" -> Zoned
+				"rat" -> Rat
 				"list" -> ListOf(parse(o.getValue("of")))
 				"option" -> OptionOf(parse(o.getValue("of")))
 				"pair" -> PairOf(parse(o.getValue("fst")), parse(o.getValue("snd")))
@@ -437,6 +440,29 @@ class Ir(
 	val dropped: List<IrDropped> = emptyList(),
 ) {
 	private val byLean: Map<String, IrTypeDef> = types.associateBy { it.lean }
+
+	/** 有理数(`Rat`)が型・署名のどこかに現れるか — 生成型 `Rational` を出すかの判定。 */
+	val usesRat: Boolean by lazy {
+		fun IrType.hasRat(): Boolean = when (this) {
+			IrType.Rat -> true
+			is IrType.ListOf -> of.hasRat()
+			is IrType.OptionOf -> of.hasRat()
+			is IrType.PairOf -> fst.hasRat() || snd.hasRat()
+			is IrType.Arrow -> from.hasRat() || to.hasRat()
+			is IrType.Result -> err.hasRat() || ok.hasRat()
+			is IrType.WithDefault -> of.hasRat()
+			else -> false
+		}
+		val fieldTypes = types.flatMap { td ->
+			when (val s = td.shape) {
+				is IrShape.Structure -> s.fields.map { it.type }
+				is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.map { it.type } }
+				is IrShape.Enum -> emptyList()
+			}
+		}
+		val methods = (queryServices + useCases + domainServices).flatMap { it.methods } + behaviors.flatMap { it.methods }
+		(fieldTypes + methods.flatMap { m -> m.params.map { it.type } + m.ret }).any { it.hasRat() }
+	}
 
 	fun typeDef(lean: String): IrTypeDef =
 		byLean[lean] ?: error("IR に型 $lean がありません")

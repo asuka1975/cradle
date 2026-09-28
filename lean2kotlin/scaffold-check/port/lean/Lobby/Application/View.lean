@@ -1,5 +1,5 @@
 /-
-  閲覧の共有語彙（View）。View→ドメイン語彙の壁: ふるまいを持つ VO（VisitorName）は View 自身の語彙（String）で写す。
+  閲覧の共有語彙（View）。View→ドメイン語彙の壁: ドメインの VO（VisitorName・Money）は View 自身の語彙（String・Rat）で写す。
 -/
 import Lobby.Domain.ValueObject
 
@@ -20,7 +20,7 @@ deriving Repr, DecidableEq
 structure PaymentView (PaymentAttemptId VisitId : Type) where
   id     : PaymentAttemptId
   visit  : VisitId
-  amount : Nat
+  amount : Rat
   tries  : Nat
   phase  : PaymentPhase
 deriving Repr, DecidableEq

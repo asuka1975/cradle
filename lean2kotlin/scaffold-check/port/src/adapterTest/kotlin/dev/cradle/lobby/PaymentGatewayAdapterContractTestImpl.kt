@@ -6,6 +6,7 @@ import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeO
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeRequest
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayInquireOutcome
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayInquireRequest
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentResult
 
@@ -48,31 +49,31 @@ class PaymentGatewayAdapterContractTestImpl : PaymentGatewayAdapterContractTest(
 	override fun arrangeAuthorizeAuthorized(): PaymentGatewayAuthorizeRequest {
 		reachable()
 		stub.decide(PaymentAttemptId(1L), PaymentGatewayAuthorizeOutcome.Authorized)
-		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = 1L, attemptNo = 1L)
+		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = Money(Rational.of(3L, 2L)), attemptNo = 1L)
 	}
 
 	override fun arrangeAuthorizeDeclined(): PaymentGatewayAuthorizeRequest {
 		reachable()
 		stub.decide(PaymentAttemptId(2L), PaymentGatewayAuthorizeOutcome.Declined)
-		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(2L), amount = 1L, attemptNo = 1L)
+		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(2L), amount = Money(Rational.of(3L, 2L)), attemptNo = 1L)
 	}
 
 	override fun arrangeAuthorizeAccepted(): PaymentGatewayAuthorizeRequest {
 		reachable()
 		stub.decide(PaymentAttemptId(3L), PaymentGatewayAuthorizeOutcome.Accepted)
-		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(3L), amount = 1L, attemptNo = 1L)
+		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(3L), amount = Money(Rational.of(3L, 2L)), attemptNo = 1L)
 	}
 
 	override fun arrangeAuthorizeUnavailable(): PaymentGatewayAuthorizeRequest {
 		reachable()
 		stub.down = true
-		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = 1L, attemptNo = 1L)
+		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = Money(Rational.of(3L, 2L)), attemptNo = 1L)
 	}
 
 	override fun arrangeAuthorizeUnknown(): PaymentGatewayAuthorizeRequest {
 		reachable()
 		stub.silent = true
-		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = 1L, attemptNo = 2L)
+		return PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(1L), amount = Money(Rational.of(3L, 2L)), attemptNo = 2L)
 	}
 
 	override fun arrangeInquireSettled(): PaymentGatewayInquireRequest {

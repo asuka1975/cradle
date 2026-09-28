@@ -4,12 +4,14 @@
 package dev.cradle.lobby.application.usecase.dispatchpaymentusecase
 
 import dev.cradle.lobby.PaymentAttemptFixture
+import dev.cradle.lobby.Rational
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGateway
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeOutcome
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayAuthorizeRequest
 import dev.cradle.lobby.application.port.paymentgateway.PaymentGatewayMock
 import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.repository.PaymentAttemptRepository
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.VisitId
@@ -46,8 +48,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は appliedNotCommitted の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -58,7 +60,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -66,9 +68,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は appliedNotCommitted の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
 		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -79,7 +81,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -87,9 +89,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は appliedNotCommitted の宣言と一致する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -100,7 +102,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -108,8 +110,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は appliedNotCommitted の宣言と一致する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
 		val useCase = faultedAppliedNotCommitted(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -120,7 +122,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -128,8 +130,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -140,7 +142,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -148,9 +150,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
 		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -161,7 +163,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -169,9 +171,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -182,7 +184,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -190,8 +192,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は markedNotSent の宣言と一致する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
 		val useCase = faultedMarkedNotSent(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -202,7 +204,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertUntouched()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -210,8 +212,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -222,7 +224,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -230,9 +232,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unavailable)))
 		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -243,7 +245,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -251,9 +253,9 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(3)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Authorized)))
 		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -264,7 +266,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 
@@ -272,8 +274,8 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 	@Test
 	fun `execute の途中の技術的障害の観測は sentNoAnswer の宣言と一致する(4)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = 4L, attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		val paymentGateway = PaymentGatewayMock(listOf(PaymentGatewayMock.Authorize(request = PaymentGatewayAuthorizeRequest(attempt = PaymentAttemptId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), attemptNo = 5L), outcome = PaymentGatewayAuthorizeOutcome.Unknown)))
 		val useCase = faultedSentNoAnswer(paymentAttemptRepository, paymentGateway)
 		var thrown: Throwable? = null
 		try {
@@ -284,7 +286,7 @@ abstract class DispatchPaymentUseCaseFaultContractTest {
 		paymentGateway.assertComplete()
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 	}
 }

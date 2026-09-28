@@ -5,6 +5,7 @@ package dev.cradle.lobby
 
 import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.entity.Visit
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.VisitId
@@ -17,7 +18,7 @@ import dev.cradle.lobby.runtime.EmployeeId
 // 橋渡し型(entity-like を運ぶ sealed / VO 構造)は平行 fixture を持つ —
 // fixture 語彙の閉包(観測レコードは本番 interface を運ばない)。
 
-data class PaymentAttemptFixture(val id: PaymentAttemptId, val visit: VisitId, val amount: Long, val tries: Long, val phase: PaymentPhase)
+data class PaymentAttemptFixture(val id: PaymentAttemptId, val visit: VisitId, val amount: Money, val tries: Long, val phase: PaymentPhase)
 
 data class VisitFixture(val id: VisitId, val host: EmployeeId, val hostName: String, val visitor: VisitorNameFixture, val phase: VisitPhase)
 

@@ -4,12 +4,16 @@
   観測は 5 つ。承認・拒否は確定、受付は確定の通知が後で届く、送れなかったなら同じ鍵で送り直してよく、
   答えが無いなら送ったかもしれないので送り直さず照会する。
 -/
+import Lobby.Domain.ValueObject
+
 namespace Lobby.Application.Port.PaymentGateway.Authorize
+
+open Lobby
 
 /-- 要求: どの試みを、いくらで、何度目として送るか。attempt が冪等キー。 -/
 structure Request (PaymentAttemptId : Type) where
   attempt   : PaymentAttemptId
-  amount    : Nat
+  amount    : Money
   attemptNo : Nat
 deriving Repr, DecidableEq
 

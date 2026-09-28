@@ -8,7 +8,12 @@
           "outcome": "authorized",
           "port": "PaymentGateway",
           "request": {
-            "amount": 1,
+            "amount": {
+              "value": {
+                "denominator": 2,
+                "numerator": 3
+              }
+            },
             "attempt": {
               "id": 0
             },
@@ -53,7 +58,12 @@
               "outcome": "authorized",
               "port": "PaymentGateway",
               "request": {
-                "amount": 1,
+                "amount": {
+                  "value": {
+                    "denominator": 2,
+                    "numerator": 3
+                  }
+                },
                 "attempt": {
                   "id": 0
                 },
@@ -84,7 +94,12 @@
           },
           "attempts": [
             {
-              "amount": 1,
+              "amount": {
+                "value": {
+                  "denominator": 2,
+                  "numerator": 3
+                }
+              },
               "id": {
                 "id": 0
               },
@@ -117,7 +132,10 @@
         "views": {
           "payments": [
             {
-              "amount": 1,
+              "amount": {
+                "denominator": 2,
+                "numerator": 3
+              },
               "id": {
                 "id": 0
               },
@@ -152,7 +170,12 @@
               "outcome": "authorized",
               "port": "PaymentGateway",
               "request": {
-                "amount": 1,
+                "amount": {
+                  "value": {
+                    "denominator": 2,
+                    "numerator": 3
+                  }
+                },
                 "attempt": {
                   "id": 0
                 },
@@ -186,7 +209,12 @@
             "outcome": "authorized",
             "port": "PaymentGateway",
             "request": {
-              "amount": 1,
+              "amount": {
+                "value": {
+                  "denominator": 2,
+                  "numerator": 3
+                }
+              },
               "attempt": {
                 "id": 0
               },
@@ -208,7 +236,12 @@
           },
           "attempts": [
             {
-              "amount": 1,
+              "amount": {
+                "value": {
+                  "denominator": 2,
+                  "numerator": 3
+                }
+              },
               "id": {
                 "id": 0
               },
@@ -241,7 +274,10 @@
         "views": {
           "payments": [
             {
-              "amount": 1,
+              "amount": {
+                "denominator": 2,
+                "numerator": 3
+              },
               "id": {
                 "id": 0
               },
@@ -276,7 +312,12 @@
               "outcome": "authorized",
               "port": "PaymentGateway",
               "request": {
-                "amount": 1,
+                "amount": {
+                  "value": {
+                    "denominator": 2,
+                    "numerator": 3
+                  }
+                },
                 "attempt": {
                   "id": 0
                 },
@@ -329,7 +370,12 @@
           },
           "attempts": [
             {
-              "amount": 1,
+              "amount": {
+                "value": {
+                  "denominator": 2,
+                  "numerator": 3
+                }
+              },
               "id": {
                 "id": 0
               },
@@ -362,7 +408,10 @@
         "views": {
           "payments": [
             {
-              "amount": 1,
+              "amount": {
+                "denominator": 2,
+                "numerator": 3
+              },
               "id": {
                 "id": 0
               },

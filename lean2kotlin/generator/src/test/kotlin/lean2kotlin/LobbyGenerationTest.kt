@@ -40,7 +40,7 @@ class LobbyGenerationTest {
 			"note: 契約定理テスト: InquirePaymentUseCase — 定理 5 本から 11 ケース(遷移形 — Repository 直参照)",
 			"note: 契約定理テスト: LeaveUseCase — 定理 3 本から 12 ケース(遷移形 — Repository 直参照)",
 			"note: 契約定理テスト: StartPaymentUseCase — 定理 4 本から 13 ケース(遷移形 — Repository 直参照)",
-			"note: 契約定理テスト: PaymentAttempt(Entity)— 定理 12 本から 44 ケース",
+			"note: 契約定理テスト: PaymentAttempt(Entity)— 定理 12 本から 48 ケース",
 			"note: 契約定理テスト: Visit(Entity)— 定理 4 本から 16 ケース",
 			"note: 契約定理テスト: VisitorName(Entity)— 定理 1 本から 4 ケース",
 			"note: 障害契約テスト: BookVisitUseCase — 1 宣言から 4 ケース(障害注入フックつき)",

@@ -4,6 +4,7 @@
 package dev.cradle.lobby.application.usecase.startpaymentusecase
 
 import dev.cradle.lobby.PaymentAttemptFixture
+import dev.cradle.lobby.Rational
 import dev.cradle.lobby.VisitFixture
 import dev.cradle.lobby.VisitorNameFixture
 import dev.cradle.lobby.application.ActorContext
@@ -12,6 +13,7 @@ import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.entity.Visit
 import dev.cradle.lobby.domain.repository.PaymentAttemptRepository
 import dev.cradle.lobby.domain.repository.VisitRepository
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.VisitId
@@ -57,8 +59,8 @@ abstract class StartPaymentUseCaseFaultContractTest {
 	fun `execute の途中の技術的障害の観測は beforeCommit の宣言と一致する(1)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s808", visitor = VisitorNameFixture(text = "s809"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s810", visitor = VisitorNameFixture(text = "s811"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(504L)
@@ -71,7 +73,7 @@ abstract class StartPaymentUseCaseFaultContractTest {
 		}
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s808", visitor = VisitorNameFixture(text = "s809"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s810", visitor = VisitorNameFixture(text = "s811"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })
@@ -82,8 +84,8 @@ abstract class StartPaymentUseCaseFaultContractTest {
 	fun `execute の途中の技術的障害の観測は beforeCommit の宣言と一致する(2)`() {
 		val paymentAttemptRepository = paymentAttemptRepository()
 		val visitRepository = visitRepository()
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)))
-		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)))
+		paymentAttemptRepository.add(paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s804", visitor = VisitorNameFixture(text = "s805"), phase = VisitPhase.Expected)))
 		visitRepository.add(visit(VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s806", visitor = VisitorNameFixture(text = "s807"), phase = VisitPhase.Left)))
 		val paymentAttemptIdGenerator = SequentialPaymentAttemptIdGenerator(503L)
@@ -96,7 +98,7 @@ abstract class StartPaymentUseCaseFaultContractTest {
 		}
 		if (thrown == null) throw AssertionError(
 			"技術的障害が注入されていない(execute が正常終了した)")
-		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)),
+		assertEquals(listOf<PaymentAttemptFixture>(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending), PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)),
 			paymentAttemptRepository.findAll().map { it.toFixture() })
 		assertEquals(listOf<VisitFixture>(VisitFixture(id = VisitId(id = 91L), host = EmployeeId(id = 4L), hostName = "s804", visitor = VisitorNameFixture(text = "s805"), phase = VisitPhase.Expected), VisitFixture(id = VisitId(id = 92L), host = EmployeeId(id = 5L), hostName = "s806", visitor = VisitorNameFixture(text = "s807"), phase = VisitPhase.Left)),
 			visitRepository.findAll().map { it.toFixture() })

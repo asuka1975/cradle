@@ -3,6 +3,7 @@
 
 package dev.cradle.lobby.domain.entity
 
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.VisitId
 
@@ -13,5 +14,5 @@ import dev.cradle.lobby.domain.valueobject.VisitId
  */
 interface PaymentAttemptFactory {
 	/** 始める: 送れる状態で保存する（まだ送っていない）。 */
-	fun start(id: PaymentAttemptId, visit: VisitId, amount: Long): PaymentAttempt
+	fun start(id: PaymentAttemptId, visit: VisitId, amount: Money): PaymentAttempt
 }

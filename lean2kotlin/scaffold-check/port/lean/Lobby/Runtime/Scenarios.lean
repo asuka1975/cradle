@@ -29,28 +29,31 @@ def scenarioByName : String → Option Snapshot
   | "basic" => some Scenario.basic
   | _       => none
 
+/-- 退出済みの来訪の料金（`Pricing.fee` の値）。決済の要求が運ぶ金額。 -/
+def leftFee : Money := ⟨3 / 2, by grind⟩
+
 /-- 社員ディレクトリが太郎を在籍として答える。 -/
 def Environment.directoryFound : Environment :=
   ⟨[.organizationDirectoryFindMember ⟨taro⟩ (.found ⟨"受入 太郎", true⟩)], 0⟩
 
-/-- 決済ゲートウェイが最初の試み（鍵 0、金額 1、1 度目）を承認する。 -/
+/-- 決済ゲートウェイが最初の試み（鍵 0、金額 3/2、1 度目）を承認する。 -/
 def Environment.paymentAuthorized : Environment :=
-  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, 1, 1⟩ .authorized], 0⟩
+  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, leftFee, 1⟩ .authorized], 0⟩
 
 /-- 答えを失い、照会では届いていないと分かり、送り直しで承認される。 -/
 def Environment.paymentLost : Environment :=
-  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, 1, 1⟩ .unknown,
+  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, leftFee, 1⟩ .unknown,
     .paymentGatewayInquire ⟨⟨0⟩⟩ .notFound,
-    .paymentGatewayAuthorize ⟨⟨0⟩, 1, 2⟩ .authorized], 0⟩
+    .paymentGatewayAuthorize ⟨⟨0⟩, leftFee, 2⟩ .authorized], 0⟩
 
 /-- 送る前に中断した試みの再開: 照会では届いておらず、送り直しで承認される。 -/
 def Environment.paymentInterrupted : Environment :=
   ⟨[.paymentGatewayInquire ⟨⟨0⟩⟩ .notFound,
-    .paymentGatewayAuthorize ⟨⟨0⟩, 1, 2⟩ .authorized], 0⟩
+    .paymentGatewayAuthorize ⟨⟨0⟩, leftFee, 2⟩ .authorized], 0⟩
 
 /-- 応答を失った試みの再開: 送った要求は外部で成立しており、照会で確定が分かる。 -/
 def Environment.paymentAnswerLost : Environment :=
-  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, 1, 1⟩ .authorized,
+  ⟨[.paymentGatewayAuthorize ⟨⟨0⟩, leftFee, 1⟩ .authorized,
     .paymentGatewayInquire ⟨⟨0⟩⟩ (.settled .authorized)], 0⟩
 
 def environmentByName : String → Option Environment
