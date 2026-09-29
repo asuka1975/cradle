@@ -54,7 +54,7 @@ def Note.close (n : Note NoteId UserId) : Except DomainError (Note NoteId UserId
 
 - 大域状態を署名に置かない。単位は機能ではなく Entity。同一性・効果・非効果・冪等を別々の定理にする（1 定理 1 概念）。
 - 集約の状態で決まる規則（どの段階からどこへ行けるか・取り消せるか・二重にしない）はルートのふるまいが持ち、断るなら `Except DomainError <Root>` を返す。受け入れる枝・断る枝をそれぞれ定理にする（受け入れた値の全体がオラクルになり、同一性・フレームもそこに含まれる）。規則を複数の UseCase の validate に分けない — 断り忘れた UseCase を足しても何も落ちない形になる。
-- ルートが不変条件（Prop）を持つなら、断るふるまいのすべてについて保存を証明する（`n.b … = .ok n' → Inv n → Inv n'`）。ふるまいを 1 つの `apply (a : Act)` に束ねれば定理は 1 本で済む。
+- ルートが不変条件（Prop）を持つなら、断るふるまいのすべてについて保存を証明する（`n.b … = .ok n' → Inv n → Inv n'`）。ルートの定理として Entity のファイルに置く（`@[contract]` は付けない）。ふるまいを 1 つの `apply (a : Act)` に束ねれば定理は 1 本で済む。骨格のメモは Prop の不変条件を持たないので、ふるまいが守る事実を同じ形で示している（`Note.close_keeps`: 閉じても同一性・書き手・題は変わらない）。
 - これらの `@[contract]` 定理は生成テストの源で、多くは def の言い換え（`rfl`）になる。業務の規則が守られることは §7 の保証の定理が言う。
 - 非ルート Entity は Repository・UseCase を持たない（ルート経由でのみ変わることが構文的保証）。
 - 法則が要求しない観測は署名に置かない。含めない法則・操作はコメントで宣言する。
@@ -180,7 +180,7 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 - `Command.lean`: 合併型 + `Actor` + **反機能の一覧**（存在しない操作とその理由）。
 - `Observation.lean`: 内部入力の合併型（Observation 形の UseCase ごとに 1 構成子。無ければ構成子の無い型）。`Command.lean` には混ぜない。
 - `Environment.lean`: `Interaction`（Port 操作ごとに 1 構成子: 期待する要求と返す観測）・`Environment`（不変の有限 script と cursor）・`check`（cursor は script の範囲内）/ `next` / `consume` / `exhausted`。環境は状態と同じく応答で往復し、プロセス内に持たない。Port を持たない間、`Interaction` の構成子は無い。
-- `Machine.lean`: `Snapshot`（ルートごとのコレクション + 泉の残高）・`check`（泉の境界 `bounds`。集約ルートの制約は観測モデルの構造が運ぶ）・`opened`（名義が届いた帰結。既定は何もしない。`opened_check` で検査の保存を示す）。
+- `Machine.lean`: `Snapshot`（ルートごとのコレクション + 泉の残高）・`check`（泉の境界 `bounds` と、構造が運ばない領域の条項 — 骨格は `ordered`: 並びは同一性の昇順。集約ルートの制約は観測モデルの構造が運ぶ）・`opened`（名義が届いた帰結。既定は何もしない。`opened_check` で検査の保存を示す）。
   5 cmd の経路: `applyCommand` / `apply`（`check` の証明を受け取り、各腕は UseCase の execute への 1 行。泉から汲む腕には `Snapshot.fresh` を渡す）— Port を持たない骨格の形。
   `external` の経路: `Input`（command | observation と障害契約の指名）・`StepResult`（applied | refused | fault | harness）・`FaultSpec`（`beforeCall` | `afterResponse` — 消費位置は構成子が決め、表の値は `@[faultContract]` の def の部分適用。腕で作り直さない）・
   `direct`（Port を使わない腕の配線）・`viaPort`（request → script の次と照合 → execute の固定配線。要求の不一致・script の不足・別の Port 操作・拒否される入力への指名はハーネスの失敗）・`withFault`（腕ごとの表引き。知らない名前はハーネスの失敗）・
@@ -201,7 +201,7 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 |---|---|
 | 1 つの集約ルート | Entity のファイル（ルートの定理。§3） |
 | 1 つの UseCase | その `UseCase.lean` |
-| 複数の UseCase をまたぐ | `Application/Composition/<名前>.lean` — UseCase は観測モデルを更新する純粋関数なので、前の手の結果の状態を次の手に渡して数珠つなぎにし、その性質を証明する（定理と、合成に使う状態の束ねだけを置く） |
+| 複数の UseCase をまたぐ | `Application/Composition/<名前>.lean` — UseCase は観測モデルを更新する純粋関数なので、前の手の結果の状態を次の手に渡して数珠つなぎにし、その性質を証明する（定理と、そのための述語・状態の束ねだけを置く） |
 
 ```lean
 -- CloseNoteUseCase/UseCase.lean（1 つの UseCase に閉じる。成功の向き）
@@ -214,11 +214,11 @@ theorem post_then_close … (hpost : PostNoteUseCase.execute author fountain c b
       CloseNoteUseCase.execute other ⟨fountain.valueAt before.noteIds⟩ mid.notes = .error .notAuthor
 ```
 
-- 向きは 2 つ。成功の向き（`execute … = .ok after → 前提 ∧ 事後`。誰が・どの段階で・何をできたか）と、不変の向き（どの手でもこの性質は崩れない）。エラー枝ごとの定理（`execute_<error>`）は拒否の向きで、`validate` の分岐を写すだけなので保証の代わりにならない。
+- 向きは 2 つ。成功の向き（`execute … = .ok after → 前提 ∧ 事後`。誰が・どの段階で・何をできたか。骨格の `CloseNoteUseCase.execute_ok_only_by_author`）と、不変の向き（どの手でもこの性質は崩れない。骨格の `Composition.steps_keep_notes`: 書く・閉じるのどちらのあとも、メモは消えず、閉じたメモは閉じたまま）。エラー枝ごとの定理（`execute_<error>`）は拒否の向きで、`validate` の分岐を写すだけなので保証の代わりにならない。
 - `@[contract]` を付けない（生成器に渡さない）。サンプルから演繹できる形・列挙の先頭 3 構成子（§9）に縛られない代わりに、Kotlin 側の対応は契約テストと E2E が受け持つ。
 - docstring に出典（`[HS-xxx]`。複数並べてよい）と結論の全文を書く。結論の一部を証明の中で捨てない（`_` で受けて使わない）。仮定は満たせる形にする — 満たせない仮定の定理は何も言わない。定理が空でないか・HS の言うことを言っているかは機械では決まらないので、Evaluator（lean-domain-model スキルの手順）が見る。
 
-転送（`Laws/Properties.lean`）: 読み取りの保証を境界の言葉に移す。観測モデルの構造が運ぶ制約（Prop フィールド）はそのまま使う。境界の検査に依る整合性の仮定は `h : s.Reachable` だけから取る（露出仮定を残さない）。check に無い事実が要るなら `check` に条項を足す（各 UseCase の保存義務になり Reachable が運ぶ）。`Laws/` にファイルを増やさない（保証の定理はここに置かない）。
+転送（`Laws/Properties.lean`）: 読み取りの保証を境界の言葉に移す。観測モデルの構造が運ぶ制約（Prop フィールド）はそのまま使う。境界の検査に依る整合性の仮定は `h : s.Reachable` だけから取る（露出仮定を残さない）。check に無い事実が要るなら `check` に条項を足す（各 UseCase の保存義務になり Reachable が運ぶ）。条項にするのは、外から受け取った状態で破れうり、Prop フィールドや型が運ばない、1 つの集約の中の事実。骨格の手本は `Snapshot.ordered`（並び = 同一性の昇順）で、腕ごとの保存は `check_of_note_add` / `check_of_note_update`、破った状態が検査を通らないことは `Scenarios.lean` の `#guard`。条項の無い `Reachable` が運ぶのは泉の境界だけで、名前ほどのことは保証しない。`Laws/` にファイルを増やさない（保証の定理はここに置かない）。
 
 ## 8. 契約定理の指名
 

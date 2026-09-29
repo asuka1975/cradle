@@ -48,6 +48,16 @@ def Note.isOpen (n : Note NoteId UserId) : Bool := !n.closed
     n.close = .error .alreadyClosed := by
   simp [Note.close, h]
 
+/-- どのふるまいでも同一性・書き手・題は変わらない（ルートの定理 — 観測モデルの一意性と並びが保たれる理由）。
+    骨格のメモは Prop の不変条件を持たないので、ふるまいが守る事実を保存の形（`n.b = .ok n' → …`）で言う。
+    @[contract] は付けない — 受け入れた値の全体は close_open がオラクルとして固定する。 -/
+theorem Note.close_keeps (n n' : Note NoteId UserId) (h : n.close = .ok n') :
+    n'.id = n.id ∧ n'.author = n.author ∧ n'.title = n.title := by
+  unfold Note.close at h
+  split at h
+  · cases h
+  · cases h; exact ⟨rfl, rfl, rfl⟩
+
 /-- 閉じるを適用し、断られたらそのままにしても同一性は変わらない（観測モデルの点更新に渡す形）。
     @[contract] は付けない — 証明の分解装置。 -/
 theorem Note.close_getD_id (n : Note NoteId UserId) : (n.close.toOption.getD n).id = n.id := by

@@ -89,27 +89,45 @@ theorem no_fault_of_empty {α β : Type} {f : Option (String × α)} (hf : ∀ e
 
 /-! ### 集約ごとの保存 -/
 
-/-- 泉から汲んだ同一性のメモを足しても検査は保たれる。 -/
+/-- 泉から汲んだ同一性のメモを足しても検査は保たれる（泉の境界: 新しい同一性は残高そのもの、
+    並び: 既存の同一性はどれも残高より小さいので、末尾に足しても昇順のまま）。 -/
 theorem check_of_note_add (s : Snapshot) (n : Note) (hfresh : n.id ∉ s.notes.ids)
     (hfree : n.title ∉ s.notes.titles) (hid : n.id = ⟨s.noteIds.next⟩) (h : s.check = true) :
     (⟨s.notes.add n hfresh hfree, ⟨s.noteIds.next + 1⟩⟩ : Snapshot).check = true := by
-  show ((s.notes.notes ++ [n]).all _) = true
-  rw [List.all_append, Bool.and_eq_true]
-  constructor
-  · simp only [Snapshot.check, Snapshot.bounds] at h
-    rw [List.all_eq_true] at h ⊢
-    intro x hx
-    have := h x hx
-    simp only [decide_eq_true_eq] at this ⊢
-    omega
-  · simp [hid]
+  obtain ⟨hb, ho⟩ := (Bool.and_eq_true _ _).mp h
+  simp only [Snapshot.bounds, List.all_eq_true, decide_eq_true_eq] at hb
+  refine (Bool.and_eq_true _ _).mpr ⟨?_, ?_⟩
+  · show ((s.notes.notes ++ [n]).all _) = true
+    rw [List.all_append, Bool.and_eq_true]
+    constructor
+    · rw [List.all_eq_true]
+      intro x hx
+      have := hb x hx
+      simp only [decide_eq_true_eq] at this ⊢
+      omega
+    · simp [hid]
+  · simp only [Snapshot.ordered, decide_eq_true_eq] at ho ⊢
+    show ((s.notes.notes ++ [n]).map (·.id.id)).Pairwise (· < ·)
+    rw [List.map_append, List.pairwise_append]
+    refine ⟨ho, by simp, ?_⟩
+    intro a ha b hb'
+    simp only [List.map_cons, List.map_nil, List.mem_singleton] at hb'
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ha
+    rw [hb', hid]
+    exact hb x hx
 
-/-- 同一性と題を変えない点更新は検査を保つ。 -/
+/-- 同一性と題を変えない点更新は検査を保つ（同一性の列が変わらないので、泉の境界も並びもそのまま）。 -/
 theorem check_of_note_update (s : Snapshot) (id : NoteId) (f : Note → Note)
     (hf : ∀ n, (f n).id = n.id) (ht : ∀ n, (f n).title = n.title) (h : s.check = true) :
     (⟨s.notes.update id f hf ht, s.noteIds⟩ : Snapshot).check = true := by
-  simp only [Snapshot.check, Snapshot.bounds] at h ⊢
-  exact all_updateWhere (fun n => n.id == id) f _ _ h (fun x hx => by rw [hf]; exact hx)
+  obtain ⟨hb, ho⟩ := (Bool.and_eq_true _ _).mp h
+  refine (Bool.and_eq_true _ _).mpr ⟨?_, ?_⟩
+  · simp only [Snapshot.bounds] at hb ⊢
+    exact all_updateWhere (fun n => n.id == id) f _ _ hb (fun x hx => by rw [hf]; exact hx)
+  · simp only [Snapshot.ordered, decide_eq_true_eq] at ho ⊢
+    show ((updateWhere (fun n => n.id == id) f s.notes.notes).map (·.id.id)).Pairwise (· < ·)
+    rw [updateWhere_map_of_key (fun n => n.id == id) f (fun n => n.id.id) (fun x => by rw [hf]) s.notes.notes]
+    exact ho
 
 /-- 旧経路の 1 手が検査を保つこと（external の腕はこれに帰着する）。 -/
 theorem check_of_apply (s s' : Snapshot) (today : Date) (actor : Actor) (cmd : Command)
