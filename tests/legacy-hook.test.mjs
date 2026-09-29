@@ -79,7 +79,7 @@ test("ビルド後のレビューとgolden促しを失敗時には出さない",
   const lake = invoke("post-bash", "Bash", { command: "lake build" }, { tool_response: "Build completed successfully" });
   assert.equal(lake.hookSpecificOutput.hookEventName, "PostToolUse");
   assert.match(lake.hookSpecificOutput.additionalContext, /golden-check/);
-  assert.match(lake.hookSpecificOutput.additionalContext, /lean-model-review/);
+  assert.match(lake.hookSpecificOutput.additionalContext, /lean-modeling-evaluator/);
   assert.equal(invoke("post-bash", "Bash", { command: "lake build" }, { tool_response: "error: failed" }), null);
 });
 

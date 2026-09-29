@@ -26,6 +26,6 @@ description: Cradle の芯 — 仕様はハーネスであり、ハーネスは�
 - **`documents/ai-notes/` は規約ではない。** AI の申し送りと規約の候補で、ユーザーが承認したものだけが規約になる。そこを根拠にコードを書かない。
 - **Lean を変えたら**: `lake build` → `cradle golden-check`（変えるつもりのなかった流れが変わっていないか）→ 変えた意図があるものだけ `--update`。
   生成を回したら `cradle regen-impact` で、変わった生成シンボルを参照する手書き実装と契約テストを確かめてから実装に着手する。
-- **ビルドが通ったら止まらない**: `gradlew build` 成功後は sql-perf-review と backend-design-review、frontend を触ったら frontend-ux-review、モデルを変えて `lake build` が通ったら lean-model-review。指摘は提示で終えず直す。
+- **ビルドが通ったら止まらない**: `gradlew build` 成功後は sql-perf-review と backend-design-review、frontend を触ったら frontend-ux-review、モデルを変えたら lean-domain-model スキルの Evaluator（`lean-modeling-evaluator`）を回す。指摘は提示で終えず直す。
 - **止まる前に**: `cradle unslop --diff` の error を 0 にする。ai-notes に書き置く課題があれば「規約ではない」の断りを冒頭に置く。
 - 対話・成果物・レポートは日本語。エキスパートの言葉は言い換えず、そのまま残す。

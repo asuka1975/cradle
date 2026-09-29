@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | 1 | 探索 | `ddd` | `documents/ddd/`（出来事・ホットスポット・用語） | open の MQ が無い、または残りが業務上「どちらでも」と確認された |
 | 2 | インフラ設計 | `infra-design` | `documents/infra-design/`（INFRA-D/A/Q・作らないもの） | 表現に関わる決定（ID など）が INFRA-D になっている |
-| 3 | Lean 化 | `lean-domain-model`（+ `lean-model-review`） | `lean/`（型・UseCase・定理・シナリオ・CLI） | `lake build`・`cradle lean-check`・`golden-check` が通る・resolved HS ごとに保証の定理がある（`cradle status`）・形式化レビューの High が無い |
+| 3 | Lean 化 | `lean-domain-model`（Planner → Generator → Evaluator） | `lean/`（型・UseCase・定理・シナリオ・CLI） | `lake build`・`cradle lean-check`・`golden-check` が通る・Evaluator が合格（resolved HS の網羅と保証の定理の中身に High が無い） |
 | 4 | 仕様アニメーション | `domain-mockup` | `lean/mockup/`（ドメインの語彙の画面）・`lean/golden/`（外部能力を使う流れは環境つき） | エキスパートが JSON を読まずに主要な流れ（外部の答え・通知・中断を含む）を一巡でき、golden を採った |
 | 5 | API 契約 | `api-contract` | `documents/codebase/openapi.yaml`・生成クライアント | コマンド 1 対 1・画面 1 対 1・422 の語彙が揃っている |
 | 6 | フロントエンド | `frontend`（+ `frontend-ux-review`） | `frontend/`（業務のまとまりごとの画面。相手は Lean CLI） | **人間が画面で確かめた** |
