@@ -67,6 +67,18 @@ theorem execute_ok_shape (actor : ActorContext UserId) (c : Command NoteId)
   | error e => rw [hv] at h; cases h
   | ok n => rw [hv] at h; injection h with h; exact ⟨n, h.symm⟩
 
+/-- 保証（成功の向き）: 閉じられたなら、宛先のメモがあり、名義は書いた本人で、閉じる前は開いていた。
+    @[contract] は付けない — 保証の定理（生成器には渡さない）。 -/
+theorem execute_ok_only_by_author (actor : ActorContext UserId) (c : Command NoteId)
+    (before after : NoteRepositoryState NoteId UserId) (h : execute actor c before = .ok after) :
+    ∃ n, before.find? c.note = some n ∧ n.author = actor.user ∧ n.closed = false := by
+  unfold execute validate at h
+  cases hf : before.find? c.note with
+  | none => simp [hf, Except.map] at h
+  | some n =>
+    refine ⟨n, rfl, ?_⟩
+    by_cases ha : n.author = actor.user <;> by_cases hc : n.closed <;> simp_all [Except.map]
+
 /-- 同一性列は変わらない（フレーム — 消えない・増えない・入れ替わらない）。@[contract] は付けない — execute_ok の系。 -/
 theorem act_ids (c : Command NoteId) (before : NoteRepositoryState NoteId UserId)
     (n : Note NoteId UserId) : (act c before n).ids = before.ids :=

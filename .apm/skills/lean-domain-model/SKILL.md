@@ -23,7 +23,7 @@ description: Use to create, update or verify the Lean 4 executable specification
 ### 初回
 
 1. `cradle status` で `lean/` の状態を確かめる。骨格が無ければ cradle-init スキル。
-2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase）→ Runtime（Ids → Command → Observation → Environment → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格のサンプル（メモ: `Entity/Note`・PostNote / CloseNote / Notes の UseCase・`basic` シナリオ・golden の `basic`）を丸ごと置き換える。サンプルの型や語彙を実ドメインに混ぜない。置き換わると `cradle lean-check` の scaffold 警告と `cradle status` の「骨格のサンプル」が消える。
+2. Domain（ValueObject → Error → Entity → DomainService）→ Application（ActorContext → RepositoryState → ReadModel → View → Projection → UseCase → Composition）→ Runtime（Ids → Command → Observation → Environment → Machine → Reachable → Views → Json → Scenarios）→ Laws の順に、骨格のサンプル（メモ: `Entity/Note`・PostNote / CloseNote / Notes の UseCase・`basic` シナリオ・golden の `basic`）を丸ごと置き換える。サンプルの型や語彙を実ドメインに混ぜない。置き換わると `cradle lean-check` の scaffold 警告と `cradle status` の「骨格のサンプル」が消える。
    `Views` は集約ごとに一覧の口を必ず持つ（lean-spec 規則）。口が無いモデルは画面でも golden でも観測できない。
 3. `lake build` が通るまで直す。証明が難航するものは `sorry` + `-- TODO(proof):` で先に進み、全体を成立させてから戻る。
 4. シナリオの期待値は `#eval` で確認してから `#guard` で固定する。
@@ -63,7 +63,7 @@ Row に足りない事実が出たら、足す前に「そのフィールドを�
 
 - 確定した用語は英語候補で型・フィールドに。英語候補が空の用語は文脈から命名し、日本語の原語を docstring に残す。作った名前は用語集に無いので、docstring の 1 文目がそのまま暫定の呼び名として探索に戻る（`cradle unslop` の lean-name-unlisted が列挙し、`naming.md` に写る）。用語集の英語候補が識別子と違う行を見つけたら識別子を改名する（用語集 → Lean の一方向）。
 - 同一性が探索で確定しているものは構造で表す（同名の並存は「防がない」のではなく「同一性に関与しないから当然」）。`rfl` で閉じる定理は、文が def を言い換えていることを示すだけで、def が正しい証拠にはならない。
-- resolved HS は (a) 型で表現不能にする (b) `<Root>RepositoryState` の Prop フィールド（一意制約）にする (c) 集約ローカルの定理にする、の順で割り当てる。どれに割り当てても、HS の結論を ∀ で言う保証の定理を `Laws/Guarantees.lean` に 1 本以上置く（`@[contract]` は付けない。形は lean-conventions §7）。
+- resolved HS は (a) 型で表現不能にする (b) `<Root>RepositoryState` の Prop フィールド（一意制約）にする (c) 集約ローカルの定理にする、の順で割り当てる。そのうえで HS の結論は保証の定理が ∀ で言う。1 HS 1 定理にせず、モデリングで抽象化した少数の定理が複数の HS をまとめて保証する。置き場は事実が閉じる単位（ルート → Entity、1 UseCase → その `UseCase.lean`、UseCase をまたぐ → `Application/Composition/`。`@[contract]` は付けない。形は lean-conventions §7）。
 - 却下された UX 提案は反機能として `Runtime/Command.lean` の一覧に書き、コマンドが無いこととフレーム定理で固定する。
 - すべての型・定理・分岐の docstring に出典（`[HS-xxx]` `[イベント#n]`）。ステータス語は書かない。導出した事実は「(導出)」。
 

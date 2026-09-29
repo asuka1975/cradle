@@ -11,10 +11,10 @@ applyTo: "lean/**/*.lean"
 ## 層と壁
 
 - `Domain/`（ValueObject / Error / Entity / DomainService）は Application も Runtime も import しない。
-- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase）は Runtime を import しない。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
+- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase / Composition）は Runtime を import しない。`Composition/` は UseCase を数珠つなぎにした保証の定理（と合成に使う状態の束ね）だけを置く。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
 - 外部能力の Port（自システムが必要とする能力の要求と観測）は `Application/Port/<Port>/<操作>.lean`（Domain が所有するなら `Domain/Port/`）に固定名 `Request` / `Outcome` と自システムの語彙の純データだけを置く（関数フィールドは持たない。詳細は lean-conventions §4b）。
 - 読み取り側（`QueryService.lean` を持つ UseCase・ReadModel・View）は `Domain.Entity` を import しない（CQRS）。Entity を読める読み側は `Projection.lean` と `RepositoryState.lean` だけ。
-- `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。外部能力の環境（Port 操作の script と cursor）も境界の持ち物（`Runtime/Environment.lean`）で、状態には含めない。Port を使う腕は request → script の照合 → execute の固定の配線で、境界が業務の判断を足さない。`Laws/` は保証の転送（`Properties.lean`）と、resolved HS の結論を ∀ で言う保証の定理（`Guarantees.lean`）だけ。
+- `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。外部能力の環境（Port 操作の script と cursor）も境界の持ち物（`Runtime/Environment.lean`）で、状態には含めない。Port を使う腕は request → script の照合 → execute の固定の配線で、境界が業務の判断を足さない。`Laws/` は保証の転送（`Properties.lean`）だけで、ファイルを増やさない。
 - モデルは生成器を知らない（`Lean2Kotlin` 等への言及・依存を書かない）。
 
 ## 形
@@ -34,7 +34,7 @@ applyTo: "lean/**/*.lean"
 
 ## 契約定理
 
-- `@[contract]` = 生成テスト 1 ファミリで、保証ではない（多くは def の言い換え）。resolved HS ごとの保証は `Laws/Guarantees.lean` の定理が ∀ で言い、`@[contract]` を付けない（lean-conventions §7）。
+- `@[contract]` = 生成テスト 1 ファミリで、保証ではない（多くは def の言い換え）。resolved HS の結論は、抽象化した少数の保証の定理が ∀ で言う（1 HS 1 定理にしない。置き場は事実が閉じる単位 — Entity / `UseCase.lean` / `Application/Composition/`。`@[contract]` を付けない。lean-conventions §7）。
 - `@[contract]` の形: UseCase はエラー枝 1 本 = 定理 1 本と `execute_ok`（作用後の状態全体がオラクル。フレーム・泉の消費・追加 / 更新の等式はその系なので指名しない）。Entity / VO のふるまいは効果・非効果・冪等・同一性を指名する。
 - 指名するのは契約面（execute / query）越しに観測できるものだけ。validate 面の定理・他の定理の系・証明の分解装置には付けない。
 - 前提は Decidable、量化変数は生成可能な型、関数は computable。

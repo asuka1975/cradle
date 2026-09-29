@@ -73,7 +73,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 - Repository: ルートごとに `<Root>Repository`。操作は遷移から許されるものだけ導出する — `findById`（Command か Observation が Id を運ぶ）/ `findAll`（常に。並びは保存順）/ `add`（観測モデルに `add` がある、または Factory がある）/ `update`（観測モデルに `update` がある、または自分自身を返すふるまいがある）/ `remove` は出さない。Id が `Unit` のルートは `get` / `save`。観測モデルは集約の列を 1 本の `List` で運ぶ — `Option` や単体のフィールドで個体を運ぶ形、UseCase の State が集約ルートを `Option` / `List` / 単体で直接運ぶ形は生成が理由付きで止まる（§6）。
 - 泉: `<X>IdGeneratorState` ↔ `<X>IdGenerator { nextId(): <X>Id }`（`application`）。供給値の型は泉の値型の写し。
 - UseCase: `validate` / `execute` の署名の写し。State・泉・時計・主体は署名から落ち、効果は Repository 経由で観測する。validate は本番では execute の内部第一段、公開メンバとしてはテストシーム。QueryService は `query` だけ（Row を運ぶメソッドは本番に写さない）。
-- 写さないもの: 観測モデル（RepositoryState）、State のふるまい、契約指名のない静的語彙、入力語彙のふるまい。
+- 写さないもの: 観測モデル（RepositoryState）、State のふるまい、契約指名のない静的語彙、入力語彙のふるまい、`Application/Composition/`（UseCase を数珠つなぎにした保証の定理だけで、生成区分を持たない）。
 - 演繹の受け皿は常に既存の本番契約面。テストのためだけの語彙・interface を作らない。
 
 ## 4. 生成テスト
