@@ -84,7 +84,7 @@ test("生成エージェントはPiのツール名を使い、レビュアーの
   const pi = readFileSync(new URL("../integrations/pi/agents/frontend-ux-reviewer.md", import.meta.url), "utf8");
   assert.match(pi, /tools: bash, read, grep, find, ls/);
   assert.doesNotMatch(pi.split("---")[1], /mcp__|glob|model:/);
-  for (const name of ["backend-design-reviewer", "sql-performance-reviewer", "unslop-reviewer"]) {
+  for (const name of ["backend-design-reviewer", "sql-performance-reviewer", "unslop-reviewer", "lean-modeling-evaluator", "lean-modeling-planner"]) {
     const agent = readFileSync(new URL(`../integrations/opencode/agents/${name}.md`, import.meta.url), "utf8");
     assert.match(agent, /action: edit\n\s+resource: "\*"\n\s+effect: deny/);
     assert.doesNotMatch(agent.split("---")[1], /tools:|model:/);

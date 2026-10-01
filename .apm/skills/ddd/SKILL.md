@@ -47,7 +47,7 @@ description: Use to run or continue domain exploration with the product owner as
    残っていれば編集を手で戻して `ddd.mjs end` をやり直す — モデルを変えるのはフェーズ 2 の仕事。基準は HEAD ではなく `start` の時点なので、`git checkout` / `git stash` で戻さない（未コミットの形式化まで消える）。検査が通るまで `.session` が残り、その間 hook は `documents/ddd/` の編集を許したまま（片付けは中継役だけが行う）。前の探索が終わらないまま `lean/` を形式化したなら `.session` を消してから `start` する。
    `end` は `ddd.mjs answers` を中継した後でだけ通る。回答を待たずに問いを捨てて終えるのは `--abandon`（ユーザーがそう決めたときだけ）。片付けは中継役の仕事で、explorer にやらせない。
 6. **UX レビュー**: 時系列マップが変わったら `ddd-ux-reviewer` をバックグラウンドで起動し、完了したら起票（ID・種別・要約）を中継する。
-7. **形式化（フェーズ 2）**: 正式ドキュメントが変わったら `lean-domain-modeler` をバックグラウンドで起動し、完了したら反映結果と新規 MQ を中継する。用語集の英語候補が識別子と違う行があれば、形式化役が識別子を改名する。
+7. **形式化（フェーズ 2）**: 正式ドキュメントが変わったら、lean-domain-model スキルの Planner → Generator → Evaluator を回し（Planner・Generator・Evaluator はバックグラウンドで起動してよい）、完了したら反映結果・Evaluator の判定・新規 MQ を中継する。用語集の英語候補が識別子と違う行があれば、形式化役が識別子を改名する。
 8. **撤回の伝播**: セッションで HS / UX / MQ が撤回・訂正されたら `cradle refs <ID>` で派生（Lean の出典・openapi・infra-design・README）を洗い、失効した記述を直す（`cradle unslop --all` の lean-ref-retracted も見る）。撤回の記法は documents 規約。
 9. **締め**: 次回の推奨テーマ（open の MQ を優先 — 形式化を止めている問い）を一言。
 
