@@ -58,7 +58,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `Nat` / `String` / `Bool` / `Unit` | `Long` / `String` / `Boolean` / `Unit` |
 | `Rat`（core） | `Rational`（生成型。IR が `Rat` を使うときだけルートに出す。BigInteger で Lean と同じ正規形 — 分母は正・既約・符号は分子 — なので等値は値の等しさ。演算は Lean と同じ意味で 0 で割ると 0。オラクル値とワイヤは `{"numerator", "denominator"}`。DB は分子と分母の 2 列（分母は正の CHECK）で持つのが素直 — 列の設計は実装の持ち物） |
 | `List α` / `Option α` / `α × β` | `List<T>` / `T?` / `Pair<A, B>` |
-| `Except E α` | `DomainResult<E, A>`（生成 sealed 型。依存なし） |
+| `Except E α` | `DomainResult<E, A>`（生成 sealed 型。依存なし）。ルートの断るふるまい（`Except DomainError <Root>`）も interface のメソッドがこれを返す |
 | `Std.Time.PlainDate` / `PlainDateTime` | `java.time.LocalDate` / `LocalDateTime`（ワイヤは ISO-8601） |
 | Id（`id` フィールド 1 つの structure） | `@JvmInline value class`。中身は数値なら `Long`、ToJson が canonical UUID 文字列なら `java.util.UUID` |
 | Entity / ルート / ふるまい持ちの VO | `interface`（フィールドは `val`、ふるまいはメソッド。自分自身の引数はレシーバに畳む） |
@@ -92,7 +92,7 @@ abstract class CloseNoteUseCaseContractTest {
 
 | ファミリ | 源 | 形 |
 |---|---|---|
-| `<X>EntityContractTest`（Entity / ふるまい持ちの VO） | `@[contract]` | 純値形: 実体化フック → メソッド → `toFixture()` 一致。指名された create があれば Factory は `factory()` フック |
+| `<X>EntityContractTest`（Entity / ふるまい持ちの VO） | `@[contract]` | 純値形: 実体化フック → メソッド → `toFixture()` 一致。断るふるまい（`DomainResult` を返す）は受け入れた値だけを `toFixture()` に写し、拒否はそのまま比べる（オラクル値は `{"ok": 値}` / `{"error": 失敗}`）。指名された create があれば Factory は `factory()` フック |
 | `<X>BehaviorsContractTest`（sealed / enum の VO） | `@[contract]` | 純値形: `behaviors()` フックで `<X>Behaviors` の実装を受け、メソッド → 一致 |
 | `<X>UseCaseContractTest`（更新系） | `@[contract]` | 遷移形: State を Repository ごとに分解し `add` で播種 → execute / validate → ルートごとの `findAll` を `toFixture()` で完全一致。泉は before の `next` を種に `Sequential<X>IdGenerator` を注入し消費数も検査。validate の成果物（ルートか証拠の DTO）は返り値も観測。Port を使う UseCase は生成モック（`<Port>Mock` にケースの要求と観測を積む。要求が無いケースは空 = 呼ばれない）をフックに渡し、結果を `runCatching` で受けてモックの完了検査 → 返り値 → Repository の順に判定する（要求不一致で実装が途中で止まった赤を状態差分の赤で隠さない） |
 | `<Port>Mock`（テスト側。Port の package） | `ports` | 本番 Port を実装する決定的モック: 期待の列（操作ごとの `Expectation`）を消費し、違う要求・積んでいない呼び出し・別の操作は記録して `PortHarnessFailure`（AssertionError。業務語彙ではない）を投げる。`assertNoFailure` は記録、`assertComplete` は記録と未消費を検査する |

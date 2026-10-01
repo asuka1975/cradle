@@ -37,7 +37,9 @@ theorem post_then_close (author other : ActorContext UserId) (fountain : Fountai
         exact heq ▸ List.mem_map.mpr ⟨n, hn, rfl⟩)
     simp [hnone, Note.post]
   constructor
-  · simp [CloseNoteUseCase.execute, CloseNoteUseCase.validate, hfind, Note.post, Except.map]
-  · simp [CloseNoteUseCase.execute, CloseNoteUseCase.validate, hfind, Note.post, Except.map, Ne.symm hother]
+  · simp [CloseNoteUseCase.execute, CloseNoteUseCase.validate, CloseNoteUseCase.act, hfind, Note.post,
+      Note.close, bind, Except.bind, Except.map]
+  · simp [CloseNoteUseCase.execute, CloseNoteUseCase.validate, hfind, Note.post, bind, Except.bind,
+      Ne.symm hother]
 
 end Sprout.Application.Composition

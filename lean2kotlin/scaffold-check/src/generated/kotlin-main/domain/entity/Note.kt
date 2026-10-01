@@ -3,6 +3,8 @@
 
 package dev.cradle.scaffold.domain.entity
 
+import dev.cradle.scaffold.DomainResult
+import dev.cradle.scaffold.domain.DomainError
 import dev.cradle.scaffold.domain.valueobject.NoteId
 import dev.cradle.scaffold.domain.valueobject.Title
 import dev.cradle.scaffold.runtime.UserId
@@ -16,6 +18,6 @@ interface Note {
 	val title: Title
 	val closed: Boolean
 	fun isOpen(): Boolean
-	/** 閉じる。 */
-	fun close(): Note
+	/** 閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 */
+	fun close(): DomainResult<DomainError, Note>
 }

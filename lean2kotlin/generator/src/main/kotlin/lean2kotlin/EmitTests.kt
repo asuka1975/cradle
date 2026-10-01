@@ -92,6 +92,11 @@ class EmitTests(
 		is IrType.OptionOf ->
 			if (fixtureNorm(t.of).isNotEmpty()) "?${fixtureNorm(t.of)}" else ""
 		is IrType.WithDefault -> fixtureNorm(t.of)
+		// 断るふるまいの結果: 受け入れた値だけを観測に写す(拒否はそのまま比べる)
+		is IrType.Result ->
+			if (fixtureNorm(t.ok).isNotEmpty())
+				".let { r -> if (r is DomainResult.Ok) DomainResult.Ok(r.value${fixtureNorm(t.ok)}) else r }"
+			else ""
 		else -> ""
 	}
 
@@ -1527,7 +1532,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		val (body, c) = k.collecting(build)
 		val imports = mutableListOf<String>()
 		imports.addAll(framework)
-		if (usesDomainResult && subpkg != null) imports.add("${out.basePackage}.DomainResult")
+		if ((usesDomainResult || DOMAIN_RESULT_REF.containsMatchIn(body)) && subpkg != null) imports.add("${out.basePackage}.DomainResult")
 		for (lean in c.refs) {
 			val td = ir.typeDef(lean)
 			val target = k.packagePathOf(td)

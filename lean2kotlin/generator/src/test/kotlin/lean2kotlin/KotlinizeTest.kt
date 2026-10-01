@@ -73,6 +73,16 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `断るふるまいの結果は ok と error の JSON から DomainResult の構築式に写る`() {
+		val closeT = IrType.Result(IrType.Ref(domainError), IrType.Ref(note))
+		assertEquals("DomainResult.Err(DomainError.AlreadyClosed)", k.literal(closeT, json("{\"error\":\"alreadyClosed\"}")))
+		assertEquals(
+			"DomainResult.Ok(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = \"買い出し\"), closed = true))",
+			k.literal(closeT, json("""{"ok":{"id":{"id":0},"author":{"id":1},"title":{"text":"買い出し"},"closed":true}}""")))
+		assertEquals(closeT, k.instanceMethodsOf(td(note)).single { it.name == "close" }.ret)
+	}
+
+	@Test
 	fun `1 フィールドの ValueObject は value class になる`() {
 		assertTrue(k.isValueClass(td(noteId)))
 		assertTrue(k.isValueClass(td(userId)))

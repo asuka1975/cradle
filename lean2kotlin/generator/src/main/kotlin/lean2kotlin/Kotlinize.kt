@@ -447,7 +447,12 @@ class Kotlinize(private val ir: Ir) {
 		is IrType.Arrow -> error("関数型のリテラルは生成できません")
 		is IrType.Ref -> refLiteral(ir.typeDef(t.lean), j)
 		is IrType.WithDefault -> literal(t.of, j)
-		is IrType.Result -> error("DomainResult のリテラルは生成できません")
+		// オラクル値は {"ok": 値} か {"error": 失敗}(抽出器が Except をこの形に焼く)
+		is IrType.Result -> {
+			val o = j.jsonObject
+			o["ok"]?.let { "DomainResult.Ok(${literal(t.ok, it)})" }
+				?: "DomainResult.Err(${literal(t.err, o.getValue("error"))})"
+		}
 	}
 
 	fun refLiteral(td: IrTypeDef, j: JsonElement): String {
@@ -571,3 +576,6 @@ class Kotlinize(private val ir: Ir) {
 
 /** 生成物の本文が有理数の生成型を参照しているか(ルートパッケージの `Rational` を import する判定)。 */
 internal val RATIONAL_REF = Regex("\\bRational\\b")
+
+/** 生成物の本文が DomainResult を型か構築子として参照しているか(KDoc の言及は数えない。断るふるまいを持つ Entity の interface・テストが import する判定)。 */
+internal val DOMAIN_RESULT_REF = Regex("\\bDomainResult[.<]")

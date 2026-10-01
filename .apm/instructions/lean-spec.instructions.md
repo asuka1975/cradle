@@ -22,8 +22,8 @@ applyTo: "lean/**/*.lean"
 - 状態が運ぶ VO の制約は Prop フィールドで型が持つ（不正な値は構築できない。`valid : Bool` を状態の VO に置かない）。入力の語彙（Command / Observation）は生の値を運び、validate が制約を決めて解決の成果物に証明を入れる（lean-conventions §2）。
 - 実体を宣言するのは `Domain/Entity/` の具体構造体だけ。ふるまいは def、法則は同じファイルの `@[contract]` 定理。ID は型パラメータで抽象のまま（表現は `Runtime/Ids.lean` の仮置き）。
 - 印はアノテーション: `@[aggregateRoot]`（ルートの選択）・`@[valueObject]`（場所ずれの例外）・`@[repositoryState]`・`@[contract]`・`@[actorContext]`・`@[faultContract]`。
-- 更新系 UseCase = `Command.lean`（入力語彙。名義は入れない）+ `UseCase.lean`（`validate` / `act` / `execute` 固定名。`execute = (validate …).map (act …)`）。
-  validate に置けるのは「業務が始まる前の拒否」だけ。既存集約を変える UseCase の validate は解決の成果物（集約ルート）を返す。
+- 更新系 UseCase = `Command.lean`（入力語彙。名義は入れない）+ `UseCase.lean`（`validate` / `act` / `execute` 固定名。`execute = (validate …).map (act …)`、ルートのふるまいが断るなら `execute = validate … >>= act …`）。
+  validate に置けるのは「業務が始まる前の拒否」（宛先の解決と名義の確かめ）だけ。集約の状態で決まる規則はルートのふるまいが持ち、断るなら `Except DomainError <Root>` を返す（lean-conventions §3）。既存集約を変える UseCase の validate は解決の成果物（集約ルート）を返す。
 - Port を使う更新系 UseCase = `Command.lean` + `UseCase.lean`（`validate` / `mkRequest` / `request` / `apply` / `execute` 固定名。`request = (validate …).map (mkRequest …)`、`execute = (validate …) >>= apply outcome …`）。
   観測（`Outcome`）は名義・時計と同格の調達の引数種で、`execute` がポート位置で受け、本番署名からは落ちる（観測の回数・拒否の区別・`request_ok` の扱いは lean-conventions §4b）。
 - 内部入力（提供元の通知・worker / timer の契機）= `Observation.lean` + `UseCase.lean`（第 3 の固定形。固定名は更新系と同じで、名義は受けない）。合併型は `Runtime/Observation.lean` で `Machine.applyObservation` に配線し、利用者の `Runtime/Command.lean` には混ぜない（詳細は lean-conventions §4c）。
