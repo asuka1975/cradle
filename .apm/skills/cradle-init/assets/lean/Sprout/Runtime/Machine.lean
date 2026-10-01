@@ -155,19 +155,20 @@ def withFault {α : Type} (fault : Option String) (table : List (String × α))
     | some entry => k (some entry)
     | none => .harness s!"unknown fault contract: {n}"
 
-/-- 内部入力のルーティング: 名義が無いので `opened` は通さない。内部入力を持つ UseCase を足す手順は
-    コマンドと同じ（Observation.lean → `Runtime/Observation.lean` に構成子 → ここに腕 → `Json.lean` にワイヤ）。 -/
-def Snapshot.applyObservation (_today : Date) (obs : Observation) (_s : Snapshot) (_env : Environment)
-    (_h : _s.check = true) : StepResult :=
+/-- 内部入力のルーティング: 名義が無いので `opened` は通さない。障害契約の指名はコマンドと同じく腕ごとの表で解く
+    （腕は `withFault fault [<表>] fun f => direct env (<UseCase>.execute …) f`、Port を使う腕は `viaPort`）。
+    内部入力を持つ UseCase を足す手順はコマンドと同じ（Observation.lean → `Runtime/Observation.lean` に構成子 → ここに腕 → `Json.lean` にワイヤ）。 -/
+def Snapshot.applyObservation (_today : Date) (obs : Observation) (_fault : Option String) (_s : Snapshot)
+    (_env : Environment) (_h : _s.check = true) : StepResult :=
   nomatch obs
 
-/-- external のルーティング: 利用者の操作は開く → 腕へ、内部入力は腕へ。Port を使う腕は `viaPort`、
-    使わない腕は `direct`。障害契約の指名は腕ごとの表で解く（この骨格の表は空 — 指名はハーネスの失敗）。 -/
+/-- external のルーティング: 利用者の操作は開く → 腕へ、内部入力は腕へ。どちらも障害契約の指名を腕へ渡す。
+    Port を使う腕は `viaPort`、使わない腕は `direct`。障害契約の指名は腕ごとの表で解く（この骨格の表は空 — 指名はハーネスの失敗）。 -/
 def Snapshot.applyExternal (today : Date) (input : Input) (s : Snapshot) (env : Environment)
     (h : s.check = true) : StepResult :=
   match input with
   | .command actor cmd fault =>
     withFault fault [] fun f => direct env (Snapshot.apply today actor cmd s h) f
-  | .observation obs _ => Snapshot.applyObservation today obs s env h
+  | .observation obs fault => Snapshot.applyObservation today obs fault s env h
 
 end Sprout.Runtime
