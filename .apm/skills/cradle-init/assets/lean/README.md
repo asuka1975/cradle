@@ -34,6 +34,7 @@ lean/
     │       ├── <更新系>UseCase/   Command.lean + UseCase.lean（Port を使うなら request / mkRequest / apply も固定名）
     │       ├── <内部入力>UseCase/ Observation.lean + UseCase.lean（通知・契機。名義は受けない。固定名は更新系と同じ）
     │       └── <参照系>UseCase/   ReadModel.lean + QueryService.lean（固定名 query）+ UseCase.lean
+    │   └── Composition/       UseCase を数珠つなぎにした保証の定理（生成器に渡さない）
     ├── Runtime/               実行系（非規範 — 表現の仮置き・境界。プロジェクトの持ち物）
     │   ├── Ids.lean           同一性の仮置き + 泉の具体化
     │   ├── Command.lean       コマンドの輸送形式 + Actor + 反機能の一覧

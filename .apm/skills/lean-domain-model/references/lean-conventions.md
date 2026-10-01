@@ -47,6 +47,7 @@ def Note.close (n : Note NoteId UserId) : Note NoteId UserId := { n with closed 
 ```
 
 - 大域状態を署名に置かない。単位は機能ではなく Entity。同一性・効果・非効果・冪等を別々の定理にする（1 定理 1 概念）。
+- これらの `@[contract]` 定理は生成テストの源で、多くは def の言い換え（`rfl`）になる。業務の規則が守られることは §7 の保証の定理が言う。
 - 非ルート Entity は Repository・UseCase を持たない（ルート経由でのみ変わることが構文的保証）。
 - 法則が要求しない観測は署名に置かない。含めない法則・操作はコメントで宣言する。
 - DomainService = 複数の集約ルートへの関心が要る業務ルールだけ。1 件に閉じるならルートのふるまい、1 UseCase にしか現れないなら UseCase の仕様。置き場は `Domain/DomainService/<名前>.lean` で 1 ファイル = 1 interface（Kotlin 名は `<名前>Service`）。
@@ -180,15 +181,39 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 - `lakefile.toml`: `defaultTargets` に lib と exe の両方（骨格は `["Sprout", "sprout"]`）— 引数の無い `lake build` だけで CLI ができ、`golden-check` / `spec-query` / モックアップはそれに依る。
 - `Scenarios.lean`: 名前付き初期状態と `scenarioByName`、名前付きの環境と `environmentByName`、`runInputs`（`flow` の写し）、`#guard`（成功の流れ・拒否・ハーネスの失敗の負経路（script の不足・別の Port 操作・知らない指名・拒否される入力への指名・観測後の拒否が cursor を消費すること）・障害契約ごとの消費位置）。
 
-## 7. 転送（`Laws/Properties.lean`）
+## 7. 保証と転送
 
-読み取りの保証を境界の言葉に移す。観測モデルの構造が運ぶ制約（Prop フィールド）はそのまま使う。境界の検査に依る整合性の仮定は `h : s.Reachable` だけから取る（露出仮定を残さない）。check に無い事実が要るなら `check` に条項を足す（各 UseCase の保存義務になり Reachable が運ぶ）。
+保証の定理: resolved HS の結論を ∀ で言う。1 HS 1 定理にしない — モデリングで抽象化し、1 本の定理が複数の HS を保証する少数の定理を目指す（形式化で情報量が圧縮できなければ Lean にした意味が無い）。docstring には、その定理が保証する HS を並べる。置き場はその事実が閉じる単位:
+
+| 事実が閉じる単位 | 置き場 |
+|---|---|
+| 1 つの集約ルート | Entity のファイル（ルートの定理。§3） |
+| 1 つの UseCase | その `UseCase.lean` |
+| 複数の UseCase をまたぐ | `Application/Composition/<名前>.lean` — UseCase は観測モデルを更新する純粋関数なので、前の手の結果の状態を次の手に渡して数珠つなぎにし、その性質を証明する（定理と、合成に使う状態の束ねだけを置く） |
+
+```lean
+-- CloseNoteUseCase/UseCase.lean（1 つの UseCase に閉じる。成功の向き）
+theorem execute_ok_only_by_author (actor) (c) (before after) (h : execute actor c before = .ok after) :
+    ∃ n, before.find? c.note = some n ∧ n.author = actor.user ∧ n.closed = false
+-- Application/Composition/NoteLifecycle.lean（書く → 閉じる。1 本で 2 つの結論を言う）
+theorem post_then_close … (hpost : PostNoteUseCase.execute author fountain c before hfresh = .ok mid)
+    (hother : other.user ≠ author.user) :
+    (∃ after, CloseNoteUseCase.execute author ⟨fountain.valueAt before.noteIds⟩ mid.notes = .ok after) ∧
+      CloseNoteUseCase.execute other ⟨fountain.valueAt before.noteIds⟩ mid.notes = .error .notAuthor
+```
+
+- 向きは 2 つ。成功の向き（`execute … = .ok after → 前提 ∧ 事後`。誰が・どの段階で・何をできたか）と、不変の向き（どの手でもこの性質は崩れない）。エラー枝ごとの定理（`execute_<error>`）は拒否の向きで、`validate` の分岐を写すだけなので保証の代わりにならない。
+- `@[contract]` を付けない（生成器に渡さない）。サンプルから演繹できる形・列挙の先頭 3 構成子（§9）に縛られない代わりに、Kotlin 側の対応は契約テストと E2E が受け持つ。
+- docstring に出典（`[HS-xxx]`。複数並べてよい）と結論の全文を書く。結論の一部を証明の中で捨てない（`_` で受けて使わない）。仮定は満たせる形にする — 満たせない仮定の定理は何も言わない。定理が空でないか・HS の言うことを言っているかは機械では決まらないので、Evaluator（lean-domain-model スキルの手順）が見る。
+
+転送（`Laws/Properties.lean`）: 読み取りの保証を境界の言葉に移す。観測モデルの構造が運ぶ制約（Prop フィールド）はそのまま使う。境界の検査に依る整合性の仮定は `h : s.Reachable` だけから取る（露出仮定を残さない）。check に無い事実が要るなら `check` に条項を足す（各 UseCase の保存義務になり Reachable が運ぶ）。`Laws/` にファイルを増やさない（保証の定理はここに置かない）。
 
 ## 8. 契約定理の指名
 
 - 指名する: 契約面（execute / query）越しに観測できる定理。状態の等式・decidable な検査・多重集合一致。
 - 指名しない: 内部関数への言及・他の指名定理の系・証明の分解装置。迷った跡は docstring に「@[contract] は付けない — ◯◯の系」。
 - Entity・VO のふるまいの定理群も漏れなく指名（効果・非効果・冪等・同一性）。
+- 保証の定理（§7）は指名しない。
 - `@[faultContract]` は def に付ける: 技術的障害で中断されたとき観測されるべき状態の定義（証明対象ではない）。Port を使う UseCase では def が観測（`Outcome`）を引数に取るかどうかが消費位置の宣言 — 取らなければ「外部を呼ぶ前の中断」（Port は呼ばれない）、取れば「応答を得た後の中断」（Port は 1 回呼ばれる）。1 つの UseCase に中断点ごとの def を置く（例: 配送の `markedNotSent`（印を保存した後・送る前）/ `sentNoAnswer`（外部は成立したかもしれないが応答を失った）/ `appliedNotCommitted`（応答を得た後・反映の commit 前）。後の 2 つは観測される状態が同じでも別の中断点として名前を持つ）。生成テストは def ごとにフック `faulted<定義名>` を要求し、モックの消費位置 → 例外 → Repository の観測の順に検査する。
 - 指名して検査に至らない契約は生成の失敗になる（観測モデルのふるまい・入力語彙のふるまい・`act` の状態の等式・Port の `request` の定理は Kotlin に面が無い — 指名しない）。
 

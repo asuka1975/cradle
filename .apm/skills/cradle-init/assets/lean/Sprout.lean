@@ -1,7 +1,7 @@
 -- ライブラリルート。モジュールを追加したらここに import を足す。
 -- 層の壁（cradle lean-check が検査する）:
 --   Domain      ← 何も import しない（Prelude のみ）
---   Application ← Domain だけ（Runtime を知らない）
+--   Application ← Domain だけ（Runtime を知らない）。Composition は UseCase を数珠つなぎにした保証の定理だけ
 --   Runtime     ← Domain / Application（表現の仮置き・境界 — 非規範）
 --   Laws        ← Runtime（保証の転送）
 import Sprout.Prelude
@@ -21,6 +21,7 @@ import Sprout.Application.UseCase.CloseNoteUseCase.UseCase
 import Sprout.Application.UseCase.NotesUseCase.ReadModel
 import Sprout.Application.UseCase.NotesUseCase.QueryService
 import Sprout.Application.UseCase.NotesUseCase.UseCase
+import Sprout.Application.Composition.NoteLifecycle
 import Sprout.Runtime.Ids
 import Sprout.Runtime.Command
 import Sprout.Runtime.Observation
