@@ -35,6 +35,10 @@ def environmentByName : String → Option Environment
 -- 初期状態は検査を通る
 #guard Scenario.basic.check
 
+-- 並びが同一性の昇順でない状態は、外から受け取っても検査を通らない（領域の条項）
+#guard !({ notes := ⟨[Note.post ⟨1⟩ alice ⟨"後", by decide⟩, Note.post ⟨0⟩ bob ⟨"先", by decide⟩], by decide, by decide⟩,
+           noteIds := ⟨2⟩ } : Snapshot).check
+
 -- 一覧には開いているメモだけが、書かれた順に出る
 #guard (views Scenario.today Scenario.basic (some alice)).notes =
   some [{ id := ⟨0⟩, author := alice, title := "買い出し", closed := false }]

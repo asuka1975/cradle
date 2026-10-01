@@ -11,7 +11,7 @@ applyTo: "lean/**/*.lean"
 ## 層と壁
 
 - `Domain/`（ValueObject / Error / Entity / DomainService）は Application も Runtime も import しない。
-- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase / Composition）は Runtime を import しない。`Composition/` は UseCase を数珠つなぎにした保証の定理（と合成に使う状態の束ね）だけを置く。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
+- `Application/`（ActorContext / RepositoryState / ReadModel / View / Projection / Port / UseCase / Composition）は Runtime を import しない。`Composition/` は UseCase を数珠つなぎにした保証の定理（と、そのための述語・状態の束ね）だけを置く。UseCase ディレクトリは `Command.lean`（利用者の操作）・`Observation.lean`（内部入力）・`QueryService.lean`（参照系）のどれか 1 つを持つ。
 - 外部能力の Port（自システムが必要とする能力の要求と観測）は `Application/Port/<Port>/<操作>.lean`（Domain が所有するなら `Domain/Port/`）に固定名 `Request` / `Outcome` と自システムの語彙の純データだけを置く（関数フィールドは持たない。詳細は lean-conventions §4b）。
 - 読み取り側（`QueryService.lean` を持つ UseCase・ReadModel・View）は `Domain.Entity` を import しない（CQRS）。Entity を読める読み側は `Projection.lean` と `RepositoryState.lean` だけ。
 - `Runtime/` は非規範（表現の仮置き・境界）。ドメインの事実を独自に足さない。外部能力の環境（Port 操作の script と cursor）も境界の持ち物（`Runtime/Environment.lean`）で、状態には含めない。Port を使う腕は request → script の照合 → execute の固定の配線で、境界が業務の判断を足さない。`Laws/` は保証の転送（`Properties.lean`）だけで、ファイルを増やさない。

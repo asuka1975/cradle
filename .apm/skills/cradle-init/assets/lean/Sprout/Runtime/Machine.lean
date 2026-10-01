@@ -26,13 +26,20 @@ instance : Inhabited Snapshot := ⟨Snapshot.empty⟩
 def Snapshot.bounds (s : Snapshot) : Bool :=
   s.notes.notes.all (fun n => decide (n.id.id < s.noteIds.next))
 
-/-- 外から受け取った状態の検査。集約ルートの制約（同一性の一意性）は観測モデルの構造が運ぶので、
-    検査するのは泉の境界だけ。 -/
-def Snapshot.check (s : Snapshot) : Bool := s.bounds
+/-- 領域の条項: メモの並びは同一性の昇順（書かれた順に並び、同一性は泉から昇順に汲まれる —
+    保存順 = 同一性の昇順）。観測モデルの構造（一意性）は運ばない事実なので、外から受け取った状態では検査する。 -/
+def Snapshot.ordered (s : Snapshot) : Bool :=
+  decide ((s.notes.notes.map (·.id.id)).Pairwise (· < ·))
+
+/-- 外から受け取った状態の検査。集約ルートの制約（同一性・題の一意性）は観測モデルの構造が運ぶので、
+    検査するのは泉の境界と、構造が運ばない領域の条項（並び）。条項を足したら、各腕が保つことを
+    `Reachable.lean` で証明する（Reachable がそれを運び、読み取りの保証は `Laws/` に転送する）。 -/
+def Snapshot.check (s : Snapshot) : Bool := s.bounds && s.ordered
 
 /-- 検査を通った状態では、泉から次に汲む値は新鮮（UseCase が要求する泉の契約）。 -/
 theorem Snapshot.fresh (s : Snapshot) (h : s.check = true) :
     noteFountain.Fresh s.noteIds s.notes.ids := by
+  have h : s.bounds = true := ((Bool.and_eq_true _ _).mp h).1
   intro hmem
   simp only [NoteRepositoryState.ids, List.mem_map] at hmem
   obtain ⟨n, hn, hid⟩ := hmem
