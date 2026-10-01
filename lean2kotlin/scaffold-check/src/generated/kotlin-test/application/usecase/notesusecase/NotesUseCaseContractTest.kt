@@ -4,7 +4,6 @@
 package dev.cradle.scaffold.application.usecase.notesusecase
 
 import dev.cradle.scaffold.DomainResult
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.application.ActorContext
 import dev.cradle.scaffold.application.NoteRow
 import dev.cradle.scaffold.application.NoteView
@@ -27,7 +26,7 @@ abstract class NotesUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_ok を再現する(1)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s6", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false))).execute(q = NotesQuery))
 	}
 
 	@Test
@@ -39,20 +38,20 @@ abstract class NotesUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_ok を再現する(3)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>()),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s8"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s8"), closed = true))).execute(q = NotesQuery))
 	}
 
 	@Test
 	fun `execute は定理 execute_ok を再現する(4)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s9", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true))).execute(q = NotesQuery))
 	}
 
 	/** 完全性と並び順: 開いているメモはすべて、書かれた順のまま見える。 */
 	@Test
 	fun `execute は定理 query_ids を再現する(1)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s3", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s3"), closed = false))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s3"), closed = false))).execute(q = NotesQuery))
 	}
 
 	/** 完全性と並び順: 開いているメモはすべて、書かれた順のまま見える。 */
@@ -66,20 +65,20 @@ abstract class NotesUseCaseContractTest {
 	@Test
 	fun `execute は定理 query_ids を再現する(3)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>()),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s5"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s5"), closed = true))).execute(q = NotesQuery))
 	}
 
 	/** 完全性と並び順: 開いているメモはすべて、書かれた順のまま見える。 */
 	@Test
 	fun `execute は定理 query_ids を再現する(4)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s6", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s7"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s7"), closed = true))).execute(q = NotesQuery))
 	}
 
 	@Test
 	fun `execute は定理 query_only_open を再現する(1)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s3", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s3"), closed = false))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s3"), closed = false))).execute(q = NotesQuery))
 	}
 
 	@Test
@@ -91,12 +90,12 @@ abstract class NotesUseCaseContractTest {
 	@Test
 	fun `execute は定理 query_only_open を再現する(3)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>()),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s5"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s5"), closed = true))).execute(q = NotesQuery))
 	}
 
 	@Test
 	fun `execute は定理 query_only_open を再現する(4)`() {
 		assertEquals(DomainResult.Ok(listOf<NoteView>(NoteView(id = NoteId(id = 91L), author = UserId(id = 4L), title = "s6", closed = false))),
-			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s7"), closed = true))).execute(q = NotesQuery))
+			useCase(ActorContext(user = UserId(id = 4L)), listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s7"), closed = true))).execute(q = NotesQuery))
 	}
 }

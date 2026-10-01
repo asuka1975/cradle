@@ -27,7 +27,7 @@ theorem post_then_close (author other : ActorContext UserId) (fountain : Fountai
   -- 書いたメモは末尾にあり、同じ同一性の先客は無い（泉の新鮮性）
   have hfind : (PostNoteUseCase.act author fountain c before hfresh free).notes.find?
       (fountain.valueAt before.noteIds) =
-      some (Note.post (fountain.valueAt before.noteIds) author.user c.title) := by
+      some (Note.post (fountain.valueAt before.noteIds) author.user ⟨c.title, free.nonempty⟩) := by
     simp only [PostNoteUseCase.act, NoteRepositoryState.add, NoteRepositoryState.find?, List.find?_append]
     have hnone : before.notes.notes.find? (fun n => n.id == fountain.valueAt before.noteIds) = none := by
       rw [List.find?_eq_none]

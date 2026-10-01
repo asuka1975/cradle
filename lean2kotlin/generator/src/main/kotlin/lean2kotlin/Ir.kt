@@ -111,6 +111,16 @@ data class IrCtor(val name: String, val fields: List<IrField>)
  * (`(coll.filter p).length ≤ n`)。述語は `x.field <op> value`(op は eq / ne、value は JSON オラクル値)。
  * name は Lean のフィールド名(生成 KDoc に写す)。
  */
+/** 型の制約(Prop フィールド): name は Lean のフィールド名、lean は命題の表示(先行フィールドを名前で指す)。 */
+data class IrInvariant(val name: String, val lean: String) {
+	companion object {
+		fun parse(j: JsonElement): IrInvariant {
+			val o = j.jsonObject
+			return IrInvariant(o.getValue("name").jsonPrimitive.content, o.getValue("lean").jsonPrimitive.content)
+		}
+	}
+}
+
 data class IrConstraint(
 	val kind: String, val name: String, val collection: String, val field: String,
 	val op: String? = null, val value: JsonElement? = null, val max: Long? = null,
@@ -148,6 +158,10 @@ data class IrTypeDef(
 	val doc: String = "",
 	/** 構造体の制約(Prop フィールドのうち抽出器が読めた一意制約)。fixture はこれを満たすように引く。 */
 	val constraints: List<IrConstraint> = emptyList(),
+	/** 観測モデル以外の型の制約(Prop フィールド)。Kotlin の型は検査しない — KDoc に構築する側の義務として写す。 */
+	val invariants: List<IrInvariant> = emptyList(),
+	/** 制約を持つ型の、Lean が制約を decide して通したサンプル値(オラクル値と同じ JSON)。Arb はここから引く。 */
+	val samples: List<JsonElement> = emptyList(),
 ) {
 	companion object {
 		fun parse(j: JsonElement): IrTypeDef {
@@ -169,7 +183,9 @@ data class IrTypeDef(
 				module = o["module"]?.jsonPrimitive?.content,
 				wire = wire,
 				doc = o["doc"]?.jsonPrimitive?.content ?: "",
-				constraints = o["constraints"]?.jsonArray?.map(IrConstraint::parse) ?: emptyList())
+				constraints = o["constraints"]?.jsonArray?.map(IrConstraint::parse) ?: emptyList(),
+				invariants = o["invariants"]?.jsonArray?.map(IrInvariant::parse) ?: emptyList(),
+				samples = o["samples"]?.jsonArray?.toList() ?: emptyList())
 		}
 	}
 }

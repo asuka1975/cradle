@@ -13,10 +13,6 @@ import dev.cradle.scaffold.runtime.UserId
 // 橋渡し型(entity-like を運ぶ sealed / VO 構造)は平行 fixture を持つ —
 // fixture 語彙の閉包(観測レコードは本番 interface を運ばない)。
 
-data class NoteFixture(val id: NoteId, val author: UserId, val title: TitleFixture, val closed: Boolean)
+data class NoteFixture(val id: NoteId, val author: UserId, val title: Title, val closed: Boolean)
 
-data class TitleFixture(val text: String)
-
-fun Note.toFixture(): NoteFixture = NoteFixture(id = id, author = author, title = title.toFixture(), closed = closed)
-
-fun Title.toFixture(): TitleFixture = TitleFixture(text = text)
+fun Note.toFixture(): NoteFixture = NoteFixture(id = id, author = author, title = title, closed = closed)

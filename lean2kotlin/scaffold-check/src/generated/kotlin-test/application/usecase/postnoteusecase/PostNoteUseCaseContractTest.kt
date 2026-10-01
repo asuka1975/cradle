@@ -5,7 +5,6 @@ package dev.cradle.scaffold.application.usecase.postnoteusecase
 
 import dev.cradle.scaffold.DomainResult
 import dev.cradle.scaffold.NoteFixture
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.application.ActorContext
 import dev.cradle.scaffold.application.NoteIdGenerator
 import dev.cradle.scaffold.domain.DomainError
@@ -30,8 +29,6 @@ abstract class PostNoteUseCaseContractTest {
 	protected abstract fun noteRepository(): NoteRepository
 	/** fixture の実体化(観測が一致する実装の値を返す)。 */
 	protected abstract fun note(fixture: NoteFixture): Note
-	/** fixture の実体化(観測が一致する実装の値を返す)。 */
-	protected abstract fun title(fixture: TitleFixture): Title
 	/** 実装を、観測用リポジトリと泉ごとの採番ポートを配線して返す。主体は固定の actor を配線する(主体ポート。主体依存のふるまい = 認可分岐はこの注入で検証される)。 */
 	protected abstract fun useCase(noteRepository: NoteRepository, noteIdGenerator: NoteIdGenerator, actor: ActorContext): PostNoteUseCase
 
@@ -40,54 +37,58 @@ abstract class PostNoteUseCaseContractTest {
 		override fun nextId(): NoteId = NoteId(next++)
 	}
 
+	/** 題が空なら書けない。 */
 	@Test
 	fun `execute は定理 execute_invalid を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
 		val noteIdGenerator = SequentialNoteIdGenerator(500L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.EmptyTitle),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(500L, noteIdGenerator.next)
 	}
 
+	/** 題が空なら書けない。 */
 	@Test
 	fun `execute は定理 execute_invalid を再現する(2)`() {
 		val noteRepository = noteRepository()
 		val noteIdGenerator = SequentialNoteIdGenerator(501L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.EmptyTitle),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "")))))
+			useCase.execute(c = PostNoteCommand(title = "")))
 		assertEquals(listOf<NoteFixture>(),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(501L, noteIdGenerator.next)
 	}
 
+	/** 題が空なら書けない。 */
 	@Test
 	fun `execute は定理 execute_invalid を再現する(3)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s11"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s11"), closed = true)))
 		val noteIdGenerator = SequentialNoteIdGenerator(502L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.EmptyTitle),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s11"), closed = true)),
+			useCase.execute(c = PostNoteCommand(title = "")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s11"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(502L, noteIdGenerator.next)
 	}
 
+	/** 題が空なら書けない。 */
 	@Test
 	fun `execute は定理 execute_invalid を再現する(4)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true)))
 		val noteIdGenerator = SequentialNoteIdGenerator(503L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.EmptyTitle),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)),
+			useCase.execute(c = PostNoteCommand(title = "")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(503L, noteIdGenerator.next)
 	}
@@ -95,12 +96,12 @@ abstract class PostNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_ok を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
 		val noteIdGenerator = SequentialNoteIdGenerator(500L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s6")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 500L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "s6")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 500L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(501L, noteIdGenerator.next)
 	}
@@ -111,8 +112,8 @@ abstract class PostNoteUseCaseContractTest {
 		val noteIdGenerator = SequentialNoteIdGenerator(501L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s6")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 501L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "s6")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 501L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(502L, noteIdGenerator.next)
 	}
@@ -120,12 +121,12 @@ abstract class PostNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_ok を再現する(3)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s11"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s11"), closed = true)))
 		val noteIdGenerator = SequentialNoteIdGenerator(502L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s6")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s11"), closed = true), NoteFixture(id = NoteId(id = 502L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "s6")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s11"), closed = true), NoteFixture(id = NoteId(id = 502L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(503L, noteIdGenerator.next)
 	}
@@ -133,13 +134,13 @@ abstract class PostNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_ok を再現する(4)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true)))
 		val noteIdGenerator = SequentialNoteIdGenerator(503L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s6")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true), NoteFixture(id = NoteId(id = 503L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "s6")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true), NoteFixture(id = NoteId(id = 503L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(504L, noteIdGenerator.next)
 	}
@@ -148,12 +149,12 @@ abstract class PostNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_title_taken を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
 		val noteIdGenerator = SequentialNoteIdGenerator(500L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.TitleTaken),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s9")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)),
+			useCase.execute(c = PostNoteCommand(title = "s9")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(500L, noteIdGenerator.next)
 	}
@@ -162,13 +163,13 @@ abstract class PostNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_title_taken を再現する(2)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true)))
 		val noteIdGenerator = SequentialNoteIdGenerator(503L)
 		val useCase = useCase(noteRepository, noteIdGenerator, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.TitleTaken),
-			useCase.execute(c = PostNoteCommand(title = title(TitleFixture(text = "s12")))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s13"), closed = true)),
+			useCase.execute(c = PostNoteCommand(title = "s12")))
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s12"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s13"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 		assertEquals(503L, noteIdGenerator.next)
 	}

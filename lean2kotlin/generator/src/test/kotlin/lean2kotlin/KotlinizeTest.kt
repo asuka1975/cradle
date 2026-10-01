@@ -95,7 +95,7 @@ class KotlinizeTest {
 	@Test
 	fun `entity-like のリテラルは fixture 語彙で構築する`() {
 		assertEquals(
-			"NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = \"買い出し\"), closed = false)",
+			"NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = \"買い出し\"), closed = false)",
 			k.refLiteral(td(note),
 				json("""{"id":{"id":0},"author":{"id":1},"title":{"text":"買い出し"},"closed":false}""")))
 		assertEquals("listOf<NoteFixture>()", k.literal(IrType.ListOf(IrType.Ref(note)), json("[]")))
@@ -115,17 +115,19 @@ class KotlinizeTest {
 	}
 
 	@Test
-	fun `isEntityLike は集約ルートとインスタンスふるまいを持つ VO に成り立つ`() {
+	fun `isEntityLike は集約ルートとインスタンスふるまいを持つ VO に成り立ち、制約だけを持つ VO には成り立たない`() {
 		assertTrue(k.isEntityLike(td(note)))
-		assertTrue(k.isEntityLike(td(title)))
+		val lobby = lobbyIr()
+		assertTrue(Kotlinize(lobby).isEntityLike(lobby.typeDef("Lobby.VisitorName")))
+		assertFalse(k.isEntityLike(td(title)))
 		assertFalse(k.isEntityLike(td(noteId)))
 		assertFalse(k.isEntityLike(td(userId)))
 		assertFalse(k.isEntityLike(td(noteView)))
 	}
 
 	@Test
-	fun `reachesEntityLike は Title を運ぶ Row に成り立ち View には成り立たない`() {
-		assertTrue(k.reachesEntityLike(IrType.Ref("Sprout.Application.NoteRow")))
+	fun `reachesEntityLike は集約ルートの列に成り立ち、値だけを運ぶ Row と View には成り立たない`() {
+		assertFalse(k.reachesEntityLike(IrType.Ref("Sprout.Application.NoteRow")))
 		assertTrue(k.reachesEntityLike(IrType.ListOf(IrType.Ref(note))))
 		assertFalse(k.reachesEntityLike(IrType.Ref(noteView)))
 		assertTrue(k.fixtureBridged.isEmpty())
@@ -149,7 +151,7 @@ class KotlinizeTest {
 	fun `ふるまいは主体を取るものと主体を作るものに仕分けられる`() {
 		assertEquals(listOf("isOpen", "close"), k.instanceMethodsOf(td(note)).map { it.name })
 		assertEquals(listOf("post"), k.factoryMethodsOf(td(note)).map { it.name })
-		assertEquals(listOf("valid"), k.instanceMethodsOf(td(title)).map { it.name })
+		assertTrue(k.instanceMethodsOf(td(title)).isEmpty())
 		assertEquals("id", k.idFieldName(td(note)))
 	}
 
@@ -200,7 +202,7 @@ class KotlinizeTest {
 			IrConstraint("uniqueSome", "uniqueNames", "rooms", "name"),
 			IrField("name", IrType.OptionOf(IrType.Ref(title))))
 		assertEquals(
-			"xs.let { ys -> val seen = HashSet<TitleFixture>(); ys.filter { x -> x.name == null || seen.add(x.name) } }",
+			"xs.let { ys -> val seen = HashSet<Title>(); ys.filter { x -> x.name == null || seen.add(x.name) } }",
 			k.constrainExpr("xs", listOf(nameKey)))
 	}
 
@@ -216,9 +218,9 @@ class KotlinizeTest {
 			IrConstraint("all", "allTitled", "notes", "title", op = "ne", value = json("{\"text\":\"\"}")), titleField)
 		// = c は値を写す(引き直しに頼らない)、≠ c は間引く(ほぼ全部が満たす)
 		assertEquals("xs.map { x -> x.copy(closed = false) }", k.constrainExpr("xs", listOf(allOpen)))
-		assertEquals("xs.filter { x -> x.title != TitleFixture(text = \"\") }", k.constrainExpr("xs", listOf(allTitled)))
+		assertEquals("xs.filter { x -> x.title != Title(text = \"\") }", k.constrainExpr("xs", listOf(allTitled)))
 		assertEquals(
-			"xs.let { ys -> var k = 0L; ys.filter { x -> !(x.title == TitleFixture(text = \"\")) || k++ < 1L } }",
+			"xs.let { ys -> var k = 0L; ys.filter { x -> !(x.title == Title(text = \"\")) || k++ < 1L } }",
 			k.constrainExpr("xs", listOf(atMostOneUntitled)))
 		assertEquals("allOpen: 全件 closed = false", k.constraintDoc(allOpen))
 		assertEquals("atMostOneUntitled: title = {\"text\":\"\"} は高々 1 件", k.constraintDoc(atMostOneUntitled))

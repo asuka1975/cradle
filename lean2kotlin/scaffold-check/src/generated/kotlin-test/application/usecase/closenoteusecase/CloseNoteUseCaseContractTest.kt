@@ -5,7 +5,6 @@ package dev.cradle.scaffold.application.usecase.closenoteusecase
 
 import dev.cradle.scaffold.DomainResult
 import dev.cradle.scaffold.NoteFixture
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.application.ActorContext
 import dev.cradle.scaffold.domain.DomainError
 import dev.cradle.scaffold.domain.entity.Note
@@ -35,116 +34,116 @@ abstract class CloseNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_already_closed を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 5L)))
 		assertEquals(DomainResult.Err(DomainError.AlreadyClosed),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 92L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_already_closed を再現する(2)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 5L)))
 		assertEquals(DomainResult.Err(DomainError.AlreadyClosed),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 92L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_not_author を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotAuthor),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 92L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_not_author を再現する(2)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotAuthor),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 92L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_not_author を再現する(3)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s8"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s8"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.NotAuthor),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 93L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s8"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s8"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_not_author を再現する(4)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 5L)))
 		assertEquals(DomainResult.Err(DomainError.NotAuthor),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_ok を再現する(1)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_ok を再現する(2)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = true), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s10"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = true), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s10"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_ok を再現する(3)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = false)))
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s10"), closed = true), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s11"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s10"), closed = true), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s11"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_ok を再現する(4)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s11"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s11"), closed = false)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Ok(Unit),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s11"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s11"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
@@ -161,22 +160,22 @@ abstract class CloseNoteUseCaseContractTest {
 	@Test
 	fun `execute は定理 execute_unknown を再現する(2)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s8"), closed = true)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s8"), closed = true)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.UnknownNote),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 91L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s8"), closed = true)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s8"), closed = true)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 
 	@Test
 	fun `execute は定理 execute_unknown を再現する(3)`() {
 		val noteRepository = noteRepository()
-		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)))
+		noteRepository.add(note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)))
 		val useCase = useCase(noteRepository, ActorContext(user = UserId(id = 4L)))
 		assertEquals(DomainResult.Err(DomainError.UnknownNote),
 			useCase.execute(c = CloseNoteCommand(note = NoteId(id = 92L))))
-		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)),
+		assertEquals(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)),
 			noteRepository.findAll().map { it.toFixture() })
 	}
 

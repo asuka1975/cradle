@@ -1,5 +1,5 @@
 /-
-  値の市民（ドメイン状態が運ぶ値だけ）。1 VO = フィールド + 制約 + @[contract] 定理群のユニット。
+  値の市民（ドメイン状態が運ぶ値だけ）。1 VO = フィールド + 制約（Prop フィールド。状態に不正な値は入らない）+ ふるまいと @[contract] 定理群。
   入力専用の語彙（コマンドのペイロード）はここではなく各 UseCase の Command.lean の持ち物。
   仕様層では ToJson / FromJson を deriving しない（境界 Runtime/Json.lean が後付けする）。
 -/
@@ -18,16 +18,10 @@ def Date.lt (a b : Date) : Bool := decide (a.toEpochDay.val < b.toEpochDay.val)
 
 /-! ### 題（メモの見出し） -/
 
-/-- メモの題。制約: 空でないこと。 -/
+/-- メモの題。空でないことは型が持つ — 空の題は構築できない（入力の検査は構築する側の validate）。 -/
 structure Title where
   text : String
-deriving Repr, DecidableEq, Inhabited
-
-/-- 妥当性（Bool の検証関数 — 実行できる制約）。 -/
-def Title.valid (t : Title) : Bool := decide (0 < t.text.length)
-
-/-- 制約の特徴付け（境界値テストの生成源）。 -/
-@[contract] theorem Title.valid_iff (t : Title) : t.valid = true ↔ 0 < t.text.length := by
-  simp [Title.valid]
+  nonempty : 0 < text.length
+deriving Repr, DecidableEq
 
 end Sprout

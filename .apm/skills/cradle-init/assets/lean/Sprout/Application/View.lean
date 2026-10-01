@@ -1,7 +1,7 @@
 /-
   閲覧の共有語彙（View と参照系の失敗）。UseCase ではない。
   View→Row の壁: View のメンバーに Row を使わない。
-  View→ドメイン語彙の壁: ふるまいを持つ VO（Title）もそのまま載せず、View 自身の語彙（String）で写す。
+  View→ドメイン語彙の壁: ドメインの VO（Title）もそのまま載せず、View 自身の語彙（String）で写す。
 -/
 import Sprout.Domain.ValueObject
 

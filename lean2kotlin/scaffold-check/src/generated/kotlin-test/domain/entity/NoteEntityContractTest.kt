@@ -4,7 +4,6 @@
 package dev.cradle.scaffold.domain.entity
 
 import dev.cradle.scaffold.NoteFixture
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.domain.valueobject.NoteId
 import dev.cradle.scaffold.domain.valueobject.Title
 import dev.cradle.scaffold.runtime.UserId
@@ -24,140 +23,140 @@ abstract class NoteEntityContractTest {
 	/** 閉じたら閉じている。 */
 	@Test
 	fun `close は定理 close_closed を再現する(1)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = false)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = false)).close().toFixture())
 	}
 
 	/** 閉じたら閉じている。 */
 	@Test
 	fun `close は定理 close_closed を再現する(2)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true),
-			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true),
+			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じたら閉じている。 */
 	@Test
 	fun `close は定理 close_closed を再現する(3)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true),
-			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true),
+			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じたら閉じている。 */
 	@Test
 	fun `close は定理 close_closed を再現する(4)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても書き手と題は変わらない（フレーム）。 */
 	@Test
 	fun `close は定理 close_frame を再現する(1)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = false)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = false)).close().toFixture())
 	}
 
 	/** 閉じても書き手と題は変わらない（フレーム）。 */
 	@Test
 	fun `close は定理 close_frame を再現する(2)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true),
-			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true),
+			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても書き手と題は変わらない（フレーム）。 */
 	@Test
 	fun `close は定理 close_frame を再現する(3)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true),
-			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true),
+			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても書き手と題は変わらない（フレーム）。 */
 	@Test
 	fun `close は定理 close_frame を再現する(4)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても同一性は変わらない。 */
 	@Test
 	fun `close は定理 close_id を再現する(1)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = false)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = false)).close().toFixture())
 	}
 
 	/** 閉じても同一性は変わらない。 */
 	@Test
 	fun `close は定理 close_id を再現する(2)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true),
-			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true),
+			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても同一性は変わらない。 */
 	@Test
 	fun `close は定理 close_id を再現する(3)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true),
-			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true),
+			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じても同一性は変わらない。 */
 	@Test
 	fun `close は定理 close_id を再現する(4)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じるのは冪等。 */
 	@Test
 	fun `close は定理 close_idem を再現する(1)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じるのは冪等。 */
 	@Test
 	fun `close は定理 close_idem を再現する(2)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true),
-			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s1"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true),
+			note(NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s1"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じるのは冪等。 */
 	@Test
 	fun `close は定理 close_idem を再現する(3)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true),
-			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true),
+			note(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true)).close().toFixture())
 	}
 
 	/** 閉じるのは冪等。 */
 	@Test
 	fun `close は定理 close_idem を再現する(4)`() {
-		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true),
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = TitleFixture(text = "s3"), closed = true)).close().toFixture())
+		assertEquals(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true),
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 7L), title = Title(text = "s3"), closed = true)).close().toFixture())
 	}
 
 	/** 書いた直後は開いている。 */
 	@Test
 	fun `isOpen は定理 post_isOpen を再現する(1)`() {
 		assertEquals(true,
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s6"), closed = false)).isOpen())
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s6"), closed = false)).isOpen())
 	}
 
 	/** 書いた直後は開いている。 */
 	@Test
 	fun `isOpen は定理 post_isOpen を再現する(2)`() {
 		assertEquals(true,
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s7"), closed = false)).isOpen())
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s7"), closed = false)).isOpen())
 	}
 
 	/** 書いた直後は開いている。 */
 	@Test
 	fun `isOpen は定理 post_isOpen を再現する(3)`() {
 		assertEquals(true,
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s8"), closed = false)).isOpen())
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s8"), closed = false)).isOpen())
 	}
 
 	/** 書いた直後は開いている。 */
 	@Test
 	fun `isOpen は定理 post_isOpen を再現する(4)`() {
 		assertEquals(true,
-			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s9"), closed = false)).isOpen())
+			note(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s9"), closed = false)).isOpen())
 	}
 }

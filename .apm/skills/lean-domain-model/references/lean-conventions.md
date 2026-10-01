@@ -14,14 +14,17 @@ cradle-init スキルが敷く最小ドメイン（メモを書く・閉じる�
 ## 2. 値の市民（`Domain/ValueObject.lean`）
 
 - ドメイン状態が運ぶ値だけが VO。入力専用の語彙はコマンドの持ち物（`UseCase/<X>/Command.lean`）。
-- 1 VO = フィールド + 制約（`valid : Bool`）+ `@[contract]` 定理（制約の特徴付け・境界値）。制約の実値にはドメインの裏付けが要る（「機械的常識」も勝手に足さない。未探索は未探索と書く）。
-- 型が構築時に保証する制約に valid を書かない（暦の実在は `Std.Time.PlainDate` が保証。リテラルは `date("2026-01-01")`）。
+- 1 VO = フィールド + 制約（Prop フィールド）+ ふるまいと `@[contract]` 定理。制約は型が持つので、状態が運ぶ VO に不正な値は入らない（`valid : Bool` を状態の VO に置かない — 型は分母 0・星 99 を作れてしまい、ユースケース以外の経路で破れても止まらない）。制約の実値にはドメインの裏付けが要る（「機械的常識」も勝手に足さない。未探索は未探索と書く）。
+- 入力の語彙（コマンドのペイロード）は生の値（`String`・`Nat`）を運ぶ。制約を満たすかは validate が決め、その証明を解決の成果物（§4 の `FreeTitle`）に入れて act が VO を構築する。業務の拒否（空の題）はワイヤのエラーではなく DomainError で言う。
+- 制約の命題は decide できる形にする（生成器は小さな値でサンプルを組んで decide し、通った値だけを契約テストの fixture と Kotlin の Arb に使う — §9）。
+- 型が構築時に保証する制約を重ねて書かない（暦の実在は `Std.Time.PlainDate` が保証。リテラルは `date("2026-01-01")`）。
 - 同一性の VO（各 ID）は各 Entity の持ち物で、表現は型パラメータで抽象のまま。具体表現は `Runtime/Ids.lean` の仮置きで、決定は NFR（インフラ設計）。
 
 ```lean
-structure Title where text : String deriving Repr, DecidableEq, Inhabited
-def Title.valid (t : Title) : Bool := decide (0 < t.text.length)
-@[contract] theorem Title.valid_iff (t : Title) : t.valid = true ↔ 0 < t.text.length := by simp [Title.valid]
+structure Title where
+  text : String
+  nonempty : 0 < text.length
+deriving Repr, DecidableEq
 ```
 
 ## 3. Entity（`Domain/Entity/`）
@@ -73,20 +76,23 @@ def VisitRepositoryState.vacant (s : VisitRepositoryState VisitId EmployeeId) : 
 
 点更新は `update`（同一性も題も変えない f とその証明）、追加は `add`（末尾。新鮮な同一性と空いている題の証明）。消す操作は無い。生成器は Repository の `add` / `update` をこの観測モデルの操作から導く。ID の泉は `Fountain σ α`（値型と生成器状態は抽象、具体化は Runtime）。
 `add` が要る証明の出どころは 2 つ: 泉から汲む同一性の新鮮性 `fountain.Fresh before.noteIds before.notes.ids` は UseCase が Prop 引数で受ける（境界は `Snapshot.check` から作る）。
-入力に依る証拠（題が空いていること）は validate が決定して解決の成果物 `FreeTitle`（Prop フィールドだけの structure）として返し、act がそれを `add` に渡す。
+入力に依る証拠（入力が題になれること・その題が空いていること）は validate が決定して解決の成果物 `FreeTitle`（Prop フィールドだけの structure）として返し、act がそれで題を構築して `add` に渡す。
 
 ```lean
 structure State (NoteId UserId G : Type) where   -- Effect Set = この UseCase が観測する世界の最小射影
   notes : NoteRepositoryState NoteId UserId
   noteIds : G
 
-/-- 解決の成果物: 題が空いている証拠（値は運ばない）。 -/
+/-- 解決の成果物: 入力が題になれる（空でない）証拠と、その題が空いている証拠（値は運ばない）。 -/
 structure FreeTitle (c : Command) (before : State NoteId UserId G) : Type where
-  free : c.title ∉ before.notes.titles
+  nonempty : 0 < c.title.length                                           -- c.title は生の String
+  free : (⟨c.title, nonempty⟩ : Title) ∉ before.notes.titles
 
 def validate (_actor : ActorContext UserId) (c : Command) (before : State …) : Except DomainError (FreeTitle c before) :=
-  if !c.title.valid then .error .emptyTitle                              -- 始まる前の拒否だけ
-  else if h : c.title ∈ before.notes.titles then .error .titleTaken else .ok ⟨h⟩
+  if hn : 0 < c.title.length then                                         -- 始まる前の拒否だけ
+    if ht : c.title ∈ before.notes.titles.map (·.text) then .error .titleTaken
+    else .ok ⟨hn, fun hm => ht (List.mem_map_of_mem hm)⟩
+  else .error .emptyTitle
 def act (actor) (fountain : Fountain G NoteId) (c) (before) (hfresh : fountain.Fresh before.noteIds before.notes.ids) (free : FreeTitle c before) : State … := …   -- Entity のふるまいの適用一発
 def execute (actor) (fountain) (c) (before) (hfresh) := (validate actor c before).map (act actor fountain c before hfresh)
 ```
@@ -176,7 +182,7 @@ def execute (outcome) (o) (before) := (validate o before) >>= apply outcome o be
 - `Reachable.lean`: `Snapshot.Reachable`（checked | step（5 cmd）| external | faulted）と `Reachable.check`。`StepResult.Sound` / `FaultSpec.Sound`（結果が運ぶ状態は検査を通る）、配線の分解補題 `direct_sound` / `viaPort_sound` / `withFault_sound`、腕ごとの `applyExternal_sound`（`check_of_<root>_add` / `check_of_<root>_update` に `except_map_eq_ok` と `execute_ok_shape` で結果の形を取り出して適用する。fault の腕は障害契約の def の形から）。
   `flow`: 入力列を順に流す連続する step の定義そのもの — 次の手の検査は `applyExternal_sound` が放電するので検査に失敗する腕は無い。CLI の `flow` / `dump` と `Scenarios.lean` の `runInputs` はその写し。
 - `Views.lean`: 射影と束。`views today s viewer`。口は画面名、`Option`。
-- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` / `Observation` は手書きで平らに固定（変更は golden が検知）。`Interaction` は `{"port","operation","request","outcome"}`、`Environment` は `{"script","cursor"}`。`port` は `Application/Port/<Port>/`（Domain 所有なら `Domain/Port/<Port>/`）のディレクトリ名そのまま、`operation` は `<操作>.lean` のファイル名の先頭を小文字に（抽出器の `ports[].name` / `operations[].method`、生成 Kotlin の `interface <Port>` / `fun <operation>` と同じ綴り。`lean-check` がこの文字列の有無を検査する）。`Request` / `Outcome` は `deriving instance`。`Snapshot` の `FromJson` は観測モデルの制約を決定して弾く（構築に証明が要る）。人が打つ表記を受ける手書き `FromJson` は、直前の docstring にその表記を書く — `spec-query schemas` が入力欄の注記にする（骨格の `Title`: 文字列 `"買い物"` と `{"text": "買い物"}` の両方を受ける）。
+- `Json.lean`: deriving の後付け。`Snapshot` / `Actor` / `Command` / `Observation` は手書きで平らに固定（変更は golden が検知）。`Interaction` は `{"port","operation","request","outcome"}`、`Environment` は `{"script","cursor"}`。`port` は `Application/Port/<Port>/`（Domain 所有なら `Domain/Port/<Port>/`）のディレクトリ名そのまま、`operation` は `<操作>.lean` のファイル名の先頭を小文字に（抽出器の `ports[].name` / `operations[].method`、生成 Kotlin の `interface <Port>` / `fun <operation>` と同じ綴り。`lean-check` がこの文字列の有無を検査する）。`Request` / `Outcome` は `deriving instance`。`Snapshot` の `FromJson` は観測モデルの制約を決定して弾く（構築に証明が要る）。人が打つ表記を受ける手書き `FromJson` は、直前の docstring にその表記を書く — `spec-query schemas` が入力欄の注記にする（例: 骨格の `Title` は文字列 `"買い物"` と `{"text": "買い物"}` の両方を受け、空の題は弾く — 状態の JSON の境界）。
 - `Main.lean`（骨格の持ち物。作り込まず、Cradle の更新で敷き直す）: 5 cmd と `external` の実行器。プロトコルエラーの形（版違い・不明な欄・`environment` と `env` の両方・`views` に `env`・observation に `actor`・command と observation の両方 / どちらも無い・`actor` の無い command）はモデルに依らないので `#guard` で固定され、exe のビルドで検査される。
 - `lakefile.toml`: `defaultTargets` に lib と exe の両方（骨格は `["Sprout", "sprout"]`）— 引数の無い `lake build` だけで CLI ができ、`golden-check` / `spec-query` / モックアップはそれに依る。
 - `Scenarios.lean`: 名前付き初期状態と `scenarioByName`、名前付きの環境と `environmentByName`、`runInputs`（`flow` の写し）、`#guard`（成功の流れ・拒否・ハーネスの失敗の負経路（script の不足・別の Port 操作・知らない指名・拒否される入力への指名・観測後の拒否が cursor を消費すること）・障害契約ごとの消費位置）。
@@ -222,7 +228,8 @@ theorem post_then_close … (hpost : PostNoteUseCase.execute author fountain c b
 - 生成器はモデルを外から読む（規約 + アノテーション + golden）。モデルに生成配線を書かない。
 - 表現で消せる不変条件は表現で消す（ネスト・属性化）。集約横断の不変条件は表現の再検討シグナル — 探索のまとまりと方針の表を見て、無ければ MQ で問う（lean-domain-model スキルの (d)）。
 - 契約定理のケースは量化変数のサンプルから演繹される。保存済みの集約の列に入る個体は、列挙型のフィールドの**先頭 3 つの構成子**にしか届かない（定理の前提が 4 つ目以降の構成子を要求すると 0 ケースになり生成が止まる）。状態の遷移で前提になる段階（送れる・確定済み・結果不明など）は先頭 3 つに置き、入力側の列挙は先頭を最も普通の値にする。
-- 生成器が読める制約の形は 4 つ: 一意性の `(coll.map (·.f)).Nodup` と `(coll.filterMap (·.f)).Nodup`、全件の `∀ x ∈ coll, p x`、上限の `(coll.filter p).length ≤ n`（coll は同じ構造体の List のフィールド、f はその要素のフィールド、n は数字のリテラル）。述語 p は要素の 1 フィールドと閉じた値の比較だけ — `x.f = c` / `x.f ≠ c` / `x.f == c` / `x.f != c` / `decide (x.f = c)` と Bool フィールドの `x.f` / `!x.f`（c は数字・文字列・Bool・引数なしの構成子）。読めた制約どおりに Repository 契約テストの個体の列を引き、読めない形の Prop フィールドは抽出の note になる（fixture はそれを満たすとは限らない）。Prop フィールドと def の Prop 引数（泉の新鮮性など）は形状・署名から落ち、証拠だけの structure は data object に写る — 証明は実装の義務。
+- 生成器が読める制約の形は 4 つ: 一意性の `(coll.map (·.f)).Nodup` と `(coll.filterMap (·.f)).Nodup`、全件の `∀ x ∈ coll, p x`、上限の `(coll.filter p).length ≤ n`（coll は同じ構造体の List のフィールド、f はその要素のフィールド、n は数字のリテラル）。述語 p は要素の 1 フィールドと閉じた値の比較だけ — `x.f = c` / `x.f ≠ c` / `x.f == c` / `x.f != c` / `decide (x.f = c)` と Bool フィールドの `x.f` / `!x.f`（c は数字・文字列・Bool・引数なしの構成子）。読めた制約どおりに Repository 契約テストの個体の列を引き、`<Root>RepositoryState` の読めない形の Prop フィールドは抽出の note になる（個体の列はそれを満たすとは限らない）。
+- それ以外の型（VO・Entity・コマンドなど）の Prop フィールドは、生成器がサンプルの値で decide する。偽なら直接の値フィールドを候補（`Nat` は 0・1・2・3・5・10・100、`String` は `"a"`・`"abc"`）で組み直し、通った値だけを契約テストの fixture と Kotlin の Arb に使う。Kotlin の型は制約を検査せず、KDoc に「構築する側の義務」として写る。どの候補でも満たせない制約（分子と分母の約分済みなど）はサンプルを組めず、その型の Arb が要る生成は理由付きで止まる。Prop フィールドと def の Prop 引数（泉の新鮮性など）は形状・署名から落ち、証拠だけの structure は data object に写る — 証明は実装の義務。
 - 採番はドメイン状態に染み出させない（泉の抽象）。具体表現は NFR を根拠にインフラ設計が決める。
 - 型引数の binder 名は `<Root>.Runtime.<binder>` で解決される（生成器の規約）。解決できないものは生成側の binder 上書きで指定する。
   型引数で抽象のままにするのは同一性の VO（各 ID）だけで、それ以外の値オブジェクトは具体名で使う（`Command (JoinCode : Type)` は規約の外 — `Command` に `JoinCode` を直に書く）。`Runtime` に表現の無い binder を残すと生成側に `binderOverrides` が要る。

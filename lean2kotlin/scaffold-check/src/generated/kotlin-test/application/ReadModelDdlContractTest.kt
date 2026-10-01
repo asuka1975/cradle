@@ -4,7 +4,6 @@
 package dev.cradle.scaffold.application
 
 import dev.cradle.scaffold.NoteFixture
-import dev.cradle.scaffold.TitleFixture
 import dev.cradle.scaffold.application.usecase.notesusecase.NotesReadModel
 import dev.cradle.scaffold.domain.entity.Note
 import dev.cradle.scaffold.domain.valueobject.NoteId
@@ -27,51 +26,51 @@ abstract class ReadModelDdlContractTest {
 
 	@Test
 	fun `NotesReadModel は golden basic-init の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden external-init の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden basic-flow #0 の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden basic-flow #1 の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = true), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = true), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = true), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = true), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden external-flow #0 の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden external-flow #1 の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = false), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))))
 	}
 
 	@Test
 	fun `NotesReadModel は golden external-flow #2 の状態から Retrieve できる`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = true), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = TitleFixture(text = "買い出し"), closed = true), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = TitleFixture(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = TitleFixture(text = "新しいメモ"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = true), NoteRow(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteRow(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 0L), author = UserId(id = 1L), title = Title(text = "買い出し"), closed = true), NoteFixture(id = NoteId(id = 1L), author = UserId(id = 2L), title = Title(text = "打合せ"), closed = true), NoteFixture(id = NoteId(id = 2L), author = UserId(id = 1L), title = Title(text = "新しいメモ"), closed = false))))
 	}
 
 	/** 妥当な書き込みモデルの射影は行の同一性を保つ。 */
 	@Test
 	fun `retrieveNotesReadModel は NoteRow の定理 noteRows_ids を再現する(1)`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = false))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s0"), closed = false))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = false))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s0"), closed = false))))
 	}
 
 	/** 妥当な書き込みモデルの射影は行の同一性を保つ。 */
@@ -84,14 +83,14 @@ abstract class ReadModelDdlContractTest {
 	/** 妥当な書き込みモデルの射影は行の同一性を保つ。 */
 	@Test
 	fun `retrieveNotesReadModel は NoteRow の定理 noteRows_ids を再現する(3)`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = TitleFixture(text = "s2"), closed = true))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 93L), author = UserId(id = 6L), title = Title(text = "s2"), closed = true))))
 	}
 
 	/** 妥当な書き込みモデルの射影は行の同一性を保つ。 */
 	@Test
 	fun `retrieveNotesReadModel は NoteRow の定理 noteRows_ids を再現する(4)`() {
-		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s3"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s4"), closed = true))),
-			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = TitleFixture(text = "s3"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = TitleFixture(text = "s4"), closed = true))))
+		assertEquals(NotesReadModel(notes = listOf<NoteRow>(NoteRow(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s3"), closed = false), NoteRow(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s4"), closed = true))),
+			retrieveNotesReadModel(listOf<NoteFixture>(NoteFixture(id = NoteId(id = 91L), author = UserId(id = 4L), title = Title(text = "s3"), closed = false), NoteFixture(id = NoteId(id = 92L), author = UserId(id = 5L), title = Title(text = "s4"), closed = true))))
 	}
 }

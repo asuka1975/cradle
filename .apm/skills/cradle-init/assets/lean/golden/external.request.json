@@ -28,9 +28,7 @@
       {
         "command": {
           "postNote": {
-            "title": {
-              "text": "新しいメモ"
-            }
+            "title": "新しいメモ"
           }
         }
       },
