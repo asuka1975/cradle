@@ -37,7 +37,7 @@ applyTo: "lean/**/*.lean"
 
 - `@[contract]` = 生成テスト 1 ファミリで、保証ではない（多くは def の言い換え）。resolved HS の結論は、抽象化した少数の保証の定理が ∀ で言う（1 HS 1 定理にしない。置き場は事実が閉じる単位 — Entity / `UseCase.lean` / `Application/Composition/`。`@[contract]` を付けない。lean-conventions §7）。
 - `@[contract]` の形: UseCase はエラー枝 1 本 = 定理 1 本と `execute_ok`（作用後の状態全体がオラクル。フレーム・泉の消費・追加 / 更新の等式はその系なので指名しない）。Entity / VO のふるまいは効果・非効果・冪等・同一性を指名する。
-- 指名するのは契約面（execute / query）越しに観測できるものだけ。validate 面の定理・他の定理の系・証明の分解装置には付けない。
+- 指名するのは契約面（execute / query）越しに観測できるものと、UseCase の判断（validate / apply が呼ぶ純粋な補助 def — 生成器が `<X>Rules` に写す）だけ。validate 面の定理・他の定理の系・証明の分解装置には付けない。
 - 前提は Decidable、量化変数は生成可能な型、関数は computable。
 - Port を使う UseCase は、validate の拒否（観測に依らない）・観測ごとの拒否・成功をそれぞれ定理にする。生成テストは Lean が評価した要求と定理の観測から Port のモックを組み、要求不一致・余分な呼び出し・呼ばれなかった応答をハーネスの失敗にする（業務の拒否とは別）。
 - `@[faultContract]` は中断点ごとに def を置く。Port を使う UseCase では観測を引数に取らない def = 外部を呼ぶ前の中断、取る def = 応答を得た後の中断で、生成テストは Port の消費位置と中断後の状態を検査する（lean-conventions §8）。境界の表（`Runtime/Machine.lean` の `FaultSpec`）はその def の部分適用で、消費位置は構成子（`beforeCall` / `afterResponse`）が写す。

@@ -1451,6 +1451,29 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     -- 更新系+画面: 各 UseCase ディレクトリの UseCase(固定形 validate / execute)
     let (useCaseJs, uSkipped) ← extractServices ucNs `UseCase ""
       (only := [`validate, `execute]) (stateResult := true)
+    -- UseCase の判断(validate / apply が呼ぶ純粋な補助 def)。@[contract] が指名したものだけを
+    -- `<X>Rules` interface に出す(指名の無い補助は Lean だけの語彙)。固定名と障害契約の def は候補にしない。
+    -- 署名を写せない補助は候補から外れるだけ(指名していれば契約の診断で止まる)
+    let isFaultTagged ← tagCheckerOpt `faultContract
+    let fixedUseCaseNames : List Name := [`validate, `act, `execute, `request, `mkRequest, `apply]
+    let (rulesAll, _) ← extractServices ucNs `UseCase "Rules"
+    let mut ruleDefs : Std.HashMap Name String := {}   -- 補助 def → `<X>Rules`
+    for (n, ci) in env.constants.toList do
+      unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
+      let .defnInfo _ := ci | continue
+      let some m := modOf n | continue
+      unless ucNs.isPrefixOf m && m.components.getLast! == `UseCase do continue
+      if fixedUseCaseNames.contains (n.updatePrefix Name.anonymous) || isFaultTagged n then continue
+      let dirS := toString m.components.dropLast.getLast!
+      let svc := (if dirS.endsWith "UseCase" then (dirS.dropEnd "UseCase".length).toString else dirS) ++ "Rules"
+      let listed := rulesAll.any fun j =>
+        match j.getObjVal? "name", j.getObjVal? "methods" with
+        | .ok (.str nm), .ok (.arr ms) => nm == svc && ms.any fun mj =>
+            match mj.getObjVal? "name" with
+            | .ok (.str mn) => mn == toString (n.updatePrefix Name.anonymous)
+            | _ => false
+        | _, _ => false
+      if listed then ruleDefs := ruleDefs.insert n svc
     -- DomainService(複数の集約ルートへの関心)— Domain/DomainService/ の def が現れたら interface を生成
     let (domainSvcJs, dsSkipped) ← extractServices (domainNs ++ `DomainService)
       `DomainService "Service" (anyLeaf := true)
@@ -1811,16 +1834,21 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           match e.getAppFn with
           | .const fn _ => projDefs.contains fn
           | _ => false
-        -- 優先順位: 射影 → 判断 → ふるまい(射影・判断の定理は仮定に
-        -- valid 等のふるまいを含むため、ふるまい判定を後段に置く)
+        let isRuleTarget (e : Expr) : Bool :=
+          match e.getAppFn with
+          | .const fn _ => ruleDefs.contains fn
+          | _ => false
+        -- 優先順位: 射影 → 判断 → UseCase の判断(補助 def)→ ふるまい(射影・判断・補助の定理は
+        -- 結論や仮定に valid・markSending 等のふるまいを含むため、ふるまい判定を後段に置く)
         let projectionMode := !touchesExec && viewHas isProjectionTarget
         let judgmentMode := !touchesExec && !projectionMode && viewHas isJudgmentTarget
-        let behaviorMode := !touchesExec && !projectionMode && !judgmentMode &&
+        let ruleMode := !touchesExec && !projectionMode && !judgmentMode && viewHas isRuleTarget
+        let behaviorMode := !touchesExec && !projectionMode && !judgmentMode && !ruleMode &&
           viewHas isBehaviorTarget
-        unless touchesExec || behaviorMode || judgmentMode || projectionMode do
+        unless touchesExec || behaviorMode || judgmentMode || projectionMode || ruleMode do
           nonUseCaseContracts := nonUseCaseContracts + 1
           droppedJs := droppedJs.push (dropped "contract" (toString thmName)
-            "主対象(UseCase の execute / validate・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する")
+            "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する")
           continue
         -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
         let mut core := stmt
@@ -1862,6 +1890,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             pure (concl.find? pred)
           let primary? ←
             if behaviorMode then searchIn isBehaviorTarget
+            else if ruleMode then searchIn isRuleTarget
             else if judgmentMode then do
               -- 判断定理はケース選択器 — 観測は本番契約面(UseCase の execute)。
               -- 定理の binder(行の列・パラメータ・鍵)を execute の引数へ割り付け、
@@ -2155,7 +2184,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     let a := inst execArgs[k]!
                     let aty ← whnf (← inferType a)
                     let h := headOf aty
-                    let pureMode := behaviorMode || projectionMode
+                    let pureMode := behaviorMode || projectionMode || ruleMode
                     if !pureMode && roles.get? h == some .repositoryState then
                       beforeJ := some (← valueToJson a, h)
                     else if !pureMode && roles.get? h == some .readModel then
@@ -2170,7 +2199,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 -- Port の期待値: 要求は Lean の request を同じ引数で評価した値(validate が主対象なら
                 -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
                 let portsExtra : List (String × Json) ← do
-                  if behaviorMode || projectionMode || judgmentMode then pure [] else
+                  if behaviorMode || projectionMode || judgmentMode || ruleMode then pure [] else
                   let dir := ((modOf execName).getD Name.anonymous).components.dropLast.getLast!
                   match ucPorts.get? dir with
                   | none => pure []
@@ -2196,8 +2225,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                       ("operation", Json.str (decapitalize dep.op)),
                       ("request", requestJ), ("outcome", outcomeJ)]])]
                 let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
-                if behaviorMode then
-                  -- ふるまい: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
+                if behaviorMode || ruleMode then
+                  -- ふるまい・UseCase の判断: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
                   caseFields := caseFields ++ [("kind", Json.str "pure"),
                     ("ok", ← valueToJson expW)]
                 else if projectionMode then
@@ -2294,6 +2323,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           let methodName := toString (execName.updatePrefix Name.anonymous)
           let groupKey :=
             if behaviorMode then toString ((behaviorDefs.get? execName).getD Name.anonymous)
+            else if ruleMode then (ruleDefs.get? execName).getD ""
             else if projectionMode then
               toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).1)
             else toString (((modOf execName).getD Name.anonymous).components.dropLast.getLast!)
@@ -2310,6 +2340,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             s!"有効なケースを演繹できない({", ".intercalate whys.toList.eraseDups})")
         else
           let target := if behaviorMode then "behaviors"
+            else if ruleMode then "rules"
             else if projectionMode then "projection"
             else "usecase"
           let extra := if projectionMode then [("rowType", Json.str rowTy)] else []
@@ -2325,7 +2356,27 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         droppedJs := droppedJs.push (dropped "contract" (toString thmName)
           s!"翻訳できない: {← e.toMessageData.toString}")
     if nonUseCaseContracts > 0 then
-      logInfo m!"lean2kotlin: 主対象(execute / validate・ふるまい・判断・射影)に触れない契約定理 {nonUseCaseContracts} 本 — 検査に至らないので生成は失敗する(指名を外す)"
+      logInfo m!"lean2kotlin: 主対象(execute / validate・UseCase の判断・ふるまい・判断・射影)に触れない契約定理 {nonUseCaseContracts} 本 — 検査に至らないので生成は失敗する(指名を外す)"
+
+    -- UseCase の判断: 契約が指名した補助 def だけを `<X>Rules` の面に残す
+    let nominatedRules : Array (String × String) := contractJs.filterMap fun c =>
+      match c.getObjVal? "target", c.getObjVal? "useCase", c.getObjVal? "method" with
+      | .ok (.str "rules"), .ok (.str svc), .ok (.str m) => some (svc, m)
+      | _, _, _ => none
+    let useCaseRulesJs : Array Json := rulesAll.filterMap fun j =>
+      match j.getObjVal? "name", j.getObjVal? "module", j.getObjVal? "methods" with
+      | .ok (.str svc), .ok md, .ok (.arr ms) =>
+        let kept := ms.filter fun mj => match mj.getObjVal? "name" with
+          | .ok (.str m) => nominatedRules.contains (svc, m)
+          | _ => false
+        if kept.isEmpty then none
+        else some (Json.mkObj [("name", Json.str svc), ("module", md), ("methods", Json.arr kept)])
+      | _, _, _ => none
+    -- `<X>Rules` もサービスと同じ Kotlin の名前空間に入る
+    for j in useCaseRulesJs do
+      if let .ok (.str nm) := j.getObjVal? "name" then
+        if let some prev := seenSvc.get? nm then
+          throwError "lean2kotlin: サービス名 {nm} が衝突しています: {prev} と UseCase の判断"
 
     -- 7. @[faultContract] 障害契約 → 障害注入フックつき契約テストの期待値。
     -- 定義の値 = 環境の技術的障害(DB 例外など — モデル外の事象)でフェーズが
@@ -2609,18 +2660,19 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         throwError "lean2kotlin: Kotlin 名 {k} が衝突しています: {prev} と {n}"
       seen := seen.insert k n
 
-    return Json.mkObj [
+    return Json.mkObj (([
       ("version", (1 : Nat)),
       ("rootNamespace", toString rootNs),
       ("types", Json.arr typeEntries),
       ("queryServices", Json.arr queryJs),
-      ("useCases", Json.arr useCaseJs),
+      ("useCases", Json.arr useCaseJs)] : List (String × Json)) ++
+      (if useCaseRulesJs.isEmpty then [] else [("useCaseRules", Json.arr useCaseRulesJs)]) ++ [
       ("domainServices", Json.arr domainSvcJs),
       ("contracts", Json.arr contractJs),
       ("faultContracts", Json.arr faultJs),
       ("behaviors", Json.arr behaviorsJs),
       ("ports", Json.arr portsJs),
-      ("diagnostics", Json.mkObj [("dropped", Json.arr droppedJs)])]
+      ("diagnostics", Json.mkObj [("dropped", Json.arr droppedJs)])])
   if let some dir := System.FilePath.parent outPath then
     IO.FS.createDirAll dir
   IO.FS.writeFile outPath (ir.pretty ++ "\n")

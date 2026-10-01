@@ -53,6 +53,28 @@ theorem reflect_id (outcome : Authorize.Outcome) (a : PaymentAttempt PaymentAtte
     (reflect outcome a).id = a.id := by
   cases outcome <;> rfl
 
+/-! ### 判断の契約（観測 1 つ = 定理 1 本）— 生成器は `DispatchPaymentRules` と契約テストを出し、実装はそれを呼ぶ -/
+
+/-- 承認なら、送る印を付けて承認で確定する。 -/
+@[contract] theorem reflect_authorized (a : PaymentAttempt PaymentAttemptId VisitId) :
+    reflect .authorized a = a.markSending.settle .authorized := rfl
+
+/-- 拒否なら、送る印を付けて拒否で確定する。 -/
+@[contract] theorem reflect_declined (a : PaymentAttempt PaymentAttemptId VisitId) :
+    reflect .declined a = a.markSending.settle .declined := rfl
+
+/-- 受け付けられたなら、送る印を付けて確定の通知を待つ。 -/
+@[contract] theorem reflect_accepted (a : PaymentAttempt PaymentAttemptId VisitId) :
+    reflect .accepted a = a.markSending.awaitConfirmation := rfl
+
+/-- 送れなかったなら、試行番号だけ進めて送れる状態に戻す（同じ冪等キーで送り直してよい）。 -/
+@[contract] theorem reflect_unavailable (a : PaymentAttempt PaymentAttemptId VisitId) :
+    reflect .unavailable a = a.markSending.resetPending := rfl
+
+/-- 答えが無いなら、結果不明にする（送り直さず照会する）。 -/
+@[contract] theorem reflect_unknown (a : PaymentAttempt PaymentAttemptId VisitId) :
+    reflect .unknown a = a.markSending.lose := rfl
+
 /-- 観測を受けて確定する。承認・拒否は確定、受付は通知待ち、送れなかったなら送れる状態のまま、答えが無ければ結果不明。 -/
 def apply (outcome : Authorize.Outcome) (o : Observation PaymentAttemptId)
     (before : State PaymentAttemptId VisitId) (_a : PaymentAttempt PaymentAttemptId VisitId) :

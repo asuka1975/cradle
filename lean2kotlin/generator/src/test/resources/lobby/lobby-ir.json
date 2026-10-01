@@ -231,6 +231,20 @@
      "doc": "始まる前の拒否: 来訪が無い / まだ退出していない（精算は退出の後）/ その来訪に未確定の試みがある。 "}],
    "kind": "command",
    "input": "Lobby.Application.StartPaymentUseCase.Command"}],
+ "useCaseRules":
+ [{"name": "DispatchPaymentRules",
+   "module": "DispatchPaymentUseCase",
+   "methods":
+   [{"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+     "params":
+     [{"type":
+       {"name": "Lobby.Application.Port.PaymentGateway.Authorize.Outcome",
+        "k": "ref"},
+       "name": "outcome"},
+      {"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+       "name": "a"}],
+     "name": "reflect",
+     "doc": "観測ごとの反映。どの観測でも試行番号は進む（送ろうとしたので）。送れなかったなら送れる状態に戻す。 "}]}],
  "types":
  [{"shape":
    {"kind": "structure",
@@ -2662,6 +2676,336 @@
      "before": {"attempts": {"attempts": []}},
      "args": {"outcome": "authorized", "o": {"attempt": {"id": 92}}},
      "after": {"attempts": {"attempts": []}}}]},
+  {"useCase": "DispatchPaymentRules",
+   "theorem": "reflect_accepted",
+   "target": "rules",
+   "method": "reflect",
+   "doc": "受け付けられたなら、送る印を付けて確定の通知を待つ。 ",
+   "cases":
+   [{"ok":
+     {"visit": {"id": 91},
+      "tries": 5,
+      "phase": "awaitingConfirmation",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 2}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "accepted",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 4,
+       "phase": "pending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 2}}}}},
+    {"ok":
+     {"visit": {"id": 92},
+      "tries": 6,
+      "phase": "awaitingConfirmation",
+      "id": {"id": 92},
+      "amount": {"value": {"numerator": 0, "denominator": 1}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "accepted",
+      "a":
+      {"visit": {"id": 92},
+       "tries": 5,
+       "phase": "authorized",
+       "id": {"id": 92},
+       "amount": {"value": {"numerator": 0, "denominator": 1}}}}},
+    {"ok":
+     {"visit": {"id": 93},
+      "tries": 7,
+      "phase": "awaitingConfirmation",
+      "id": {"id": 93},
+      "amount": {"value": {"numerator": 5, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "accepted",
+      "a":
+      {"visit": {"id": 93},
+       "tries": 6,
+       "phase": "unknown",
+       "id": {"id": 93},
+       "amount": {"value": {"numerator": 5, "denominator": 3}}}}},
+    {"ok":
+     {"visit": {"id": 91},
+      "tries": 8,
+      "phase": "awaitingConfirmation",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "accepted",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 7,
+       "phase": "sending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 3}}}}}]},
+  {"useCase": "DispatchPaymentRules",
+   "theorem": "reflect_authorized",
+   "target": "rules",
+   "method": "reflect",
+   "doc": "承認なら、送る印を付けて承認で確定する。 ",
+   "cases":
+   [{"ok":
+     {"visit": {"id": 91},
+      "tries": 5,
+      "phase": "authorized",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 2}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "authorized",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 4,
+       "phase": "pending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 2}}}}},
+    {"ok":
+     {"visit": {"id": 92},
+      "tries": 6,
+      "phase": "authorized",
+      "id": {"id": 92},
+      "amount": {"value": {"numerator": 0, "denominator": 1}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "authorized",
+      "a":
+      {"visit": {"id": 92},
+       "tries": 5,
+       "phase": "authorized",
+       "id": {"id": 92},
+       "amount": {"value": {"numerator": 0, "denominator": 1}}}}},
+    {"ok":
+     {"visit": {"id": 93},
+      "tries": 7,
+      "phase": "authorized",
+      "id": {"id": 93},
+      "amount": {"value": {"numerator": 5, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "authorized",
+      "a":
+      {"visit": {"id": 93},
+       "tries": 6,
+       "phase": "unknown",
+       "id": {"id": 93},
+       "amount": {"value": {"numerator": 5, "denominator": 3}}}}},
+    {"ok":
+     {"visit": {"id": 91},
+      "tries": 8,
+      "phase": "authorized",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "authorized",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 7,
+       "phase": "sending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 3}}}}}]},
+  {"useCase": "DispatchPaymentRules",
+   "theorem": "reflect_declined",
+   "target": "rules",
+   "method": "reflect",
+   "doc": "拒否なら、送る印を付けて拒否で確定する。 ",
+   "cases":
+   [{"ok":
+     {"visit": {"id": 91},
+      "tries": 5,
+      "phase": "declined",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 2}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "declined",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 4,
+       "phase": "pending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 2}}}}},
+    {"ok":
+     {"visit": {"id": 92},
+      "tries": 6,
+      "phase": "declined",
+      "id": {"id": 92},
+      "amount": {"value": {"numerator": 0, "denominator": 1}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "declined",
+      "a":
+      {"visit": {"id": 92},
+       "tries": 5,
+       "phase": "authorized",
+       "id": {"id": 92},
+       "amount": {"value": {"numerator": 0, "denominator": 1}}}}},
+    {"ok":
+     {"visit": {"id": 93},
+      "tries": 7,
+      "phase": "declined",
+      "id": {"id": 93},
+      "amount": {"value": {"numerator": 5, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "declined",
+      "a":
+      {"visit": {"id": 93},
+       "tries": 6,
+       "phase": "unknown",
+       "id": {"id": 93},
+       "amount": {"value": {"numerator": 5, "denominator": 3}}}}},
+    {"ok":
+     {"visit": {"id": 91},
+      "tries": 8,
+      "phase": "declined",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "declined",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 7,
+       "phase": "sending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 3}}}}}]},
+  {"useCase": "DispatchPaymentRules",
+   "theorem": "reflect_unavailable",
+   "target": "rules",
+   "method": "reflect",
+   "doc": "送れなかったなら、試行番号だけ進めて送れる状態に戻す（同じ冪等キーで送り直してよい）。 ",
+   "cases":
+   [{"ok":
+     {"visit": {"id": 91},
+      "tries": 5,
+      "phase": "pending",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 2}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unavailable",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 4,
+       "phase": "pending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 2}}}}},
+    {"ok":
+     {"visit": {"id": 92},
+      "tries": 6,
+      "phase": "pending",
+      "id": {"id": 92},
+      "amount": {"value": {"numerator": 0, "denominator": 1}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unavailable",
+      "a":
+      {"visit": {"id": 92},
+       "tries": 5,
+       "phase": "authorized",
+       "id": {"id": 92},
+       "amount": {"value": {"numerator": 0, "denominator": 1}}}}},
+    {"ok":
+     {"visit": {"id": 93},
+      "tries": 7,
+      "phase": "pending",
+      "id": {"id": 93},
+      "amount": {"value": {"numerator": 5, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unavailable",
+      "a":
+      {"visit": {"id": 93},
+       "tries": 6,
+       "phase": "unknown",
+       "id": {"id": 93},
+       "amount": {"value": {"numerator": 5, "denominator": 3}}}}},
+    {"ok":
+     {"visit": {"id": 91},
+      "tries": 8,
+      "phase": "pending",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unavailable",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 7,
+       "phase": "sending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 3}}}}}]},
+  {"useCase": "DispatchPaymentRules",
+   "theorem": "reflect_unknown",
+   "target": "rules",
+   "method": "reflect",
+   "doc": "答えが無いなら、結果不明にする（送り直さず照会する）。 ",
+   "cases":
+   [{"ok":
+     {"visit": {"id": 91},
+      "tries": 5,
+      "phase": "unknown",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 2}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unknown",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 4,
+       "phase": "pending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 2}}}}},
+    {"ok":
+     {"visit": {"id": 92},
+      "tries": 6,
+      "phase": "unknown",
+      "id": {"id": 92},
+      "amount": {"value": {"numerator": 0, "denominator": 1}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unknown",
+      "a":
+      {"visit": {"id": 92},
+       "tries": 5,
+       "phase": "authorized",
+       "id": {"id": 92},
+       "amount": {"value": {"numerator": 0, "denominator": 1}}}}},
+    {"ok":
+     {"visit": {"id": 93},
+      "tries": 7,
+      "phase": "unknown",
+      "id": {"id": 93},
+      "amount": {"value": {"numerator": 5, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unknown",
+      "a":
+      {"visit": {"id": 93},
+       "tries": 6,
+       "phase": "unknown",
+       "id": {"id": 93},
+       "amount": {"value": {"numerator": 5, "denominator": 3}}}}},
+    {"ok":
+     {"visit": {"id": 91},
+      "tries": 8,
+      "phase": "unknown",
+      "id": {"id": 91},
+      "amount": {"value": {"numerator": 1, "denominator": 3}}},
+     "kind": "pure",
+     "args":
+     {"outcome": "unknown",
+      "a":
+      {"visit": {"id": 91},
+       "tries": 7,
+       "phase": "sending",
+       "id": {"id": 91},
+       "amount": {"value": {"numerator": 1, "denominator": 3}}}}}]},
   {"useCase": "InquirePaymentUseCase",
    "theorem": "execute_not_found",
    "target": "usecase",

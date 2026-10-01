@@ -574,6 +574,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 	private fun emitTheoremContractTests(goldenPlan: MutableMap<String, Pair<IrMethod, String?>>) {
 		val byTarget = ir.contracts.groupBy { it.target }
 		val behaviorCs = byTarget["behaviors"] ?: emptyList()
+		val ruleCs = byTarget["rules"] ?: emptyList()
 		val ucCs = byTarget["usecase"] ?: emptyList()
 		for ((ucName, contracts) in ucCs.groupBy { it.useCase }.toSortedMap()) {
 			val s = ir.useCases.find { it.name == ucName }
@@ -600,6 +601,72 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 			if (k.isInputRole(td.role)) continue
 			if (k.isEntityLike(td)) emitEntityTheoremTest(td, contracts)
 			else emitBehaviorsTheoremTest(subject, contracts)
+		}
+		for ((svc, contracts) in ruleCs.groupBy { it.useCase }.toSortedMap()) {
+			val s = ir.useCaseRules.find { it.name == svc }
+			if (s == null) {
+				log("  note: 契約定理テスト: UseCase の判断 $svc が interface 面にありません")
+				continue
+			}
+			emitRulesTheoremTest(s, contracts)
+		}
+	}
+
+	/** UseCase の判断(`<X>Rules`)の単体テスト(純値形 — オラクル値との完全一致)。
+	    引数は本番語彙で構築し(entity-like の葉は実体化フック経由)、返り値は観測(toFixture)で比較する。 */
+	private fun emitRulesTheoremTest(s: IrService, contracts: List<IrContract>) {
+		val mats = linkedMapOf<String, IrTypeDef>()
+		for (c in contracts) {
+			val m = s.methods.find { it.name == c.method } ?: continue
+			for (p in m.params) for (e in entityRefsOf(p.type)) mats[e.lean] = e
+		}
+		emitFile(k.useCasePackage(s.module), "${s.name}ContractTest", framework = junitImports) {
+			val sb = StringBuilder()
+			sb.append("/**\n")
+			sb.append(" * Lean: @[contract] 定理群から演繹された `${s.module}` の判断(${s.name})の単体テスト。\n")
+			sb.append(" * 定理 1 本 = テストファミリ 1 本 — 定理が選んだ入力でのオラクル値(Lean 内評価)との完全一致で固定する。\n")
+			sb.append(" */\n")
+			sb.append("abstract class ${s.name}ContractTest {\n")
+			sb.append("\t/** 判断の実装を返す(UseCase の実装がこの interface を実装してもよい)。 */\n")
+			sb.append("\tprotected abstract fun rules(): ${s.name}\n")
+			for ((_, e) in mats) {
+				sb.append("\t/** fixture の実体化(観測が一致する実装の値を返す)。 */\n")
+				sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
+					"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
+			}
+			var emitted = 0
+			for (c in contracts) {
+				val m = s.methods.find { it.name == c.method }
+				if (m == null) {
+					log("  note: ${c.theorem}: 判断 ${c.method} が interface にありません")
+					continue
+				}
+				c.cases.forEachIndexed { i, case ->
+					if (case.kind != "pure" || case.ok == null) {
+						log("  note: ${c.theorem}(${i + 1}): 純値形でないためスキップ")
+						return@forEachIndexed
+					}
+					val callArgs = m.params.map { p ->
+						val j = case.args[p.name] ?: run {
+							log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
+							return@forEachIndexed
+						}
+						"${ident(p.name)} = ${inputLiteral(p.type, j)}"
+					}
+					val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+					sb.append("\n$doc\t@Test\n")
+					sb.append("\tfun `${c.method} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+					sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
+					sb.append("\t\t\trules().${ident(c.method)}(" +
+						callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
+					sb.append("\t}\n")
+					emittedContracts += contractKey(c)
+					emitted++
+				}
+			}
+			sb.append("}")
+			log("  note: 契約定理テスト: ${s.name} — 定理 ${contracts.size} 本から $emitted ケース(純値形)")
+			sb.toString()
 		}
 	}
 

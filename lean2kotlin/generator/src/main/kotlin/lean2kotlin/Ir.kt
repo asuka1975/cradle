@@ -433,6 +433,8 @@ class Ir(
 	val queryServices: List<IrService>,
 	val useCases: List<IrService>,
 	val domainServices: List<IrService>,
+	/** UseCase の判断(`<X>Rules`): 契約が指名した UseCase の補助 def(validate / apply が呼ぶ純粋な判断)。 */
+	val useCaseRules: List<IrService> = emptyList(),
 	val contracts: List<IrContract> = emptyList(),
 	val faultContracts: List<IrFaultContract> = emptyList(),
 	val behaviors: List<IrBehavior> = emptyList(),
@@ -460,7 +462,7 @@ class Ir(
 				is IrShape.Enum -> emptyList()
 			}
 		}
-		val methods = (queryServices + useCases + domainServices).flatMap { it.methods } + behaviors.flatMap { it.methods }
+		val methods = (queryServices + useCases + domainServices + useCaseRules).flatMap { it.methods } + behaviors.flatMap { it.methods }
 		(fieldTypes + methods.flatMap { m -> m.params.map { it.type } + m.ret }).any { it.hasRat() }
 	}
 
@@ -482,6 +484,7 @@ class Ir(
 				queryServices = o["queryServices"]?.jsonArray?.map(IrService::parse) ?: emptyList(),
 				useCases = o["useCases"]?.jsonArray?.map(IrService::parse) ?: emptyList(),
 				domainServices = o["domainServices"]?.jsonArray?.map(IrService::parse) ?: emptyList(),
+				useCaseRules = o["useCaseRules"]?.jsonArray?.map(IrService::parse) ?: emptyList(),
 				contracts = o["contracts"]?.jsonArray?.map(IrContract::parse) ?: emptyList(),
 				faultContracts = o["faultContracts"]?.jsonArray?.map(IrFaultContract::parse) ?: emptyList(),
 				behaviors = o["behaviors"]?.jsonArray?.map(IrBehavior::parse) ?: emptyList(),
