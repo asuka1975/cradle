@@ -60,6 +60,19 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `有理数は生成型 Rational に写り、リテラルは正規形の分子と分母、Arb は負と分母 1 以外も引く`() {
+		assertEquals(IrType.Rat, IrType.parse(json("{\"k\":\"rat\"}")))
+		assertEquals("Rational", k.typeRef(IrType.Rat))
+		assertEquals("List<Rational>", k.typeRef(IrType.ListOf(IrType.Rat)))
+		assertEquals("Rational.of(-1L, 2L)", k.literal(IrType.Rat, json("{\"numerator\":-1,\"denominator\":2}")))
+		assertEquals("Rational.of(java.math.BigInteger(\"12345678901234567890123\"), java.math.BigInteger(\"7\"))",
+			k.literal(IrType.Rat, json("{\"numerator\":12345678901234567890123,\"denominator\":7}")))
+		assertEquals("Arb.bind(Arb.long(-4096L..4096L), Arb.long(1L..64L)) { n, d -> Rational.of(n, d) }", k.arbOf(IrType.Rat))
+		assertFalse(sproutIr().usesRat)
+		assertTrue(lobbyIr().usesRat)
+	}
+
+	@Test
 	fun `1 フィールドの ValueObject は value class になる`() {
 		assertTrue(k.isValueClass(td(noteId)))
 		assertTrue(k.isValueClass(td(userId)))

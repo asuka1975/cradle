@@ -91,6 +91,7 @@ partial def typeToIR (rootNs : Name) (reg : MonoReg) (e : Expr) : MetaM Json := 
     else if n == ``String then return Json.mkObj [("k", "string")]
     else if n == ``Bool then return Json.mkObj [("k", "bool")]
     else if n == ``Unit || n == ``PUnit then return Json.mkObj [("k", "unit")]
+    else if n == ``Rat then return Json.mkObj [("k", "rat")]
     else if let some k := stdTimeKind? n then return Json.mkObj [("k", k)]
     else if rootNs.isPrefixOf n then do
       registerMono reg s!"{n}" { head := n, args := #[], expr := e }
@@ -366,6 +367,19 @@ unsafe def evalBoolUnsafe (e : Expr) : MetaM Bool :=
 def evalBoolExpr (_ : Expr) : MetaM Bool :=
   throwError "evalBoolExpr: interpreter not available"
 
+unsafe def evalRatUnsafe (e : Expr) : MetaM Rat :=
+  Meta.evalExpr Rat (mkConst ``Rat) e
+/-- 有理数の値をコンパイル実行で得る(`Rat` の正規化は gcd の整礎再帰で、whnf では止まる)。 -/
+@[implemented_by evalRatUnsafe]
+def evalRatExpr (_ : Expr) : MetaM Rat :=
+  throwError "evalRatExpr: interpreter not available"
+
+/-- 有理数のオラクル値: {"numerator": 整数, "denominator": 正の整数}(`Rat` の正規形 — 既約・分母が正)。 -/
+def ratJson (r : Rat) : Json := Json.mkObj [("numerator", toJson r.num), ("denominator", toJson r.den)]
+
+/-- 有理数のサンプル式 `mkRat n d`。 -/
+def ratLit (n : Int) (d : Nat) : Expr := mkApp2 (mkConst ``mkRat) (toExpr n) (mkNatLit d)
+
 /-- 前方宣言用: ctorFieldTypes は下に定義される(シリアライザ合成が使う)。 -/
 private def ctorFieldTypesFwd (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
     MetaM (Array (Expr × Bool)) := do
@@ -484,6 +498,7 @@ partial def valueToJson (e : Expr) : MetaM Json := do
   -- 標準時間型(Std.Time)は ctor 分解せず ToJson インスタンスで直列化する
   -- (ISO-8601 文字列 — 対象の Runtime が定義。ctor 分解すると内部表現が漏れる)
   let ty ← whnf (← inferType e)
+  if ty.isConstOf ``Rat then return ratJson (← evalRatExpr e)
   if let .const tyN _ := ty.getAppFn then
     if (stdTimeKind? tyN).isSome then
       match ← jsonViaInstance e with
@@ -614,6 +629,8 @@ def scalarAlternatives (ty : Expr) (orig : Expr) : MetaM (Array Expr) := do
   let ty ← whnf ty
   if ty.isConstOf ``Nat then
     return #[orig] ++ (#[0, 1, 2, 3, 5, 10, 100].map mkNatLit)
+  else if ty.isConstOf ``Rat then
+    return #[orig, ratLit 0 1, ratLit 1 1, ratLit 1 2, ratLit 2 1, ratLit 3 2]
   else if ty.isConstOf ``String then
     return #[orig, mkStrLit "a", mkStrLit "abc"]
   else return #[orig]
@@ -676,6 +693,11 @@ partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
   let .const tn lvls := ty.getAppFn | return none
   let args := ty.getAppArgs
   if tn == ``Nat then return some (mkNatLit (4 + variant))
+  else if tn == ``Rat then
+    -- 分母 1 以外を多めに。variant 1 = 0 の境界、5 = 負の境界(「負でない」制約の失敗枝へ届かせる)
+    let (n, d) : Int × Nat := match variant with
+      | 0 => (1, 2) | 1 => (0, 1) | 2 => (5, 3) | 3 => (1, 3) | 4 => (2, 1) | 5 => (-1, 2) | _ => (7, 4)
+    return some (ratLit n d)
   else if tn == `Std.Time.PlainDate then do
     -- 標準時間型: epoch 日で決定的に構築。variant で日をずらす —
     -- 独立にサンプルされる日付(clock.today と createdOn 等)の組合せが

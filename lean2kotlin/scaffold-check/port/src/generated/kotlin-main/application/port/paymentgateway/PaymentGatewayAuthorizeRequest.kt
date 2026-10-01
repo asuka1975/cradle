@@ -3,6 +3,7 @@
 
 package dev.cradle.lobby.application.port.paymentgateway
 
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 
 /**
@@ -10,6 +11,6 @@ import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
  */
 data class PaymentGatewayAuthorizeRequest(
 	val attempt: PaymentAttemptId,
-	val amount: Long,
+	val amount: Money,
 	val attemptNo: Long,
 )

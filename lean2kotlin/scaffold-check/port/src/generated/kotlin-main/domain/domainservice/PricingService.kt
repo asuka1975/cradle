@@ -4,6 +4,7 @@
 package dev.cradle.lobby.domain.domainservice
 
 import dev.cradle.lobby.domain.entity.Visit
+import dev.cradle.lobby.domain.valueobject.Money
 
 /**
  * Lean: モジュール `Pricing` の interface 面(署名は Lean の def の写し)。
@@ -11,6 +12,6 @@ import dev.cradle.lobby.domain.entity.Visit
  * 実装は AI が別ファイルに書く。default 禁止。
  */
 interface PricingService {
-	/** 受付中の来訪は無料、退出済みは 1。 */
-	fun fee(v: Visit): Long
+	/** 受付中の来訪は無料、退出済みは 3/2（端数のある料金）。 */
+	fun fee(v: Visit): Money
 }

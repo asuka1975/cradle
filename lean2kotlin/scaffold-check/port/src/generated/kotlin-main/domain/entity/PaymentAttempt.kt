@@ -3,6 +3,7 @@
 
 package dev.cradle.lobby.domain.entity
 
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.PaymentResult
@@ -14,7 +15,7 @@ import dev.cradle.lobby.domain.valueobject.VisitId
 interface PaymentAttempt {
 	val id: PaymentAttemptId
 	val visit: VisitId
-	val amount: Long
+	val amount: Money
 	val tries: Long
 	val phase: PaymentPhase
 	/** その確定結果で決着しているか（同じ結果の通知の重複の判定）。 */

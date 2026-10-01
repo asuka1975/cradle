@@ -4,7 +4,9 @@
 package dev.cradle.lobby.domain.entity
 
 import dev.cradle.lobby.PaymentAttemptFixture
+import dev.cradle.lobby.Rational
 import dev.cradle.lobby.domain.entity.PaymentAttemptFactory
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.PaymentResult
@@ -27,308 +29,336 @@ abstract class PaymentAttemptEntityContractTest {
 	/** 受け付けられたら通知待ち。 */
 	@Test
 	fun `awaitConfirmation は定理 awaitConfirmation_phase を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.AwaitingConfirmation),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).awaitConfirmation().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.AwaitingConfirmation),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).awaitConfirmation().toFixture())
 	}
 
 	/** 受け付けられたら通知待ち。 */
 	@Test
 	fun `awaitConfirmation は定理 awaitConfirmation_phase を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.AwaitingConfirmation),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).awaitConfirmation().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.AwaitingConfirmation),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).awaitConfirmation().toFixture())
 	}
 
 	/** 受け付けられたら通知待ち。 */
 	@Test
 	fun `awaitConfirmation は定理 awaitConfirmation_phase を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.AwaitingConfirmation),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).awaitConfirmation().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.AwaitingConfirmation),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).awaitConfirmation().toFixture())
 	}
 
 	/** 受け付けられたら通知待ち。 */
 	@Test
 	fun `awaitConfirmation は定理 awaitConfirmation_phase を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.AwaitingConfirmation),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).awaitConfirmation().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.AwaitingConfirmation),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).awaitConfirmation().toFixture())
 	}
 
 	/** 答えを失えば結果不明。 */
 	@Test
 	fun `lose は定理 lose_unknown を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Unknown),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).lose().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Unknown),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).lose().toFixture())
 	}
 
 	/** 答えを失えば結果不明。 */
 	@Test
 	fun `lose は定理 lose_unknown を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Unknown),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).lose().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Unknown),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).lose().toFixture())
 	}
 
 	/** 答えを失えば結果不明。 */
 	@Test
 	fun `lose は定理 lose_unknown を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).lose().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).lose().toFixture())
 	}
 
 	/** 答えを失えば結果不明。 */
 	@Test
 	fun `lose は定理 lose_unknown を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Unknown),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).lose().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Unknown),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).lose().toFixture())
 	}
 
 	/** 送る印は同一性（冪等キー）を変えない。 */
 	@Test
 	fun `markSending は定理 markSending_id を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
 	}
 
 	/** 送る印は同一性（冪等キー）を変えない。 */
 	@Test
 	fun `markSending は定理 markSending_id を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 6L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 6L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
 	}
 
 	/** 送る印は同一性（冪等キー）を変えない。 */
 	@Test
 	fun `markSending は定理 markSending_id を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 7L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 7L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
 	}
 
 	/** 送る印は同一性（冪等キー）を変えない。 */
 	@Test
 	fun `markSending は定理 markSending_id を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 8L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 8L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
 	}
 
 	/** 送る印を付けた試みは、送ったかどうか分からない状態。 */
 	@Test
 	fun `markSending は定理 markSending_phase を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
 	}
 
 	/** 送る印を付けた試みは、送ったかどうか分からない状態。 */
 	@Test
 	fun `markSending は定理 markSending_phase を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 6L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 6L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
 	}
 
 	/** 送る印を付けた試みは、送ったかどうか分からない状態。 */
 	@Test
 	fun `markSending は定理 markSending_phase を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 7L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 7L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
 	}
 
 	/** 送る印を付けた試みは、送ったかどうか分からない状態。 */
 	@Test
 	fun `markSending は定理 markSending_phase を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 8L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 8L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
 	}
 
 	/** 送る印は試行番号を 1 進める。 */
 	@Test
 	fun `markSending は定理 markSending_tries を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 5L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 5L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).markSending().toFixture())
 	}
 
 	/** 送る印は試行番号を 1 進める。 */
 	@Test
 	fun `markSending は定理 markSending_tries を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 6L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 6L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).markSending().toFixture())
 	}
 
 	/** 送る印は試行番号を 1 進める。 */
 	@Test
 	fun `markSending は定理 markSending_tries を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 7L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 7L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).markSending().toFixture())
 	}
 
 	/** 送る印は試行番号を 1 進める。 */
 	@Test
 	fun `markSending は定理 markSending_tries を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 8L, phase = PaymentPhase.Sending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 8L, phase = PaymentPhase.Sending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).markSending().toFixture())
 	}
 
 	/** 送れる状態に戻せば送れる（試行番号は戻らない）。 */
 	@Test
 	fun `resetPending は定理 resetPending_phase を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻せば送れる（試行番号は戻らない）。 */
 	@Test
 	fun `resetPending は定理 resetPending_phase を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻せば送れる（試行番号は戻らない）。 */
 	@Test
 	fun `resetPending は定理 resetPending_phase を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻せば送れる（試行番号は戻らない）。 */
 	@Test
 	fun `resetPending は定理 resetPending_phase を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻しても試行番号は戻らない。 */
 	@Test
 	fun `resetPending は定理 resetPending_tries を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻しても試行番号は戻らない。 */
 	@Test
 	fun `resetPending は定理 resetPending_tries を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻しても試行番号は戻らない。 */
 	@Test
 	fun `resetPending は定理 resetPending_tries を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).resetPending().toFixture())
 	}
 
 	/** 送れる状態に戻しても試行番号は戻らない。 */
 	@Test
 	fun `resetPending は定理 resetPending_tries を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Pending),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).resetPending().toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Pending),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).resetPending().toFixture())
 	}
 
 	/** 承認で確定すれば承認済み。 */
 	@Test
 	fun `settle は定理 settle_authorized を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 承認で確定すれば承認済み。 */
 	@Test
 	fun `settle は定理 settle_authorized を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 承認で確定すれば承認済み。 */
 	@Test
 	fun `settle は定理 settle_authorized を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 承認で確定すれば承認済み。 */
 	@Test
 	fun `settle は定理 settle_authorized を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 拒否で確定すれば拒否済み。 */
 	@Test
 	fun `settle は定理 settle_declined を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 拒否で確定すれば拒否済み。 */
 	@Test
 	fun `settle は定理 settle_declined を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 拒否で確定すれば拒否済み。 */
 	@Test
 	fun `settle は定理 settle_declined を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = 6L, tries = 6L, phase = PaymentPhase.Unknown)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 93L), visit = VisitId(id = 93L), amount = Money(value = Rational.of(5L, 3L)), tries = 6L, phase = PaymentPhase.Unknown)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 拒否で確定すれば拒否済み。 */
 	@Test
 	fun `settle は定理 settle_declined を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 7L, tries = 7L, phase = PaymentPhase.Sending)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 3L)), tries = 7L, phase = PaymentPhase.Sending)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 確定は同一性を変えない。 */
 	@Test
 	fun `settle は定理 settle_id を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 確定は同一性を変えない。 */
 	@Test
 	fun `settle は定理 settle_id を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = 4L, tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 91L), visit = VisitId(id = 91L), amount = Money(value = Rational.of(1L, 2L)), tries = 4L, phase = PaymentPhase.Pending)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 確定は同一性を変えない。 */
 	@Test
 	fun `settle は定理 settle_id を再現する(3)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Authorized).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Authorized).toFixture())
 	}
 
 	/** 確定は同一性を変えない。 */
 	@Test
 	fun `settle は定理 settle_id を再現する(4)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Declined),
-			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = 5L, tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Declined).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Declined),
+			paymentAttempt(PaymentAttemptFixture(id = PaymentAttemptId(id = 92L), visit = VisitId(id = 92L), amount = Money(value = Rational.of(0L, 1L)), tries = 5L, phase = PaymentPhase.Authorized)).settle(r = PaymentResult.Declined).toFixture())
 	}
 
 	/** 始めた直後は送れる状態。 */
 	@Test
 	fun `start は定理 start_pending を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 4L, tries = 0L, phase = PaymentPhase.Pending),
-			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 4L).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 2L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 2L))).toFixture())
 	}
 
 	/** 始めた直後は送れる状態。 */
 	@Test
 	fun `start は定理 start_pending を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 5L, tries = 0L, phase = PaymentPhase.Pending),
-			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 5L).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(0L, 1L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(0L, 1L))).toFixture())
+	}
+
+	/** 始めた直後は送れる状態。 */
+	@Test
+	fun `start は定理 start_pending を再現する(3)`() {
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(5L, 3L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(5L, 3L))).toFixture())
+	}
+
+	/** 始めた直後は送れる状態。 */
+	@Test
+	fun `start は定理 start_pending を再現する(4)`() {
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 3L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 3L))).toFixture())
 	}
 
 	/** 始めた直後は 1 度も送っていない。 */
 	@Test
 	fun `start は定理 start_tries を再現する(1)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 4L, tries = 0L, phase = PaymentPhase.Pending),
-			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 4L).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 2L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 2L))).toFixture())
 	}
 
 	/** 始めた直後は 1 度も送っていない。 */
 	@Test
 	fun `start は定理 start_tries を再現する(2)`() {
-		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 5L, tries = 0L, phase = PaymentPhase.Pending),
-			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = 5L).toFixture())
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(0L, 1L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(0L, 1L))).toFixture())
+	}
+
+	/** 始めた直後は 1 度も送っていない。 */
+	@Test
+	fun `start は定理 start_tries を再現する(3)`() {
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(5L, 3L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(5L, 3L))).toFixture())
+	}
+
+	/** 始めた直後は 1 度も送っていない。 */
+	@Test
+	fun `start は定理 start_tries を再現する(4)`() {
+		assertEquals(PaymentAttemptFixture(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 3L)), tries = 0L, phase = PaymentPhase.Pending),
+			factory().start(id = PaymentAttemptId(id = 100L), visit = VisitId(id = 101L), amount = Money(value = Rational.of(1L, 3L))).toFixture())
 	}
 }

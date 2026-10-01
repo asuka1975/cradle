@@ -377,6 +377,7 @@ class Kotlinize(private val ir: Ir) {
 		IrType.DateTime -> "java.time.LocalDateTime"
 		IrType.Zoned -> "java.time.ZonedDateTime"
 		IrType.Uuid -> "java.util.UUID"
+		IrType.Rat -> "Rational"
 		is IrType.ListOf -> "List<${typeRef(t.of)}>"
 		is IrType.OptionOf -> "${typeRef(t.of)}?"
 		is IrType.PairOf -> "Pair<${typeRef(t.fst)}, ${typeRef(t.snd)}>"
@@ -427,6 +428,14 @@ class Kotlinize(private val ir: Ir) {
 		IrType.Zoned -> "java.time.ZonedDateTime.parse(${stringLit(j.jsonPrimitive.content)})"
 		// ワイヤは canonical UUID 文字列
 		IrType.Uuid -> "java.util.UUID.fromString(${stringLit(j.jsonPrimitive.content)})"
+		// ワイヤは {"numerator", "denominator"}(Lean の Rat の正規形)
+		IrType.Rat -> {
+			val o = j.jsonObject
+			val n = o.getValue("numerator").jsonPrimitive.content.toBigInteger()
+			val d = o.getValue("denominator").jsonPrimitive.content.toBigInteger()
+			if (n.bitLength() < 64 && d.bitLength() < 64) "Rational.of(${n}L, ${d}L)"
+			else "Rational.of(java.math.BigInteger(\"$n\"), java.math.BigInteger(\"$d\"))"
+		}
 		is IrType.ListOf ->
 			// 要素が Entity ならリテラルは fixture の列(fixture は interface を実装しない)
 			"listOf<${typeRefFixture(t.of)}>(${j.jsonArray.joinToString(", ") { literal(t.of, it) }})"
@@ -545,6 +554,8 @@ class Kotlinize(private val ir: Ir) {
 		// UUID ワイヤの Id の中身: 値域を小さく保つ(集約の列の Arb が入れ子の個体の id を
 		// 列の位置 × 1000000L で変位させる論法と不交和 — 乱択どうしの衝突回避は distinctBy / 変位が担う)
 		IrType.Uuid -> "Arb.long(0L..4096L).map { java.util.UUID(0L, it) }"
+		// 分母 1 以外・負の値も引く(正規化は Rational.of が担う)
+		IrType.Rat -> "Arb.bind(Arb.long(-4096L..4096L), Arb.long(1L..64L)) { n, d -> Rational.of(n, d) }"
 		IrType.DateTime ->
 			"Arb.long(0L..2_000_000_000L).map { java.time.LocalDateTime.ofEpochSecond(it, 0, java.time.ZoneOffset.UTC) }"
 		IrType.Zoned -> error("ZonedDateTime の Arb は未対応(必要になったら対応表を拡張)")
@@ -557,3 +568,6 @@ class Kotlinize(private val ir: Ir) {
 		is IrType.Result -> error("DomainResult の Arb は生成できません")
 	}
 }
+
+/** 生成物の本文が有理数の生成型を参照しているか(ルートパッケージの `Rational` を import する判定)。 */
+internal val RATIONAL_REF = Regex("\\bRational\\b")

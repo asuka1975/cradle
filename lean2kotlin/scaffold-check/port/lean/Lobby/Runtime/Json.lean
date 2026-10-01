@@ -17,6 +17,24 @@ deriving instance ToJson, FromJson for Lobby.Application.VisitIdGeneratorState
 deriving instance ToJson, FromJson for Lobby.Application.PaymentAttemptIdGeneratorState
 deriving instance ToJson for Lobby.VisitorName
 
+/-- 有理数のワイヤ: `{"numerator": 整数, "denominator": 正の整数}`（`Rat` の正規形 — 既約・分母が正）。
+    受けるときは約分する。分母 0 は弾く。 -/
+instance : ToJson Rat where
+  toJson r := Json.mkObj [("numerator", toJson r.num), ("denominator", toJson r.den)]
+instance : FromJson Rat where
+  fromJson? j := do
+    let n : Int ← fromJson? (← j.getObjVal? "numerator")
+    let d : Nat ← fromJson? (← j.getObjVal? "denominator")
+    if d = 0 then throw "denominator: 0" else pure (mkRat n d)
+
+instance : ToJson Lobby.Money where
+  toJson m := Json.mkObj [("value", toJson m.value)]
+/-- 負の金額は状態に置けない。 -/
+instance : FromJson Lobby.Money where
+  fromJson? j := do
+    let v : Rat ← fromJson? (← j.getObjVal? "value")
+    if h : 0 ≤ v then pure ⟨v, h⟩ else throw "money: negative"
+
 /-- 来訪者の名前の文字列をそのまま受ける（`{"text": …}` も受ける）。 -/
 instance : FromJson Lobby.VisitorName where
   fromJson?

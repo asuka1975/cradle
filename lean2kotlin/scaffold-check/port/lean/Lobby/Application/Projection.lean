@@ -19,7 +19,7 @@ def visitViews (s : VisitRepositoryState VisitId EmployeeId) : List (VisitView V
   s.visits.map toVisitView
 
 def toPaymentView (a : PaymentAttempt PaymentAttemptId VisitId) : PaymentView PaymentAttemptId VisitId :=
-  { id := a.id, visit := a.visit, amount := a.amount, tries := a.tries, phase := a.phase }
+  { id := a.id, visit := a.visit, amount := a.amount.value, tries := a.tries, phase := a.phase }
 
 /-- 決済の試みの一覧（始めた順のまま）。 -/
 def paymentViews (s : PaymentAttemptRepositoryState PaymentAttemptId VisitId) :

@@ -14,7 +14,7 @@ open Lobby
 structure PaymentAttempt (PaymentAttemptId VisitId : Type) where
   id     : PaymentAttemptId
   visit  : VisitId
-  amount : Nat
+  amount : Money
   /-- 試行番号（送るたびに進む。冪等キー id とは別）。 -/
   tries  : Nat
   phase  : PaymentPhase
@@ -23,7 +23,7 @@ deriving Repr, DecidableEq
 variable {PaymentAttemptId VisitId : Type}
 
 /-- 始める: 送れる状態で保存する（まだ送っていない）。 -/
-def PaymentAttempt.start (id : PaymentAttemptId) (visit : VisitId) (amount : Nat) :
+def PaymentAttempt.start (id : PaymentAttemptId) (visit : VisitId) (amount : Money) :
     PaymentAttempt PaymentAttemptId VisitId :=
   { id, visit, amount, tries := 0, phase := .pending }
 
@@ -65,11 +65,11 @@ def PaymentAttempt.settledAs (a : PaymentAttempt PaymentAttemptId VisitId) (r : 
   a.phase == (match r with | .authorized => PaymentPhase.authorized | .declined => .declined)
 
 /-- 始めた直後は送れる状態。 -/
-@[contract] theorem PaymentAttempt.start_pending (id : PaymentAttemptId) (v : VisitId) (n : Nat) :
+@[contract] theorem PaymentAttempt.start_pending (id : PaymentAttemptId) (v : VisitId) (n : Money) :
     (PaymentAttempt.start id v n).phase = .pending := rfl
 
 /-- 始めた直後は 1 度も送っていない。 -/
-@[contract] theorem PaymentAttempt.start_tries (id : PaymentAttemptId) (v : VisitId) (n : Nat) :
+@[contract] theorem PaymentAttempt.start_tries (id : PaymentAttemptId) (v : VisitId) (n : Money) :
     (PaymentAttempt.start id v n).tries = 0 := rfl
 
 /-- 送る印は同一性（冪等キー）を変えない。 -/

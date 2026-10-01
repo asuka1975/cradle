@@ -155,6 +155,7 @@ class EmitTests(
 		IrType.Str -> "\"\""
 		IrType.Bool -> "false"
 		IrType.Uuid -> "java.util.UUID(0L, 0L)"
+		IrType.Rat -> "Rational.ZERO"
 		IrType.Date -> "java.time.LocalDate.ofEpochDay(0L)"
 		IrType.DateTime -> "java.time.LocalDateTime.ofEpochSecond(0L, 0, java.time.ZoneOffset.UTC)"
 		is IrType.ListOf -> "emptyList()"
@@ -1543,6 +1544,7 @@ class PortHarnessFailure(message: String) : AssertionError(message)
 		if (subpkg != null && body.contains(".toFixture(")) {
 			imports.add("${out.basePackage}.toFixture")
 		}
+		if (subpkg != null && RATIONAL_REF.containsMatchIn(body)) imports.add("${out.basePackage}.Rational")
 		if (subpkg != null) {
 			for (kn in c.arbs) imports.add("${out.basePackage}.${k.arbFunName(kn)}")
 		}

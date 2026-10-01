@@ -16,6 +16,7 @@ import dev.cradle.lobby.application.usecase.bookvisitusecase.BookVisitVacant
 import dev.cradle.lobby.domain.DomainError
 import dev.cradle.lobby.domain.entity.PaymentAttempt
 import dev.cradle.lobby.domain.entity.Visit
+import dev.cradle.lobby.domain.valueobject.Money
 import dev.cradle.lobby.domain.valueobject.PaymentAttemptId
 import dev.cradle.lobby.domain.valueobject.PaymentPhase
 import dev.cradle.lobby.domain.valueobject.PaymentResult
@@ -36,7 +37,7 @@ internal fun arbBookVisitVacant(): Arb<BookVisitVacant> =
 	Arb.constant(BookVisitVacant)
 
 internal fun arbPaymentView(): Arb<PaymentView> =
-	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.long(0L..4096L), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentView(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
+	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.bind(Arb.long(-4096L..4096L), Arb.long(1L..64L)) { n, d -> Rational.of(n, d) }, Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentView(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
 
 internal fun arbOrganizationDirectoryFindMemberMember(): Arb<OrganizationDirectoryFindMemberMember> =
 	Arb.bind(Arb.string(0..8, Codepoint.alphanumeric()), Arb.boolean()) { p0, p1 -> OrganizationDirectoryFindMemberMember(name = p0, active = p1) }
@@ -54,7 +55,7 @@ internal fun arbOrganizationDirectoryFindMemberRequest(): Arb<OrganizationDirect
 internal fun arbPaymentGatewayAuthorizeOutcome(): Arb<PaymentGatewayAuthorizeOutcome> = Arb.enum<PaymentGatewayAuthorizeOutcome>()
 
 internal fun arbPaymentGatewayAuthorizeRequest(): Arb<PaymentGatewayAuthorizeRequest> =
-	Arb.bind(arbPaymentAttemptId(), Arb.long(0L..4096L), Arb.long(0L..4096L)) { p0, p1, p2 -> PaymentGatewayAuthorizeRequest(attempt = p0, amount = p1, attemptNo = p2) }
+	Arb.bind(arbPaymentAttemptId(), arbMoney(), Arb.long(0L..4096L)) { p0, p1, p2 -> PaymentGatewayAuthorizeRequest(attempt = p0, amount = p1, attemptNo = p2) }
 
 internal fun arbPaymentGatewayInquireOutcome(): Arb<PaymentGatewayInquireOutcome> {
 	val c0: Arb<PaymentGatewayInquireOutcome> = arbPaymentResult().map { p0 -> PaymentGatewayInquireOutcome.Settled(result = p0) }
@@ -70,12 +71,16 @@ internal fun arbVisitView(): Arb<VisitView> =
 	Arb.bind(arbVisitId(), arbEmployeeId(), Arb.string(0..8, Codepoint.alphanumeric()), Arb.string(0..8, Codepoint.alphanumeric()), arbVisitPhase()) { p0, p1, p2, p3, p4 -> VisitView(id = p0, host = p1, hostName = p2, visitor = p3, phase = p4) }
 
 internal fun arbPaymentAttempt(): Arb<PaymentAttemptFixture> =
-	Arb.bind(arbPaymentAttemptId(), arbVisitId(), Arb.long(0L..4096L), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentAttemptFixture(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
+	Arb.bind(arbPaymentAttemptId(), arbVisitId(), arbMoney(), Arb.long(0L..4096L), arbPaymentPhase()) { p0, p1, p2, p3, p4 -> PaymentAttemptFixture(id = p0, visit = p1, amount = p2, tries = p3, phase = p4) }
 
 internal fun arbVisit(): Arb<VisitFixture> =
 	Arb.bind(arbVisitId(), arbEmployeeId(), Arb.string(0..8, Codepoint.alphanumeric()), arbVisitorName(), arbVisitPhase()) { p0, p1, p2, p3, p4 -> VisitFixture(id = p0, host = p1, hostName = p2, visitor = p3, phase = p4) }
 
 internal fun arbDomainError(): Arb<DomainError> = Arb.enum<DomainError>()
+
+/** `Lobby.Money` の制約(nonneg)を Lean が decide して通したサンプル。 */
+internal fun arbMoney(): Arb<Money> =
+	Arb.element(Money(value = Rational.of(1L, 2L)), Money(value = Rational.of(0L, 1L)), Money(value = Rational.of(5L, 3L)), Money(value = Rational.of(1L, 3L)), Money(value = Rational.of(2L, 1L)), Money(value = Rational.of(7L, 4L)))
 
 internal fun arbPaymentPhase(): Arb<PaymentPhase> = Arb.enum<PaymentPhase>()
 

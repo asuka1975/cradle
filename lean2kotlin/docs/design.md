@@ -56,6 +56,7 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | Lean | Kotlin |
 |---|---|
 | `Nat` / `String` / `Bool` / `Unit` | `Long` / `String` / `Boolean` / `Unit` |
+| `Rat`（core） | `Rational`（生成型。IR が `Rat` を使うときだけルートに出す。BigInteger で Lean と同じ正規形 — 分母は正・既約・符号は分子 — なので等値は値の等しさ。演算は Lean と同じ意味で 0 で割ると 0。オラクル値とワイヤは `{"numerator", "denominator"}`。DB は分子と分母の 2 列（分母は正の CHECK）で持つのが素直 — 列の設計は実装の持ち物） |
 | `List α` / `Option α` / `α × β` | `List<T>` / `T?` / `Pair<A, B>` |
 | `Except E α` | `DomainResult<E, A>`（生成 sealed 型。依存なし） |
 | `Std.Time.PlainDate` / `PlainDateTime` | `java.time.LocalDate` / `LocalDateTime`（ワイヤは ISO-8601） |
@@ -104,7 +105,7 @@ abstract class CloseNoteUseCaseContractTest {
 契約定理からの演繹（抽出時）:
 - binder の分類: 型 = binder 規約で単型化、インスタンス = 合成、Prop = 仮定（ケース選択器。decide で真と決まった仮定は証明項として主対象の Prop 引数に渡す）、値 = サンプル。
 - 仮定は `decide` で検査し、偽なら捨てる。「結果 = パターン」形は左辺を評価して単一化。否定形はその入力の失敗ケース。
-- 期待値は execute / ふるまいの Lean 内評価を JSON で焼き込む。サンプルは決定的な小プール（variant: 通常 / 境界 / 別構成子 / 混在リスト / 空文字列 / 空リスト）。構造体の Prop フィールドはサンプルの値で decide し、偽なら直接の値フィールドを候補（`Nat` は元・0・1・2・3・5・10・100、`String` は元・`"a"`・`"abc"`）の組で組み直す（上限 64 組。最初の組で通れば元の値のまま）。Id の鍵は 91.. の 3 周期、泉の種は 500 以上（既存 id より大きく、id 昇順で観測する実 DB でも保存順が成立する）。
+- 期待値は execute / ふるまいの Lean 内評価を JSON で焼き込む。サンプルは決定的な小プール（variant: 通常 / 境界 / 別構成子 / 混在リスト / 空文字列 / 空リスト）。`Rat` のサンプルは variant ごとに 1/2・0・5/3・1/3・2・-1/2・7/4（値は `evalExpr` で正規形にして焼く — `Rat` の正規化は whnf では止まる）。構造体の Prop フィールドはサンプルの値で decide し、偽なら直接の値フィールドを候補（`Nat` は元・0・1・2・3・5・10・100、`String` は元・`"a"`・`"abc"`、`Rat` は元・0・1・1/2・2・3/2）の組で組み直す（上限 64 組。最初の組で通れば元の値のまま）。Id の鍵は 91.. の 3 周期、泉の種は 500 以上（既存 id より大きく、id 昇順で観測する実 DB でも保存順が成立する）。
 - `Fountain σ α` の引数は、σ が単一 `Nat` フィールドの生成器状態なら counter 具体化で合成してオラクル評価する。
 - 参照系は本番の execute 面に付いた定理だけ読む。判断の定理はケース選択器で、合成した execute が validate の関門で失敗する組合せは採らない。
 - 時計ポートを持つ UseCase は、フックが固定の today を受け取る（値は各ケースの評価と同じ日）。
