@@ -72,18 +72,24 @@ function changedEntry(name, kind, diffs, i, input) {
 }
 
 /** external の flow を init + step の連鎖で打ち直し、再生した flow の応答（trace の各要素の射影と最後の env）と突き合わせる。
-    init は sidecar の flow のリクエストの欄（scenario・環境・actor・viewer・today）から組む。 */
+    init は sidecar の flow のリクエストの欄（scenario・環境・actor・viewer・today）から組む。
+    CLI が落ちた・JSON でない応答を返したときも error の行で返す（投げると検査済みの golden の行も出ないまま止まる）。数えるのは呼び手。 */
 async function chainReplay(name, flowReq, flowRes) {
   const inputs = flowReq.inputs ?? [];
   const trace = flowRes.ok.trace ?? [];
   const changed = (diffs, i) => changedEntry(name, "chain", diffs, i, i === undefined ? null : traceInputOf(inputs[i]));
+  const chainError = (reason) => ({ name, kind: "chain", status: "error", reason });
   const common = pickFields(flowReq, ["actor", "viewer", "today"]);
-  const init = await callLean(cfg, { cmd: "external", version: SIDECAR_VERSION, action: "init", ...pickFields(flowReq, ["scenario", "environment", "env"]), ...common }, { build });
-  if (!isOk(init)) return { name, kind: "chain", status: "error", reason: `連鎖の init の応答のトップが ok ではない: ${JSON.stringify(init).slice(0, 300)}` };
+  let init;
+  try { init = await callLean(cfg, { cmd: "external", version: SIDECAR_VERSION, action: "init", ...pickFields(flowReq, ["scenario", "environment", "env"]), ...common }, { build }); }
+  catch (e) { return chainError(e.message); }
+  if (!isOk(init)) return chainError(`連鎖の init の応答のトップが ok ではない: ${JSON.stringify(init).slice(0, 300)}`);
   if (trace.length !== inputs.length) return changed([{ path: "/ok/trace", expected: `length ${inputs.length}（sidecar の inputs）`, actual: `length ${trace.length}` }]);
   let state = init.ok.state, env = init.ok.env;
   for (let i = 0; i < inputs.length; i++) {
-    const res = await callLean(cfg, { cmd: "external", version: SIDECAR_VERSION, action: "step", state, env, input: inputs[i], ...common }, { build });
+    let res;
+    try { res = await callLean(cfg, { cmd: "external", version: SIDECAR_VERSION, action: "step", state, env, input: inputs[i], ...common }, { build }); }
+    catch (e) { return chainError(e.message); }
     if (!isOk(res)) return changed([{ path: `/ok/trace/${i}`, expected: "ok", actual: res }], i);
     const diffs = diffJson(pickFields(trace[i], CHAIN_KEYS), pickFields(res.ok, CHAIN_KEYS), `/ok/trace/${i}`);
     if (diffs.length) return changed(diffs, i);

@@ -9,7 +9,8 @@ const goldenCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/golden-
 
 // 偽の Lean CLI（cradle.json の project から lean/.lake/build/bin/<project 小文字> に置く）:
 // stdin のリクエストを requests.log に残し、canned.json から cmd（external なら external:<action>）で引いた応答を返す。
-// 同じ鍵の応答が配列なら、この呼び出しが何度目か（requests.log の同じ鍵の行数）で選ぶ — step の連鎖に使う
+// 同じ鍵の応答が配列なら、この呼び出しが何度目か（requests.log の同じ鍵の行数）で選ぶ — step の連鎖に使う。
+// 応答が { $raw: "…" } ならその文字列をそのまま返す（JSON でない応答）
 const fakeCli = `#!${process.execPath}
 const fs = require("fs"); const path = require("path");
 const req = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -20,7 +21,7 @@ const key = keyOf(req);
 const canned = JSON.parse(fs.readFileSync(path.join(__dirname, "canned.json"), "utf8"))[key];
 const nth = fs.readFileSync(log, "utf8").trim().split("\\n").filter(l => keyOf(JSON.parse(l)) === key).length - 1;
 const res = Array.isArray(canned) ? canned[nth] : canned;
-process.stdout.write(JSON.stringify(res ?? { error: "no canned response for " + key + " #" + nth }));
+process.stdout.write(typeof res?.$raw === "string" ? res.$raw : JSON.stringify(res ?? { error: "no canned response for " + key + " #" + nth }));
 `;
 
 const alice = { user: { id: 1 } };
@@ -194,6 +195,37 @@ test("連鎖の手の応答が flow の trace と食い違えば chain が chang
   canned({ "external:init": externalInit, "external:flow": { ok: { env: { cursor: 1, script: [] }, trace: externalTrace } }, "external:step": chainSteps });
   const tail = report().report.find(x => x.kind === "chain");
   assert.deepEqual({ status: tail.status, step: tail.step, firstDivergence: tail.firstDivergence }, { status: "changed", step: undefined, firstDivergence: "/ok/env/cursor" });
+});
+
+test("連鎖の CLI が JSON でない応答を返せば chain の error の行にし、ほかの golden の行も出して 1 で終わる（失敗は 1 回だけ数える）", (t) => {
+  const { put, canned, report, run, requests, external } = fixture(t);
+  external();
+  put("lean/golden/basic-init.json", legacyInit);
+  put("lean/golden/basic-flow.json", legacyFlow);
+  put("lean/golden/basic.request.json", legacyRequests);
+  put("lean/golden/zeta-init.json", legacyInit);
+  put("lean/golden/zeta-flow.json", legacyFlow);
+  put("lean/golden/zeta.request.json", legacyRequests);
+  canned({ init: legacyInit, flow: legacyFlow, "external:init": externalInit, "external:flow": externalFlow, "external:step": [chainSteps[0], { $raw: "panic: not json" }] });
+  const r = report();
+  assert.equal(r.status, 1);
+  assert.equal(r.failed, 1);
+  assert.deepEqual(summary(r), [["basic", "init", "ok"], ["basic", "flow", "ok"], ["pay", "init", "ok"], ["pay", "flow", "ok"], ["pay", "chain", "error"], ["zeta", "init", "ok"], ["zeta", "flow", "ok"]]);
+  assert.match(r.report[4].reason, /^Lean CLI の応答が JSON ではありません: panic: not json/);
+  requests();
+  const text = run();
+  assert.equal(text.stderr, "");
+  assert.equal(text.status, 1);
+  assert.match(text.stdout, /error    pay-chain: Lean CLI の応答が JSON ではありません: panic: not json\n/);
+  assert.match(text.stdout, /ok       zeta-flow\n/);
+  assert.match(text.stdout, /\n6 ok, 1 changed\/error, 0 skipped\n/);
+  requests();
+  // 連鎖の init（2 度目の external の init）が何も返さないのも同じ
+  canned({ init: legacyInit, flow: legacyFlow, "external:init": [externalInit, { $raw: "" }], "external:flow": externalFlow, "external:step": chainSteps });
+  const silent = report("--name", "pay");
+  assert.deepEqual(summary(silent), [["pay", "init", "ok"], ["pay", "flow", "ok"], ["pay", "chain", "error"]]);
+  assert.match(silent.report[2].reason, /^Lean CLI が何も返しませんでした/);
+  assert.equal(silent.failed, 1);
 });
 
 test("応答のトップが ok でなければ（error / harnessError）--update でも書かず error。flow が ok でなければ chain も打たない", (t) => {
