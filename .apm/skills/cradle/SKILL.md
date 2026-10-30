@@ -28,10 +28,11 @@ description: Use when you need the current position in the Lean spec-driven pipe
 - `golden-check` で CHANGED が出たら、意図した変更だけを `--update` し、golden の差分を変更理由とともにコミットする。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。
 - `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。`--dry-run` はクリーンでなければ断る（元に戻すと未コミットの差分も消える）。
 - どの道具も `CRADLE_PROJECT_DIR` でルートを指定できる（hook は Claude Code の `CLAUDE_PROJECT_DIR`、無ければ stdin の `cwd` から `cradle.json` を持つ祖先を探す）。
-- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。
+- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。`meta` の末尾に `evalErrors` があれば、その鍵の一覧は Lean を評価できていない（無いとは言えない）— 理由を示し、ビルドを直して引き直すか `print` で確かめる（`print` は評価できなければ理由と 1 で終わる）。
 
 ## 道具が落ちたとき
 
 - `Lean CLI がありません` → `cd lean && lake build`。
-- `cradle.json に project が要ります` → ルートに `cradle.json` を置く（cradle-init スキル）。
-- `golden の request.json が無い` → 5 cmd で採った golden なら `--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。外部能力の経路（`external`）で採った golden は脇書き（版・環境・入力列）が無いと再生できず、manifest からも復元しない — モックアップで採り直す。脇書きの `version` が 1 でないものも同じ。
+- `cradle.json に project（Lean のルート名前空間）が要ります` → ルートに `cradle.json` を置く（cradle-init スキル）。
+- `.request.json が無い（再生できない golden）` → 5 cmd で採った golden。`--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。
+- `.request.json（版・環境・入力列）が無いと再生できない` → 外部能力の経路（`external`）で採った golden は脇書きが無いと再生できず、manifest からも復元しない — モックアップで採り直す。脇書きの `version` が 1 でないもの（`は読めない（読める版: 1）`）も同じ。
