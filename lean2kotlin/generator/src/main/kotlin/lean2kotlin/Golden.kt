@@ -183,6 +183,11 @@ object Golden {
 		return GoldenLoad(snapshots, notes, errors)
 	}
 
+	/** golden を読まないときの読み込み結果: スナップショットは無く、指定なし(dir が null)か指定先にディレクトリが無いかを note に残す。 */
+	fun absent(dir: Path?): GoldenLoad = GoldenLoad(emptyList(),
+		listOf(if (dir == null) "golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"
+			else "golden ディレクトリがありません: $dir — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"))
+
 	/**
 	 * fault のエントリが指名した障害契約を IR の障害契約(`<UseCase>.<def>` と Lean の署名から導いた portCalls)と突き合わせる。
 	 * 名前が IR に無い・portCalls が違う golden は、生成する障害契約テストと食い違うので再生できない(error)。

@@ -18,7 +18,7 @@ class LobbyGenerationTest {
 	private fun log(out: Path): List<String> {
 		val lines = mutableListOf<String>()
 		Lean2KotlinGeneration.generate(
-			lobbyIr(), GoldenLoad(emptyList(), listOf("golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません")),
+			lobbyIr(), Golden.absent(null),
 			"dev.cradle.lobby", out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
 		return lines
 	}

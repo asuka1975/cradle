@@ -27,9 +27,7 @@ object Lean2KotlinGeneration {
 		val ir = Ir.parse(irPath.readText())
 		val golden =
 			if (goldenDir != null && Files.isDirectory(goldenDir)) Golden.load(goldenDir)
-			else GoldenLoad(emptyList(),
-				listOf(if (goldenDir == null) "golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"
-					else "golden ディレクトリがありません: $goldenDir — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"))
+			else Golden.absent(goldenDir)
 		generate(ir, golden, kotlinPackage, mainOut, testOut, adapterTestOut, indent, log)
 	}
 
