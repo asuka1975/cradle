@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const specQuery = fileURLToPath(new URL("../.apm/skills/cradle/scripts/spec-query.mjs", import.meta.url));
 
@@ -33,9 +32,7 @@ end Example.Runtime
 // 一時プロジェクト: Runtime/Scenarios.lean と空の Runtime/Json.lean、偽の CLI。PATH を空にして lake（#print）を呼べなくする —
 // meta の commands / errors は空で返り、CLI の問い合わせ（views の口・external の版）だけが偽の CLI に届く
 function fixture(t, canned) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-spec-query-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-spec-query-");
   const runtime = join(root, "lean/Example/Runtime");
   mkdirSync(runtime, { recursive: true });
   writeFileSync(join(runtime, "Scenarios.lean"), scenariosLean);
@@ -47,10 +44,9 @@ function fixture(t, canned) {
   writeFileSync(join(bin, "canned.json"), JSON.stringify(canned));
   const noTools = join(root, "no-tools");
   mkdirSync(noTools);
-  const env = { ...process.env, PATH: noTools };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
+  const env = cleanEnv({ PATH: noTools });
   return (...args) => {
-    const r = spawnSync(process.execPath, [specQuery, ...args, "--build", "never"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+    const r = runNode(specQuery, [...args, "--build", "never"], { cwd: root, env });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     return JSON.parse(r.stdout);
   };

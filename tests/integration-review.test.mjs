@@ -1,19 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createJiti } from "jiti";
 import { callHook } from "../integrations/hook-client.mjs";
+import { tempProject } from "./helpers.mjs";
 
 const jiti = createJiti(import.meta.url);
 const piExtension = (await jiti.import("../integrations/pi/index.ts")).default;
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-review-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-review-");
   mkdirSync(join(root, "lean"));
   return root;
 }

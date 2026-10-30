@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const contractCheck = fileURLToPath(new URL("../.apm/skills/api-contract/scripts/contract-check.mjs", import.meta.url));
 
@@ -36,15 +35,11 @@ const observation = (path, id, ctor, over = {}) => ({ method: "post", path, id, 
 
 // 一時プロジェクト: cradle.json と openapi.yaml だけ。契約検査を --meta @file --json で走らせて結果を返す
 function run(t, ops, { config = {}, metaOverride = meta } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-contract-check-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example", ...config }));
+  const root = tempProject(t, "cradle-contract-check-", { project: "Example", ...config });
   mkdirSync(join(root, "documents/codebase"), { recursive: true });
   writeFileSync(join(root, "documents/codebase/openapi.yaml"), `openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths:\n${paths(ops)}\n`);
   writeFileSync(join(root, "meta.json"), JSON.stringify(metaOverride));
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const r = spawnSync(process.execPath, [contractCheck, "--meta", "@meta.json", "--json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const r = runNode(contractCheck, ["--meta", "@meta.json", "--json"], { cwd: root, env: cleanEnv() });
   assert.ok(r.stdout.trim(), r.stderr);
   return { status: r.status, result: JSON.parse(r.stdout) };
 }

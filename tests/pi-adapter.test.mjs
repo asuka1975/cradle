@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tempProject } from "./helpers.mjs";
 
 import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
@@ -35,9 +35,7 @@ function makePi(root) {
 }
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-pi-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-pi-");
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
   mkdirSync(join(root, "documents/developer"), { recursive: true });
   return root;

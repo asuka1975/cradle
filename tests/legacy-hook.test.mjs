@@ -1,24 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-hook-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-hook-");
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
   function invoke(mode, tool_name, tool_input = {}, extra = {}, claude = false) {
-    const result = spawnSync(process.execPath, [hook, mode], {
-      cwd: root, env: { ...env, ...(claude ? { CLAUDE_PROJECT_DIR: root } : {}) },
-      input: JSON.stringify({ cwd: root, tool_name, tool_input, ...extra }), encoding: "utf8", timeout: 10_000,
+    const result = runNode(hook, [mode], {
+      cwd: root, env: cleanEnv(claude ? { CLAUDE_PROJECT_DIR: root } : {}),
+      input: JSON.stringify({ cwd: root, tool_name, tool_input, ...extra }), timeout: 10_000,
     });
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stderr);

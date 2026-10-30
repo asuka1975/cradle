@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const flowsFromGolden = fileURLToPath(new URL("../.apm/skills/e2e-parity/scripts/flows-from-golden.mjs", import.meta.url));
 const status = fileURLToPath(new URL("../.apm/skills/cradle/scripts/status.mjs", import.meta.url));
@@ -17,12 +16,9 @@ const flow = (trace) => ({ ok: { trace } });
 // 台本の手: from-golden.json と同じ形（command は構成子名・actor・outcome）
 const step = (n, actor, command, outcome) => ({ n, actor, command, outcome });
 
-// 一時プロジェクト: cradle.json・golden 2 本（basic: 2 手 / other: 1 手）・e2e/。台本は各テストが置く。
-// 環境変数を落とすのは、Claude Code の中で走るとプロジェクトルートが cradle 自身に解決されるため
+// 一時プロジェクト: cradle.json・golden 2 本（basic: 2 手 / other: 1 手）・e2e/。台本は各テストが置く
 function fixture(t, cradle = {}) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-e2e-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example", ...cradle }));
+  const root = tempProject(t, "cradle-e2e-", { project: "Example", ...cradle });
   mkdirSync(join(root, "lean/golden"), { recursive: true });
   mkdirSync(join(root, "e2e"), { recursive: true });
   writeFileSync(join(root, "lean/golden/basic-flow.json"), JSON.stringify(flow([
@@ -30,9 +26,8 @@ function fixture(t, cradle = {}) {
     refused(bob, { closeNote: { note: { id: 0 } } }),
   ])));
   writeFileSync(join(root, "lean/golden/other-flow.json"), JSON.stringify(flow([applied(alice, { closeNote: { note: { id: 0 } } })])));
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const run = (script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const env = cleanEnv();
+  const run = (script, ...args) => runNode(script, args, { cwd: root, env });
   const put = (rel, json) => { mkdirSync(join(root, rel, ".."), { recursive: true }); writeFileSync(join(root, rel), JSON.stringify(json)); };
   return { root, run, put };
 }

@@ -1,26 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const leanCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/lean-check.mjs", import.meta.url));
 
 // 一時プロジェクト: UseCase ディレクトリの形と Runtime の配線だけを持つ Lean モデル（lake build はしない）。鍵 Main.lean だけは lean/ 直下（CLI）
 function fixture(t, files) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-lean-check-forms-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-lean-check-forms-");
   for (const [rel, text] of Object.entries(files)) {
     const f = rel === "Main.lean" ? join(root, "lean", rel) : join(root, "lean/Example", rel);
     mkdirSync(dirname(f), { recursive: true });
     writeFileSync(f, text);
   }
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const r = spawnSync(process.execPath, [leanCheck, "--json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
   return JSON.parse(r.stdout).findings.filter(f => ["usecase", "wiring", "cqrs"].includes(f.rule));
 }
 

@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, rmSync, chmodSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const goldenCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/golden-check.mjs", import.meta.url));
 
@@ -49,20 +48,17 @@ const chainStep = (state, env, input) => ({ cmd: "external", version: 1, action:
 const chainRequests = [chainInit, chainStep(externalInit.ok.state, env0, inputs[0]), chainStep(externalTrace[0].state, env0, inputs[1])];
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-golden-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-golden-");
   const bin = join(root, "lean/.lake/build/bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(join(bin, "example"), fakeCli);
   chmodSync(join(bin, "example"), 0o755);
   mkdirSync(join(root, "lean/golden"), { recursive: true });
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
+  const env = cleanEnv();
   const put = (rel, json) => writeFileSync(join(root, rel), JSON.stringify(json));
   const read = (rel) => readFileSync(join(root, rel), "utf8");
   const canned = (responses) => put("lean/.lake/build/bin/canned.json", responses);
-  const run = (...args) => spawnSync(process.execPath, [goldenCheck, "--build", "never", ...args], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const run = (...args) => runNode(goldenCheck, ["--build", "never", ...args], { cwd: root, env });
   const report = (...args) => { const r = run("--json", ...args); assert.equal(r.stderr, "", r.stderr); return { status: r.status, ...JSON.parse(r.stdout) }; };
   // 前回の呼び出し以降に CLI が受け取ったリクエスト
   const log = join(bin, "requests.log");

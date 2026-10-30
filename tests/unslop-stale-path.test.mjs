@@ -1,24 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const unslop = fileURLToPath(new URL("../.apm/skills/cradle/scripts/unslop-lint.mjs", import.meta.url));
 
 // 一時プロジェクト: cradle.json と e2e/ だけ。散文は各テストが置く
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-unslop-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-unslop-");
   mkdirSync(join(root, "e2e"), { recursive: true });
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
+  const env = cleanEnv();
   const put = (rel, text) => { mkdirSync(join(root, rel, ".."), { recursive: true }); writeFileSync(join(root, rel), text); };
   const findings = () => {
-    const r = spawnSync(process.execPath, [unslop, "--all", "--json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+    const r = runNode(unslop, ["--all", "--json"], { cwd: root, env });
     return JSON.parse(r.stdout).findings.filter(f => f.rule === "stale-path");
   };
   return { put, findings };

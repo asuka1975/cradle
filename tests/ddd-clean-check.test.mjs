@@ -1,21 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, unlinkSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, rmSync, existsSync, unlinkSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const ddd = fileURLToPath(new URL("../.apm/skills/ddd/scripts/ddd.mjs", import.meta.url));
 const check = fileURLToPath(new URL("../.apm/skills/cradle/scripts/ddd-clean-check.mjs", import.meta.url));
 const COMMAND = "inductive Command where\n  /-- 何かする。 -/\n  | foo\n";
 
-// 一時プロジェクト: cradle.json・documents/ddd の 5 ファイル・lean/ の Command.lean と README・コミット 1 つ。
-// 環境変数を落とすのは、Claude Code の中で走るとプロジェクトルートが cradle 自身に解決されるため
+// 一時プロジェクト: cradle.json・documents/ddd の 5 ファイル・lean/ の Command.lean と README・コミット 1 つ
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-ddd-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-ddd-");
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
   for (const f of ["hotspots.md", "ux-review.md", "model-review.md"]) writeFileSync(join(root, "documents/ddd", f), `# ${f}\n`);
   writeFileSync(join(root, "documents/ddd/event-timeline.md"), "# event-timeline.md\n\nプロダクト: テスト用の一言\n");
@@ -23,8 +20,7 @@ function fixture(t) {
   mkdirSync(join(root, "lean/Example/Runtime"), { recursive: true });
   writeFileSync(join(root, "lean/Example/Runtime/Command.lean"), COMMAND);
   writeFileSync(join(root, "lean/README.md"), "# lean\n");
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
+  const env = cleanEnv();
   const git = (...args) => {
     const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, env, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
@@ -32,7 +28,7 @@ function fixture(t) {
   git("init", "-q");
   git("add", "-A");
   git("commit", "-q", "-m", "init");
-  const run = (script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const run = (script, ...args) => runNode(script, args, { cwd: root, env });
   const lean = (p) => join(root, "lean", p);
   return { root, run, lean, marker: join(root, "documents/ddd/.session") };
 }
