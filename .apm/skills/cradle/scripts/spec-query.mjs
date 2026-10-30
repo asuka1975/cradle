@@ -23,7 +23,7 @@
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames, headerUsage } from "./lib.mjs";
+import { loadConfigOrFail, buildMode, callLean, ensureLeanBinary, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames, headerUsage } from "./lib.mjs";
 import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom, splitTypeApp } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
@@ -58,6 +58,11 @@ function constructorsOf(fullName) {
   }
   return { constructors: ctors };
 }
+
+/** commands / errors / schemas / print の腕の先頭で --build の build を 1 回走らせる — `lake env lean` は callLean を通らず、build の前は import するモジュールが無い
+    （auto はバイナリが無いときだけ、always はあっても）。never は確かめもしない — #print はバイナリでなく olean を読み、無ければ import の誤りがそのまま理由になる。
+    meta は externalProtocol の callLean が先に build するので通さない。 */
+function buildForPrint() { if (build !== "never") ensureLeanBinary(cfg, build); }
 
 // 同じ #print を繰り返さない（meta は commands / observations / errors を何度も引く）
 const printed = new Map();
@@ -189,10 +194,11 @@ try {
   switch (cmd) {
     case "scenarios": printJson(scenarioNames(cfg)); break;
     case "environments": printJson(environmentNames(cfg)); break;
-    case "commands": printJson(commands()); break;
-    case "errors": printJson(errors()); break;
+    case "commands": buildForPrint(); printJson(commands()); break;
+    case "errors": buildForPrint(); printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
     case "schemas": {
+      buildForPrint();
       const { specs, error } = commandSchemas();
       printJson(specs);
       // 構成子かペイロードの #print が評価しきれなければ、空の・欠けた写像を「入力が無い」と読ませないよう理由を出して 0 で終えない
@@ -241,6 +247,7 @@ try {
     }
     case "print": {
       if (!rest.length) fail("print には名前が要ります（例: MonoWa.Runtime.Command）");
+      buildForPrint();
       const src = `import ${cfg.lean.root}\n` + rest.map(n => `#print ${n}`).join("\n") + "\n";
       const r = leanEval(cfg, src);
       process.stdout.write(r.stdout);

@@ -185,6 +185,48 @@ if (!fs.existsSync(${JSON.stringify(bin)})) { process.stdout.write("error: unkno
   assert.equal(cc.status, 0, cc.stdout + cc.stderr);
 });
 
+test("commands / errors / schemas / print も --build に従う — 新しい checkout の auto は lake build を 1 回走らせてから #print し、never は build せず import の誤りのまま", (t) => {
+  const run = fixture(t, { init });
+  const bin = join(run.root, "lean/.lake/build/bin/example");
+  const cli = readFileSync(bin, "utf8");
+  const builds = join(run.root, "builds.log");
+  // lake build が CLI を置くまで、`lake env lean` は import できずに 1 で終わる。build を走らせた回数は builds.log の行数
+  const before = `const fs = require("fs");
+if (process.argv[2] === "build") { fs.appendFileSync(${JSON.stringify(builds)}, "build\\n"); fs.writeFileSync(${JSON.stringify(bin)}, ${JSON.stringify(cli)}, { mode: 0o755 }); process.exit(0); }
+if (!fs.existsSync(${JSON.stringify(bin)})) { process.stdout.write("error: unknown module prefix 'Example'\\n"); process.exit(1); }`;
+  const command = "inductive Example.Runtime.Command : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Command.postNote : Example.PostNote → Example.Runtime.Command\n";
+  run.lake(scriptedLake({ "Example.Runtime.Command": command, "Example.PostNote": "structure Example.PostNote : Type\nnumber of parameters: 0\nfields:\n  Example.PostNote.title : String\n" }, { before }));
+  const env = cleanEnv({ PATH: join(run.root, "no-tools") });
+  const query = (fresh, ...args) => {
+    if (fresh) rmSync(bin, { force: true });
+    rmSync(builds, { force: true });
+    const r = runNode(specQuery, args, { cwd: run.root, env });
+    let n = 0;
+    try { n = readFileSync(builds, "utf8").split("\n").filter(Boolean).length; } catch {}
+    return { status: r.status, stdout: r.stdout, stderr: r.stderr, builds: n };
+  };
+  const built = {
+    commands: { status: 0, stdout: JSON.stringify({ constructors: [{ name: "postNote", type: "Example.PostNote → Example.Runtime.Command" }] }, null, 2) + "\n", stderr: "" },
+    errors: { status: 0, stdout: JSON.stringify({ constructors: [{ name: "only", type: "Example.DomainError" }] }, null, 2) + "\n", stderr: "" },
+    schemas: { status: 0, stdout: JSON.stringify({ postNote: { type: "Example.PostNote", fields: [{ name: "title", type: "String", optional: false, kind: "text" }] } }, null, 2) + "\n", stderr: "" },
+    print: { status: 0, stdout: command, stderr: "" },
+  };
+  const unbuilt = {
+    commands: { status: 0, stdout: JSON.stringify({ error: "error: unknown module prefix 'Example'", constructors: [] }, null, 2) + "\n", stderr: "" },
+    errors: { status: 0, stdout: JSON.stringify({ error: "error: unknown module prefix 'Example'", constructors: [] }, null, 2) + "\n", stderr: "" },
+    schemas: { status: 1, stdout: "{}\n", stderr: "cradle: #print を評価できない: error: unknown module prefix 'Example'\n" },
+    print: { status: 1, stdout: "error: unknown module prefix 'Example'\n", stderr: "" },
+  };
+  for (const [sub, args] of [["commands", []], ["errors", []], ["schemas", []], ["print", ["Example.Runtime.Command"]]]) {
+    assert.deepEqual(query(true, sub, ...args), { ...built[sub], builds: 1 }, `${sub}（auto）`);
+    // バイナリがあれば auto は build しない。always はあっても 1 回
+    assert.deepEqual(query(false, sub, ...args), { ...built[sub], builds: 0 }, `${sub}（auto、build 済み）`);
+    assert.deepEqual(query(false, sub, ...args, "--build", "always"), { ...built[sub], builds: 1 }, `${sub}（always）`);
+    assert.deepEqual(query(true, sub, ...args, "--build", "never"), { ...unbuilt[sub], builds: 0 }, `${sub}（never）`);
+    writeFileSync(bin, cli, { mode: 0o755 });
+  }
+});
+
 test("lake を起動できなければ schemas は空の写像と構成子の #print の理由で 1（入力の無いモデルと読ませない）", (t) => {
   const run = fixture(t, { init });
   const r = run.raw("schemas");
