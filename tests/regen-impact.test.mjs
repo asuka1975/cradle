@@ -36,9 +36,9 @@ const hand = {
 
 // 一時プロジェクト（git 管理）: 生成物と手書きをコミットし、backend.regenerate は regen/ に置いた再生成後の写しを生成ディレクトリへ重ねて Legacy.kt を消す。
 // gradle も Lean も要らない（regenerate は backend/ を cwd に sh で走る）
-function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt") {
+function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt", handFiles = hand) {
   const root = tempProject(t, "cradle-regen-impact-", { project: "Example", backend: { regenerate } });
-  writeTree(root, { ...before, ...hand });
+  writeTree(root, { ...before, ...handFiles });
   writeTree(join(root, "regen"), Object.fromEntries(Object.entries(after).map(([rel, text]) => [rel.replace("backend/src/generated/", ""), text])));
   commitAll(root);
   // git status の未追跡の出し方（ディレクトリにまとめる）や diff の出力を利用者の git 設定に左右させない
@@ -54,7 +54,7 @@ const exposed = "backend/src/main/kotlin/p/infrastructure/ExposedNoteRepository.
 const controller = "backend/src/main/kotlin/p/presentation/NoteController.kt";
 const sym = (symbol, kind, file, referencedBy = []) => ({ symbol, kinds: [kind], generatedFiles: [file], referencedBy });
 // 追跡済みの差分（diff --name-status の順）の後に未追跡（ls-files --others の順）。シンボルは参照元の多い順、同数なら名前順。
-// src/adapterTest で配線した DirectoryAdapterContractTest も未配線に出る（regen-impact は src/main と src/test しか見ない）
+// src/adapterTest で配線した DirectoryAdapterContractTest は配線済み（status と同じく、Adapter の適合テストは src/adapterTest に探す）
 const expected = {
   changedGeneratedFiles: [
     { status: "D", path: files.legacy }, { status: "M", path: files.note }, { status: "M", path: files.repo }, { status: "M", path: files.contract },
@@ -72,7 +72,7 @@ const expected = {
     sym("NoteRepository.delete", "added", files.repo),
     sym("NoteRepositoryContractTest.clock", "added", files.contract),
   ],
-  unwiredContractTests: ["DirectoryAdapterContractTest"],
+  unwiredContractTests: [],
   golden: null,
   restored: false,
 };
@@ -88,8 +88,6 @@ const expectedText = [
   "  NoteRepository.save [removed]", `      ${exposed}`,
   "",
   "参照元の無い生成シンボル（新規 interface など — これから実装するもの）: Directory, Directory.find, DirectoryAdapterContractTest, DirectoryAdapterContractTest.adapter, Legacy, NoteRepository.delete, NoteRepositoryContractTest.clock",
-  "",
-  "未配線の契約テスト: DirectoryAdapterContractTest",
 ].join("\n") + "\n";
 
 test("再生成してから生成物の差分・変わったシンボルと参照元・未配線の契約テストを --json で出し、--no-regen は作業ツリーの同じ差分を読む", (t) => {
@@ -103,7 +101,7 @@ test("再生成してから生成物の差分・変わったシンボルと参�
   assert.equal(read.stdout, regen.stdout);
 });
 
-test("文字の出力は差分・参照元のあるシンボル・参照元の無いシンボル・未配線の契約テストの順。golden-check が動かなければその stderr を添える", (t) => {
+test("文字の出力は差分・参照元のあるシンボル・参照元の無いシンボルの順。golden-check が動かなければその stderr を添える", (t) => {
   const { root, run } = fixture(t);
   assert.equal(run("--no-golden").status, 0);
   const text = run("--no-regen", "--no-golden");
@@ -113,6 +111,19 @@ test("文字の出力は差分・参照元のあるシンボル・参照元の�
   const golden = run("--no-regen");
   assert.equal(golden.status, 0, golden.stderr);
   assert.equal(golden.stdout, `${expectedText}\ngolden 回帰: 実行できず — cradle: golden ディレクトリがありません: ${join(root, "lean/golden")}\n\n`);
+});
+
+test("未配線の契約テストは status と同じ数え方: Adapter の適合テストは src/adapterTest に、ほかは src/test に具象クラスが無ければ変わった順に並べ、src/main の継承は配線と数えない", (t) => {
+  // 適合テストの具象クラスを消し、契約テストの具象クラスを src/main に置く（test のソースセットの抽象テストは src/main から見えない）
+  const handFiles = Object.fromEntries(Object.entries(hand).filter(([rel]) => !rel.endsWith("ContractTestImpl.kt")));
+  handFiles["backend/src/main/kotlin/p/NoteRepositoryContractTestImpl.kt"] = hand["backend/src/test/kotlin/p/NoteRepositoryContractTestImpl.kt"];
+  const { run } = fixture(t, undefined, handFiles);
+  const json = run("--no-golden", "--json");
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).unwiredContractTests, ["NoteRepositoryContractTest", "DirectoryAdapterContractTest"]);
+  const text = run("--no-regen", "--no-golden");
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(text.stdout, `${expectedText}\n未配線の契約テスト: NoteRepositoryContractTest, DirectoryAdapterContractTest\n`);
 });
 
 test("生成ディレクトリに未コミットの差分があれば再生成せずに止まり、再生成が失敗すればその出力の末尾を出して 2 で終わる", (t) => {

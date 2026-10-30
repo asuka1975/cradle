@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { tempProject, writeTree } from "./helpers.mjs";
 import { loadConfig } from "../.apm/skills/cradle/scripts/lib.mjs";
-import { collectStatus, renderStatus, generatedPorts, adaptedPorts, wiredCount } from "../.apm/skills/cradle/scripts/status-core.mjs";
+import { collectStatus, renderStatus, generatedPorts, adaptedPorts } from "../.apm/skills/cradle/scripts/status-core.mjs";
 
 function setup(t, files = {}) {
   const root = tempProject(t, "cradle-status-core-");
@@ -73,12 +73,6 @@ test("adaptedPorts は class / object の supertype に Port を持つものだ�
   assert.deepEqual(adaptedPorts(ports, texts), ["Directory", "PaymentGateway"]);
   // 語の途中の一致は数えない
   assert.deepEqual(adaptedPorts(["Directory"], ["class A : CachedDirectoryX {\n}\n"]), []);
-});
-
-test("wiredCount は `: <名前>(` で継承されている抽象テストの数", () => {
-  const text = "class A : BookRepositoryContractTest() {\n}\nclass B :LoanContractTest (\n) {}\nval x: OtherContractTest = y\n";
-  assert.equal(wiredCount(text, ["BookRepositoryContractTest", "LoanContractTest", "OtherContractTest", "MissingContractTest"]), 2);
-  assert.equal(wiredCount("", ["A"]), 0);
 });
 
 test("画面の口は leanVocabulary と同じ読み方で数え、改行コード・字下げの幅・deriving の有無・コメントの中の `名前:` に依らない", (t) => {

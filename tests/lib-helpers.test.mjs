@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval, contractTestWiring } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -158,4 +158,22 @@ test("aiNoteProblems は ai-notes の下のノートの名前と冒頭 800 字�
   assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-topic.md`, "x".repeat(791) + "規約ではありません").noHeader, false);
   assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-topic.md`, "x".repeat(792) + "規約ではありません").noHeader, true);
   for (const p of [`${dir}/README.md`, `${dir}/TEMPLATE.md`, `${dir}/sub/X-README.md`, `${dir}-old/memo.md`, "documents/memo.md", dir]) assert.equal(aiNoteProblems(dir, p, "# 件名\n"), null, p);
+});
+
+test("contractTestWiring は `: <名前>(` の継承を、Adapter の適合テストは src/adapterTest に、ほかの契約テストは src/test にだけ探す", (t) => {
+  const root = tempDir(t, "cradle-wiring-");
+  writeTree(root, {
+    "cradle.json": JSON.stringify({ project: "Example" }),
+    "backend/src/test/kotlin/p/Impls.kt": "class A : BookRepositoryContractTest() {\n}\nclass B :LoanContractTest (\n) {}\nval x: OtherContractTest = y\nclass C : MailAdapterContractTest()\n",
+    "backend/src/adapterTest/kotlin/p/DirectoryImpl.kt": "class D : DirectoryAdapterContractTest() {\n}\nclass E : CartContractTest()\n",
+    // src/main からは test のソースセットの抽象テストが見えないので、同じ形でも配線ではない
+    "backend/src/main/kotlin/p/Wrong.kt": "class F : MainOnlyContractTest()\n",
+  });
+  const cfg = loadConfig(root, {});
+  const names = ["BookRepositoryContractTest", "LoanContractTest", "OtherContractTest", "MissingContractTest", "MailAdapterContractTest", "DirectoryAdapterContractTest", "CartContractTest", "MainOnlyContractTest"];
+  assert.deepEqual(contractTestWiring(cfg, names).map(w => [w.name, w.adapter, w.wired]), [
+    ["BookRepositoryContractTest", false, true], ["LoanContractTest", false, true], ["OtherContractTest", false, false], ["MissingContractTest", false, false],
+    ["MailAdapterContractTest", true, false], ["DirectoryAdapterContractTest", true, true], ["CartContractTest", false, false], ["MainOnlyContractTest", false, false],
+  ]);
+  assert.deepEqual(contractTestWiring(cfg, []), []);
 });

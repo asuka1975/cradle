@@ -2,7 +2,7 @@
 // フェーズは ctx（設定・読み方・フェーズをまたいで使う数）を受けて { name, state, facts, next } を返す。
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary } from "./lib.mjs";
+import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
 
 const ids = "(?:HS|UX|MQ)-\\d+";
 const phase = (name, state, facts, next) => ({ name, state, facts, next });
@@ -136,9 +136,6 @@ export function adaptedPorts(ports, texts) {
   return ports.filter(p => supertypes.some(s => new RegExp(`\\b${p}\\b`).test(s)));
 }
 
-/** 配線済みの抽象テストの数: names のうち、text の具象クラスが `: <name>(` で継承しているもの。 */
-export function wiredCount(text, names) { return names.filter(n => new RegExp(`:\\s*${n}\\s*\\(`).test(text)).length; }
-
 // 6. バックエンド
 function backend({ cfg, R }) {
   if (!existsSync(R(cfg.backend.dir))) return phase("バックエンド", "未着手", [], "モデルの画面確認が済んでから着手（順序）");
@@ -146,11 +143,11 @@ function backend({ cfg, R }) {
   const genKt = gen.flatMap(g => walk(g, { ext: [".kt"] }));
   const nameOf = (f) => f.replace(/.*\//, "").replace(/\.kt$/, "");
   // Adapter の適合テスト（<Port>AdapterContractTest）は build の門の外で、配線の置き場も src/adapterTest — 契約テストとは別に数える
-  const abstractNames = genKt.filter(f => /ContractTest\.kt$/.test(f) && !/AdapterContractTest\.kt$/.test(f)).map(nameOf);
-  const adapterTestNames = genKt.filter(f => /AdapterContractTest\.kt$/.test(f)).map(nameOf);
-  const wiredIn = (dir, names) => wiredCount(walk(R(`${cfg.backend.dir}/src/${dir}`), { ext: [".kt"] }).map(f => readFileSync(f, "utf8")).join("\n"), names);
-  const wired = wiredIn("test", abstractNames);
-  const adapterTestsWired = wiredIn("adapterTest", adapterTestNames);
+  const wiring = contractTestWiring(cfg, genKt.filter(f => /ContractTest\.kt$/.test(f)).map(nameOf));
+  const abstractNames = wiring.filter(w => !w.adapter).map(w => w.name);
+  const adapterTestNames = wiring.filter(w => w.adapter).map(w => w.name);
+  const wired = wiring.filter(w => !w.adapter && w.wired).length;
+  const adapterTestsWired = wiring.filter(w => w.adapter && w.wired).length;
   const handMain = walk(R(`${cfg.backend.dir}/src/main`), { ext: [".kt"] });
   const impls = handMain.length;
   // 外部能力の Port: 生成 interface（KDoc の「Lean: Port」）と、それを実装する手書きの Adapter。

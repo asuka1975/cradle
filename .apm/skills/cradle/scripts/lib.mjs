@@ -395,6 +395,18 @@ export function hasPortOperation(portList, port, operation) {
   return portList.some(p => p.name === port && p.operations.some(o => o.method === operation));
 }
 
+/** 生成された抽象テスト（names はファイル名から取ったクラス名）の配線: [{ name, adapter, wired }]。具象クラスが `: <name>(` で継承していれば配線済み。
+    Adapter の適合テスト（<Port>AdapterContractTest）は adapterTest のソースセット、それ以外の契約テストは test のソースセットにだけ探す —
+    抽象テストはそれぞれのソースセットにしか見えないので、src/main の同じ形は配線ではない。 */
+export function contractTestWiring(cfg, names) {
+  const texts = {};
+  const textOf = (dir) => texts[dir] ??= walk(join(cfg.root, cfg.backend.dir, "src", dir), { ext: [".kt"] }).map(f => readFileSync(f, "utf8")).join("\n");
+  return names.map(name => {
+    const adapter = /AdapterContractTest$/.test(name);
+    return { name, adapter, wired: new RegExp(`:\\s*${name}\\s*\\(`).test(textOf(adapter ? "adapterTest" : "test")) };
+  });
+}
+
 /** sidecar の版。モックアップはこの版で書き、golden-check はこの版だけを読む。 */
 export const SIDECAR_VERSION = 1;
 

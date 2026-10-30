@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript, contractTestWiring } from "./lib.mjs";
 import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
@@ -51,9 +51,9 @@ const handFiles = [...walk(join(cfg.root, cfg.backend.dir, "src", "main"), { ext
 const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
 const impact = impactOf(symbols.values(), handTexts);
 
-// 契約テスト: 生成された抽象テストと具象の配線
+// 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）
 const abstractTests = changed.filter(c => /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
-const unwired = abstractTests.filter(n => !handTexts.some(h => new RegExp(`:\\s*${n}\\s*\\(`).test(h.text)));
+const unwired = contractTestWiring(cfg, abstractTests).filter(w => !w.wired).map(w => w.name);
 
 let golden = null;
 if (!opts["no-golden"]) {
