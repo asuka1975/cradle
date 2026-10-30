@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode, writeTree, commitAll, git } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, git } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
 const unslop = fileURLToPath(new URL("../.apm/skills/cradle/scripts/unslop-lint.mjs", import.meta.url));
@@ -79,4 +79,40 @@ test("Stop はコミットの無いリポジトリでも新しいファイルの
   const r = runNode(hook, ["stop"], { cwd: root, env: cleanEnv(), input: JSON.stringify({ cwd: root }) });
   assert.deepEqual([r.status, r.stderr], [0, ""]);
   assert.deepEqual(JSON.parse(r.stdout), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 1 件あります。止まる前に直すこと（規約は unslop と comments）:\n${reasonLine(1)}` });
+});
+
+// core.quotePath の既定（true）の git が引用符と 8 進で返す非 ASCII のパスも、Stop の差分に入る
+test("Stop は非 ASCII の名前のファイルの unslop error でも、コミットのあるリポジトリでも無いリポジトリでも差し戻す", (t) => {
+  const note = "documents/ai-notes/20261030-01-検討.md";
+  const lines = [
+    `- ${note}:1 [ai-note-header] ファイル名は YYYYMMDD-NN-<topic>.md（20261030-01-検討.md）`,
+    `- ${note}:1 [ai-note-header] 冒頭に「これは規約ではありません。」の断りが無い`,
+    "- e2e/手.ts:1 [comment-status] コメントにドメイン事実のステータス語 — 可変の状態を 2 か所に持たない",
+  ].join("\n");
+  const expected = { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 3 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}` };
+  const { root, stop } = fixture(t);
+  writeTree(root, { "e2e/手.ts": "export const z = 1;\n" });
+  git(root, "add", "e2e/手.ts");
+  git(root, "commit", "-q", "-m", "te");
+  writeTree(root, { "e2e/手.ts": "// この手は未決\nexport const z = 1;\n", [note]: "# 検討\n" });
+  assert.deepEqual(stop(), expected);
+  const unborn = tempProject(t, "cradle-hook-stop-unborn-");
+  writeTree(unborn, { "e2e/手.ts": "// この手は未決\nexport const z = 1;\n", [note]: "# 検討\n" });
+  git(unborn, "init", "-q");
+  git(unborn, "add", "e2e/手.ts");
+  const r = runNode(hook, ["stop"], { cwd: unborn, env: cleanEnv(), input: JSON.stringify({ cwd: unborn }) });
+  assert.deepEqual([r.status, r.stderr], [0, ""]);
+  assert.deepEqual(JSON.parse(r.stdout || "null"), expected);
+});
+
+// プロジェクトルートは payload.cwd から上がった最寄りの cradle.json（git のルートとは比べない）
+test("Stop は cradle.json が git のルートより下のディレクトリにあっても、追跡中のファイルの変更の unslop error で差し戻す", (t) => {
+  const top = tempDir(t, "cradle-hook-stop-sub-");
+  writeTree(top, { "app/cradle.json": JSON.stringify({ project: "Example" }), "app/e2e/flow.ts": "export const y = 1;\n" });
+  commitAll(top);
+  writeTree(top, { "app/e2e/flow.ts": "// 手 1 は未決\nexport const y = 1;\n" });
+  const app = join(top, "app");
+  const r = runNode(hook, ["stop"], { cwd: app, env: cleanEnv(), input: JSON.stringify({ cwd: app }) });
+  assert.deepEqual([r.status, r.stderr], [0, ""]);
+  assert.deepEqual(JSON.parse(r.stdout || "null"), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 1 件あります。止まる前に直すこと（規約は unslop と comments）:\n${reasonLine(1)}` });
 });

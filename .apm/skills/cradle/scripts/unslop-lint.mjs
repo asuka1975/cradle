@@ -66,9 +66,11 @@ function candidateFiles() {
   // コミットの無いリポジトリでは diff HEAD が断る。空の HEAD との差分は追跡中のファイル全部
   let unborn = false;
   try { git(cfg.root, ["rev-parse", "--verify", "-q", "HEAD"]); } catch { unborn = true; }
+  // -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、そのままでは cfg.root に繋いでも無いファイルになる。
+  // --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対で、その下だけを読む
   let names;
   try {
-    names = [...git(cfg.root, unborn ? ["ls-files", "--cached"] : ["diff", "--name-only", "HEAD"]).split("\n"), ...git(cfg.root, ["ls-files", "--others", "--exclude-standard"]).split("\n")];
+    names = [...git(cfg.root, unborn ? ["ls-files", "-z", "--cached"] : ["diff", "--name-only", "-z", "--relative", "HEAD"]).split("\0"), ...git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0")];
   } catch (e) { fail(e.message, 2); }
   return [...new Set(names.filter(n => n && !isHarnessCode(n)))].map(n => join(cfg.root, n)).filter(p => existsSync(p) && statSync(p).isFile());
 }
