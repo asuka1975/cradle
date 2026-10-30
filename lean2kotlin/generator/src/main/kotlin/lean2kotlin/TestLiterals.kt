@@ -14,6 +14,10 @@ internal fun EmitTests.fixtureNorm(t: IrType): String = when (t) {
 		if (fixtureNorm(t.of).isNotEmpty()) ".map { it${fixtureNorm(t.of)} }" else ""
 	is IrType.OptionOf ->
 		if (fixtureNorm(t.of).isNotEmpty()) "?${fixtureNorm(t.of)}" else ""
+	is IrType.PairOf ->
+		if (fixtureNorm(t.fst).isNotEmpty() || fixtureNorm(t.snd).isNotEmpty())
+			".let { p -> Pair(p.first${fixtureNorm(t.fst)}, p.second${fixtureNorm(t.snd)}) }"
+		else ""
 	is IrType.WithDefault -> fixtureNorm(t.of)
 	// 断るふるまいの結果: 受け入れた値だけを観測に写す(拒否はそのまま比べる)
 	is IrType.Result ->
@@ -34,6 +38,11 @@ internal fun EmitTests.inputLiteral(t: IrType, j: JsonElement): String = when (t
 	is IrType.ListOf ->
 		"listOf<${k.typeRef(t.of)}>(${j.jsonArray.joinToString(", ") { inputLiteral(t.of, it) }})"
 	is IrType.OptionOf -> if (j is JsonNull) "null" else inputLiteral(t.of, j)
+	// 対の各側も入力位置(k.literal に任せると中の entity-like が fixture 語彙のまま入る)
+	is IrType.PairOf -> {
+		val a = j.jsonArray
+		"Pair(${inputLiteral(t.fst, a[0])}, ${inputLiteral(t.snd, a[1])})"
+	}
 	is IrType.WithDefault -> inputLiteral(t.of, j)
 	else -> k.literal(t, j)
 }

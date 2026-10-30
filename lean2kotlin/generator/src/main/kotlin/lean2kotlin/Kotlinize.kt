@@ -191,6 +191,9 @@ class Kotlinize(private val ir: Ir) {
 		}
 		is IrType.ListOf -> "List<${typeRefFixture(t.of)}>"
 		is IrType.OptionOf -> "${typeRefFixture(t.of)}?"
+		// 対と結果の中も reachesEntityLike と同じく降りる(中身が届かなければ typeRef と同じ形)
+		is IrType.PairOf -> "Pair<${typeRefFixture(t.fst)}, ${typeRefFixture(t.snd)}>"
+		is IrType.Result -> "DomainResult<${typeRefFixture(t.err)}, ${typeRefFixture(t.ok)}>"
 		is IrType.WithDefault -> typeRefFixture(t.of)
 		else -> typeRef(t)
 	}
