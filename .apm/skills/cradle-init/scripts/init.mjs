@@ -21,7 +21,8 @@ const backendPkg = opts.backend ?? null;
 const domain = opts.domain ?? null;
 const dryRun = !!opts["dry-run"];
 const force = !!opts.force;
-const only = opts.only ?? null;
+// 末尾の / を落としてから空かを見る（空の変数を渡した --only "$P/" は "/" になり、落とした "" は全部のファイルに一致する）
+const only = typeof opts.only === "string" ? opts.only.replace(/\/+$/, "") : opts.only ?? null;
 // 引数の誤りは何か書く前に止める（敷いた後で止めると、書いた分の一覧も出さずに 1 で終わる）
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
@@ -39,7 +40,7 @@ const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 const written = [], skipped = [], failed = [];
 // 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する
 function put(rel, content, { exec = false } = {}) {
-  if (only && !rel.startsWith(only.replace(/\/$/, ""))) return;
+  if (only && !rel.startsWith(only)) return;
   const dest = join(target, rel);
   if (existsSync(dest) && !force) { skipped.push(rel); return; }
   if (dryRun) { written.push(rel); return; }

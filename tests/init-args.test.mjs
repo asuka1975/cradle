@@ -16,6 +16,9 @@ test("init は --k=v も --k v と同じに読み、--only=lean/mockup --force �
   const env = cleanEnv();
   const dry = runNode(init, ["--project=Demo", `--dir=${root}`, "--only=lean/mockup", "--dry-run"], { cwd, env });
   assert.deepEqual([dry.status, dry.stdout, dry.stderr], [0, `Cradle init — Demo (${root}) [dry-run]\n${mockupLines}${next}`, ""]);
+  // 末尾の / は付けても付けなくても同じファイルを選ぶ
+  const slash = runNode(init, ["--project=Demo", `--dir=${root}`, "--only=lean/mockup/", "--dry-run"], { cwd, env });
+  assert.deepEqual([slash.status, slash.stdout, slash.stderr], [dry.status, dry.stdout, dry.stderr]);
   assert.deepEqual(readdirSync(root), []);
   const full = runNode(init, ["--project", "Demo", "--dir", root], { cwd, env });
   assert.equal(full.status, 0, full.stderr);
@@ -59,14 +62,15 @@ test("init は値を付けた --force / --dry-run（--force=false など）と�
   assert.deepEqual(readdirSync(cwd), []);
 });
 
-test("init は空の --only= / --dir= / --backend=（空の変数を渡した形も）を値の無い形と同じに何も書かずに 1 で止め、--only= --force で骨格を丸ごと上書きしない", (t) => {
+test("init は空の --only= / --dir= / --backend=（空の変数を渡した形も、--only \"$P/\" の / だけも）を値の無い形と同じに何も書かずに 1 で止め、--only= --force で骨格を丸ごと上書きしない", (t) => {
   const env = cleanEnv();
   const root = tempDir(t, "cradle-init-blank-");
   const full = runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env });
   assert.equal(full.status, 0, full.stderr);
   const hotspots = join(root, "documents/ddd/hotspots.md");
   writeFileSync(hotspots, "# 書き込んだ HS\n");
-  for (const blank of [["--only="], ["--only", ""], ["--only", " "]]) {
+  // 末尾が / だけの値（空の変数を渡した --only "$P/"）も空と同じ。/ を落とした "" は全部のファイルに一致する
+  for (const blank of [["--only="], ["--only", ""], ["--only", " "], ["--only", "/"], ["--only=/"], ["--only", "//"]]) {
     const r = runNode(init, ["--project", "Demo", "--dir", root, ...blank, "--force"], { cwd: root, env });
     assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--only <prefix> が要ります（例: lean/mockup）\n"], JSON.stringify(blank));
     assert.equal(readFileSync(hotspots, "utf8"), "# 書き込んだ HS\n", JSON.stringify(blank));
