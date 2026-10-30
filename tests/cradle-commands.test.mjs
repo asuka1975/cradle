@@ -82,12 +82,13 @@ test("contract-skeleton は引数が無ければ使い方、無いファイル�
   assert.deepEqual([flagOnly.status, flagOnly.stdout, flagOnly.stderr], [1, "", usage.stderr]);
 });
 
-// 一時プロジェクト（git 管理）: イベント#1 と、その ID を前方に含む イベント#10 を documents・lean・README に置く
+// 一時プロジェクト（git 管理）: イベント#1 と、その ID を前方に含む イベント#10・#101・#1.1・#1a を documents・lean・README に置く
 function refsFixture(t) {
   const root = tempProject(t, "cradle-refs-");
   writeTree(root, {
     "documents/ddd/event-timeline.md": "# イベント時系列マップ\n\n| # | ドメインイベント |\n|---|---|\n| 1 | 本が登録された |\n| 10 | 本が除籍された |\n",
     "documents/ddd/hotspots.md": "| HS-001 | イベント#1 の後に貸出できるか | open |\n| HS-002 | イベント#10 で予約はどうなるか | open |\n",
+    "documents/ddd/model-review.md": "| MQ-001 | イベント#1.1 で分かれるか | open |\n| MQ-002 | イベント#1a は イベント#101 より前か | open |\n| MQ-003 | イベント#10 と イベント#1 は同じ本か | open |\n",
     "lean/Example/Domain/Book.lean": "/-- 本。出典: イベント#1 -/\nstructure Book where\n  id : Nat\n",
     "lean/Example/Domain/Retire.lean": "/-- 除籍。出典: イベント#10 -/\ndef retire := 1\n",
     "README.md": "# Example\n\n形式化の出典はイベント#1.\n",
@@ -99,19 +100,22 @@ function refsFixture(t) {
 }
 const refsTail = "documents 側で撤回・訂正したら、ここに出た派生（Lean の出典・openapi・infra-design・README）を洗い直すこと。\n";
 
-test("refs はプロジェクトルートから git grep の行（path:line:content）をそのまま字下げして出す。前方一致の イベント#10 も拾う", (t) => {
+test("refs はプロジェクトルートから git grep の行（path:line:content）をそのまま字下げして出す。ID は文字どおりに探し、後ろに数字・英小文字・「.数字」が続く イベント#10・#1.1・#1a は拾わない", (t) => {
   const { root, run } = refsFixture(t);
   const r = run(root, "イベント#1");
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr, "");
   assert.equal(r.stdout, [
-    "イベント#1: 5 箇所",
+    "イベント#1: 4 箇所",
+    // 文末の「.」は ID の続きではない
     "  README.md:3:形式化の出典はイベント#1.",
     "  documents/ddd/hotspots.md:1:| HS-001 | イベント#1 の後に貸出できるか | open |",
-    "  documents/ddd/hotspots.md:2:| HS-002 | イベント#10 で予約はどうなるか | open |",
+    // イベント#10 と同じ行でも、ほかに イベント#1 そのものがあれば拾う
+    "  documents/ddd/model-review.md:3:| MQ-003 | イベント#10 と イベント#1 は同じ本か | open |",
     "  lean/Example/Domain/Book.lean:1:/-- 本。出典: イベント#1 -/",
-    "  lean/Example/Domain/Retire.lean:1:/-- 除籍。出典: イベント#10 -/",
   ].join("\n") + "\n" + refsTail);
+  // 「.」は任意の 1 文字ではない（イベント#101 を拾わない）
+  assert.equal(run(root, "イベント#1.1").stdout, "イベント#1.1: 1 箇所\n  documents/ddd/model-review.md:1:| MQ-001 | イベント#1.1 で分かれるか | open |\n" + refsTail);
   // git grep の 1（一致なし）は失敗ではない
   const none = run(root, "MQ-404");
   assert.deepEqual([none.status, none.stdout, none.stderr], [0, "MQ-404: 0 箇所\n" + refsTail, ""]);
