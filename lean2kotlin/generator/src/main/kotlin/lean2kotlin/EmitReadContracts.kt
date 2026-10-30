@@ -96,6 +96,42 @@ internal fun EmitTests.synthesizeArg(t: IrType, state: JsonObject): String? = wh
 	else -> null
 }
 
+/** golden 回帰の対象のメソッドと、照らす golden views のキー(null は views 全体を束ねる DTO)。 */
+internal data class GoldenTarget(val method: IrMethod, val screenKey: String?)
+
+/**
+ * golden 回帰の対象(参照系)を UseCase 名ごとに ir.useCases の順で集める — emit は定理由来のケースと同じ
+ * <UseCase>ContractTest に束ねる(EmitTests.emitTheoremContractTests が担う)。
+ */
+internal fun planGoldenTargets(ir: Ir, snapshots: List<GoldenSnapshot>): Map<String, GoldenTarget> {
+	val plan = linkedMapOf<String, GoldenTarget>()
+	if (snapshots.isNotEmpty()) {
+		// 計画の基準は views を持つ最初のスナップショット(外部能力の golden では refused / fault が先に来ることがある)
+		val v0 = snapshots.firstOrNull { it.views.isNotEmpty() }?.views ?: snapshots.first().views
+		for (s in ir.useCases) {
+			for (m in s.methods.filter { it.name == "execute" }) {
+				val okT = (m.ret as? IrType.Result)?.ok ?: m.ret
+				// 対象 1(束): 成功側が「画面束ね」DTO(フィールドが golden views のキーと一致)。
+				// 束が Runtime 在住のプロジェクトでは現れない(Runtime は抽出の対象外)
+				val retTd = (okT as? IrType.Ref)?.let { ir.typeDef(it.lean) }
+				val fields = (retTd?.shape as? IrShape.Structure)?.fields
+				if (retTd?.role == "viewDto" && !fields.isNullOrEmpty() &&
+					fields.all { v0.containsKey(it.name) }) {
+					plan[s.name] = GoldenTarget(m, null)
+					continue
+				}
+				// 対象 2(画面): golden views のキー = UseCase 名(UseCase 接尾辞を
+				// 剥いで先頭小文字)で、成功側が View DTO を運ぶ
+				val key = s.module.removeSuffix("UseCase").replaceFirstChar { it.lowercase() }
+				if (v0.containsKey(key) && okT.leafRefs().any {
+						ir.typeDef(it).role == "viewDto" })
+					plan[s.name] = GoldenTarget(m, key)
+			}
+		}
+	}
+	return plan
+}
+
 /**
  * 参照系 UseCase の契約テスト(1 UseCase 1 クラス): golden 回帰と @[contract]
  * 定理由来のケースを同じ契約面(execute)に束ねる。観測の Set(ReadModel)は
@@ -103,11 +139,11 @@ internal fun EmitTests.synthesizeArg(t: IrType, state: JsonObject): String? = wh
  * 判断・射影の定理も入力の選択器としてここへ流れ込む — 検証面は常に本番の execute。
  */
 internal fun EmitTests.emitReadUseCaseContractTest(
-	s: IrService, contracts: List<IrContract>, golden: Pair<IrMethod, String?>?,
+	s: IrService, contracts: List<IrContract>, golden: GoldenTarget?,
 ) {
-	val m = golden?.first ?: s.methods.find { it.name == "execute" }
+	val m = golden?.method ?: s.methods.find { it.name == "execute" }
 		?: s.methods.firstOrNull() ?: return
-	val screenKey = golden?.second
+	val screenKey = golden?.screenKey
 	val kept = m.params.filterNot { k.isUseCasePlumbing(it.type) }
 	val errT = (m.ret as? IrType.Result)?.err
 	val okT = (m.ret as? IrType.Result)?.ok ?: m.ret

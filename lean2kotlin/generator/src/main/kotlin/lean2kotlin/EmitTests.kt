@@ -46,33 +46,7 @@ class EmitTests(
 		emitFile(null, "GeneratedArbs",
 			framework = listOf("io.kotest.property.Arb", "io.kotest.property.arbitrary.*")) { arbsBody() }
 		for (td in ir.types.filter { it.role == "aggregateRoot" }) emitRepositoryContractTest(td)
-		// golden 回帰の対象(参照系)を集める — emit は定理由来のケースと同じ
-		// <UseCase>ContractTest に束ねる(emitTheoremContractTests が担う)
-		val goldenPlan = linkedMapOf<String, Pair<IrMethod, String?>>()
-		if (goldenSnapshots.isNotEmpty()) {
-			// 計画の基準は views を持つ最初のスナップショット(外部能力の golden では refused / fault が先に来ることがある)
-			val v0 = goldenSnapshots.firstOrNull { it.views.isNotEmpty() }?.views ?: goldenSnapshots.first().views
-			for (s in ir.useCases) {
-				for (m in s.methods.filter { it.name == "execute" }) {
-					val okT = (m.ret as? IrType.Result)?.ok ?: m.ret
-					// 対象 1(束): 成功側が「画面束ね」DTO(フィールドが golden views のキーと一致)。
-					// 束が Runtime 在住のプロジェクトでは現れない(Runtime は抽出の対象外)
-					val retTd = (okT as? IrType.Ref)?.let { ir.typeDef(it.lean) }
-					val fields = (retTd?.shape as? IrShape.Structure)?.fields
-					if (retTd?.role == "viewDto" && !fields.isNullOrEmpty() &&
-						fields.all { v0.containsKey(it.name) }) {
-						goldenPlan[s.name] = m to null
-						continue
-					}
-					// 対象 2(画面): golden views のキー = UseCase 名(UseCase 接尾辞を
-					// 剥いで先頭小文字)で、成功側が View DTO を運ぶ
-					val key = s.module.removeSuffix("UseCase").replaceFirstChar { it.lowercase() }
-					if (v0.containsKey(key) && okT.leafRefs().any {
-							ir.typeDef(it).role == "viewDto" })
-						goldenPlan[s.name] = m to key
-				}
-			}
-		}
+		val goldenPlan = planGoldenTargets(ir, goldenSnapshots)
 		emitDdlContractTest(ir.contracts.filter { it.target == "projection" })
 		emitTheoremContractTests(goldenPlan)
 		emitFaultContractTests()
@@ -90,11 +64,13 @@ class EmitTests(
 	 *   採番の種も before 状態(ids.next)が運ぶ — 実装は IdGenerator をそこから始める
 	 * - 参照系(kind=value): ReadModel を fixture に execute の返り値を突き合わせる
 	 */
-	private fun emitTheoremContractTests(goldenPlan: MutableMap<String, Pair<IrMethod, String?>>) {
+	private fun emitTheoremContractTests(goldenPlan: Map<String, GoldenTarget>) {
 		val byTarget = ir.contracts.groupBy { it.target }
 		val behaviorCs = byTarget["behaviors"] ?: emptyList()
 		val ruleCs = byTarget["rules"] ?: emptyList()
 		val ucCs = byTarget["usecase"] ?: emptyList()
+		// 定理契約と一緒に参照系として出した UseCase(遷移の UseCase は計画から外さない)
+		val handled = mutableSetOf<String>()
 		for ((ucName, contracts) in ucCs.groupBy { it.useCase }.toSortedMap()) {
 			val s = ir.useCases.find { it.name == ucName }
 			if (s == null) {
@@ -103,10 +79,13 @@ class EmitTests(
 			}
 			val kinds = contracts.flatMap { it.cases }.map { it.kind }.toSet()
 			if ("transition" in kinds) emitTransitionTheoremTest(ucName, s, contracts)
-			else emitReadUseCaseContractTest(s, contracts, goldenPlan.remove(ucName))
+			else {
+				handled += ucName
+				emitReadUseCaseContractTest(s, contracts, goldenPlan[ucName])
+			}
 		}
 		// 定理契約のない参照系は golden 回帰だけの ContractTest になる
-		for ((ucName, plan) in goldenPlan) {
+		for ((ucName, plan) in goldenPlan.filterKeys { it !in handled }) {
 			ir.useCases.find { it.name == ucName }
 				?.let { emitReadUseCaseContractTest(it, emptyList(), plan) }
 		}
