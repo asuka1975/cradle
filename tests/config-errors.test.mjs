@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode, git } from "./helpers.mjs";
 
 const skill = (p) => fileURLToPath(new URL(`../.apm/skills/${p}`, import.meta.url));
 const cradle = skill("cradle/scripts/cradle.mjs");
@@ -45,4 +45,18 @@ test("git の外の regen-impact は失敗した git の呼び出しの 1 行で
   assert.equal(r.status, 1);
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, "cradle: Command failed: git status --porcelain -- backend/src/generated\n");
+});
+
+test("コミットの無いリポジトリの regen-impact は再生成する前にその理由の 1 行で止まり、1 つコミットすれば回る", (t) => {
+  const root = tempProject(t, "cradle-config-nohead-");
+  git(root, "init", "-q");
+  const run = (...args) => runNode(cradle, ["regen-impact", ...args], { cwd: root, env: cleanEnv() });
+  for (const args of [["--no-regen", "--no-golden"], [], ["--dry-run"]]) {
+    const r = run(...args);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "cradle: まだコミットがありません。regen-impact は生成物を HEAD と比べるので、先にコミットしてから回す\n"], args.join(" "));
+  }
+  git(root, "commit", "-q", "--allow-empty", "-m", "init");
+  const r = run("--no-regen", "--no-golden");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
 });

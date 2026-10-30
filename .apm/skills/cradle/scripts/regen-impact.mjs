@@ -18,6 +18,8 @@ const gens = cfg.backend.generated;
 
 // git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない
 let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]); } catch (e) { fail(e.message); }
+// コミットが 1 つも無いリポジトリでは git status は通るが HEAD と比べられない。再生成する前に止める
+try { git(cfg.root, ["rev-parse", "--verify", "-q", "HEAD"]); } catch { fail("まだコミットがありません。regen-impact は生成物を HEAD と比べるので、先にコミットしてから回す"); }
 if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirty}`);
 // 元に戻す（checkout と clean）は始める前の差分とこの実行の出力を見分けないので、--no-regen・--force でも差分があれば --dry-run を断る
 if (opts["dry-run"] && dirty) fail(`--dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:\n${dirty}`);
