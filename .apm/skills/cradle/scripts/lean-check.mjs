@@ -27,7 +27,7 @@
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { loadConfigOrFail, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents, stripLeanComments } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents, stripLeanComments, scenarioNames } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfigOrFail();
@@ -240,8 +240,8 @@ if (opts.build) {
 let smokeResult = null;
 if (opts.smoke) {
   try {
-    const scen = [...walk(cfg.lean.rootDir, { ext: [".lean"] })].flatMap(f => [...readFileSync(f, "utf8").matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)].map(m => m[1]))[0];
-    const res = await callLean(cfg, { cmd: "init", scenario: scen ?? "basic" }, { build: "never" });
+    // 流す出発点は spec-query scenarios の先頭（scenarioByName の腕）。ほかの def の文字列の腕（値オブジェクト・environmentByName）は出発点ではない
+    const res = await callLean(cfg, { cmd: "init", scenario: scenarioNames(cfg)[0] ?? "basic" }, { build: "never" });
     smokeResult = res.ok ? "ok" : `init が ok を返さない: ${JSON.stringify(res).slice(0, 300)}`;
   } catch (e) { smokeResult = e.message; }
 }
