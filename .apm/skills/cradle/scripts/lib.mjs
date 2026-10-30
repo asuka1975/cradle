@@ -276,6 +276,9 @@ export function stripLeanComments(text) {
   return out;
 }
 
+/** sorry の残数: コメントを消した写しで `sorry` を含む行の数（1 行に幾つあっても 1）。lean-check が sorryMax で止める数え方と同じ。 */
+export function leanSorryLines(text) { return stripLeanComments(text).split("\n").filter(l => /\bsorry\b/.test(l)).length; }
+
 /** 形式化が付けた名前: コマンド構成子・失敗語彙・画面の口。doc は宣言直前の docstring の 1 文目（無ければ ""）。 */
 export function leanVocabulary(cfg) {
   const targets = [

@@ -46,16 +46,13 @@ for (const f of allFiles) {
   const code = stripLeanComments(raw);
   const relPath = rel(modelDir, f);
   const layer = relPath.split("/")[0];
-  const lines = raw.split("\n");
 
-  const codeLines = code.split("\n");
-  lines.forEach((l, i) => {
-    const c = l.replace(/--.*$/, "");
-    const cl = codeLines[i] ?? "";
-    if (/\bsorry\b/.test(c)) add("sorry", "info", f, i + 1, "未証明（sorry）");
-    if (/^\s*axiom\b/.test(c)) add("axiom", "error", f, i + 1, "axiom は禁止（矛盾の混入経路）");
-    if (/^\s*(private\s+|protected\s+)?partial\s+def\b/.test(c)) add("partial", "warn", f, i + 1, "partial def（停止性が示せない再帰）");
-    if (/^\s*unsafe\s+def\b/.test(c)) add("unsafe", "error", f, i + 1, "unsafe は禁止");
+  // 行の規則はコメントを消した行で見る（docstring・ブロックコメントの中の sorry / axiom は数えない）。sorry は 1 行に幾つあっても 1（status の数も同じ）
+  code.split("\n").forEach((cl, i) => {
+    if (/\bsorry\b/.test(cl)) add("sorry", "info", f, i + 1, "未証明（sorry）");
+    if (/^\s*axiom\b/.test(cl)) add("axiom", "error", f, i + 1, "axiom は禁止（矛盾の混入経路）");
+    if (/^\s*(private\s+|protected\s+)?partial\s+def\b/.test(cl)) add("partial", "warn", f, i + 1, "partial def（停止性が示せない再帰）");
+    if (/^\s*unsafe\s+def\b/.test(cl)) add("unsafe", "error", f, i + 1, "unsafe は禁止");
     for (const m of cfg.lean.forbiddenMentions) if (cl.toLowerCase().includes(m.toLowerCase())) add("mentions", "error", f, i + 1, `生成器への依存 (${m}) — モデルは生成器を知らない`);
   });
 

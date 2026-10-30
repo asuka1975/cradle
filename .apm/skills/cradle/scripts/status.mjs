@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfigOrFail();
@@ -46,7 +46,9 @@ else {
 if (!existsSync(cfg.lean.modelDir)) phase("Lean 実行可能仕様", "未着手", [`${cfg.lean.dir}/${cfg.lean.root}/ が無い`], "lean-domain-model スキルで初回生成");
 else {
   const leanFiles = walk(cfg.lean.modelDir, { ext: [".lean"] });
-  const sorry = leanFiles.reduce((n, f) => n + (readFileSync(f, "utf8").replace(/--.*$/gm, "").match(/\bsorry\b/g) ?? []).length, 0);
+  // lean-check が sorryMax で止める数と同じ: モデルのファイルと lean/Main.lean の、sorry を含むコードの行
+  const mainFile = join(cfg.lean.rootDir, "Main.lean");
+  const sorry = [...leanFiles, ...(existsSync(mainFile) ? [mainFile] : [])].reduce((n, f) => n + leanSorryLines(readFileSync(f, "utf8")), 0);
   const useCases = existsSync(join(cfg.lean.modelDir, "Application", "UseCase")) ? readdirSync(join(cfg.lean.modelDir, "Application", "UseCase")).length : 0;
   const goldenDir = goldenDirOf(cfg);
   const goldens = existsSync(goldenDir) ? goldenFlowFiles(goldenDir).length : 0;
