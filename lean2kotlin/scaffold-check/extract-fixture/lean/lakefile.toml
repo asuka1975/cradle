@@ -1,0 +1,6 @@
+# 抽出器だけの回帰素材（倉庫の注文、名前空間 Depot）。生成には通さない — 診断（diagnostics.dropped）を持つ IR は生成器が失敗にする。
+name = "depot-lean"
+defaultTargets = ["Depot"]
+
+[[lean_lib]]
+name = "Depot"

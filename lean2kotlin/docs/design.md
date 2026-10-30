@@ -42,10 +42,10 @@ IR の節は `types`（役割つきの型）/ `useCases` / `queryServices` / `do
 | `Application/Port/<Port>/<操作>`（`Domain/Port` も同じ）の固定名 `Request` / `Outcome` | portRequest / portOutcome | data class / sealed / enum（Kotlin 名は `<Port><操作>Request` / `<Port><操作>Outcome`。`Outcome` は `execute` の観測引数として本番署名から落ちる） |
 | 同じ操作モジュールのそれ以外の純データ | portDto | data class / sealed / enum（`<Port><操作><名前>`） |
 
-- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。加えて、`UseCase/<X>/UseCase` の固定名（validate / act / execute / request / mkRequest / apply）でも障害契約でもない def のうち `@[contract]` が指名したもの（UseCase の判断）を IR の `useCaseRules`（`<X>Rules`）に写す。指名の無い補助は写さない。`useCases[]` は入力の種別 `kind`（`command` = 利用者の操作 / `observation` = 内部入力 / `query` = 参照系）と入力型 `input` を持つ。Command と Observation の同居、Observation 形の `execute` が名義（`@[actorContext]`）を受ける形は抽出の失敗。
+- interface 面は固定形だけ写す: `UseCase/<X>/UseCase` の `validate` / `execute`、`UseCase/<X>/QueryService` の `query`、`Domain/DomainService/` の def。加えて、`UseCase/<X>/UseCase` の固定名（validate / act / execute / request / mkRequest / apply）でも障害契約でもない def のうち `@[contract]` が指名したもの（UseCase の判断）を IR の `useCaseRules`（`<X>Rules`）に写す。指名の無い補助は写さない。`useCases[]` は入力の種別 `kind`（`command` = 利用者の操作 / `observation` = 内部入力 / `query` = 参照系）と入力型 `input`（Command / Observation モジュールの同名の型、無ければそのモジュールで唯一の型。決まらなければ書かない）を持つ。Command と Observation の同居、Observation 形の `execute` が名義（`@[actorContext]`）を受ける形は抽出の失敗。
 - Port: IR の `ports`（Port ごとに操作と要求・観測の型）。UseCase の `request`（戻りは `Except E Request`）と `execute` の観測引数（`Outcome`）の組で Port・操作を決め、`useCases[].ports` に置く（対応が無い・片方だけ・複数・別の操作・参照系での使用は失敗。型名の末尾で推測しない）。契約ケース（transition）と障害契約のケースには `ports`（Lean が同じ引数で評価した `request` の値と、定理の観測）を焼き込む。validate の拒否では要求は無い（= 呼ばれない）。
-- 診断: `diagnostics.dropped` に、IR に入らなかった契約定理・障害契約（主対象に触れない・ケースを演繹できない・翻訳できない）と写像できない固定形の署名を理由つきで残す。生成器はこれを失敗にする（§6）。
-- ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command / Observation の def のうち、親 namespace が分類済みの型と一致するもの（RepositoryState と入力語彙のふるまいは写さない）。
+- 診断: `diagnostics.dropped` に、IR に入らなかった契約定理・障害契約（主対象に触れない・ケースを演繹できない・翻訳できない）と写像できない固定形の署名を理由つきで残す。主対象に触れない契約定理が語る def がふるまい・判断・射影の候補から署名で除かれていたときは、その def と署名の理由を残す。生成器はこれを失敗にする（§6）。
+- ふるまい（`behaviors`）は Domain/Entity・Domain/ValueObject・Application/RepositoryState・各 Command / Observation の def のうち、親 namespace が分類済みの型そのもの、そうでなければ短い名前が同じ分類済みの型が 1 つだけのもの（2 つ以上なら写さない。RepositoryState と入力語彙のふるまいは写さない）。
 - 制約: 構造体の Prop フィールドは形状から除き、`(coll.map (·.f)).Nodup` を `{"kind":"unique"}`、`(coll.filterMap (·.f)).Nodup` を `{"kind":"uniqueSome"}`、`∀ x ∈ coll, p x` を `{"kind":"all"}`、`(coll.filter p).length ≤ n` を `{"kind":"atMost","max":n}` として型の `constraints`（name / collection / field。all / atMost は述語 `x.field <op> value` の `op`（eq / ne）と `value`（オラクル値と同じ JSON）も）に出す。読める述語の形は lean-conventions §9。`<Root>RepositoryState` の読めない形は note。それ以外の型の Prop フィールドは `invariants`（name / lean = 命題の表示）に出し、Lean が制約を decide して通したサンプル値を `samples`（オラクル値と同じ JSON）に出す — 生成器は `invariants` を型の KDoc に「構築する側の義務」として写し（Kotlin の型は検査しない）、その型の Arb を `Arb.element(<samples>)` にする（サンプルが無ければ Arb が要る生成は失敗）。def の Prop 引数（泉の新鮮性など）は interface 面から落ち、評価では decide の証明で埋める。
 - 単型化: 型引数の解決は lean-conventions §9 の binder 規約（上書きは `binderOverrides`）。定数の適用形 `C a…` を受理し、Id の表現はモデルの具体化を写す（`Runtime/Ids.lean` の `structure NoteId where id : Nat` → `Long`）。
 - 印の TagAttribute は対象自身の `Domain/Annotations.lean` のものを環境から読む。印の型は普通の structure（opaque / axiom はオラクル評価が止まる）。docstring は主体ポートと IdGenerator ポートの KDoc に全文写す。メソッドの KDoc は先頭行。
@@ -119,8 +119,8 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 
 `generator/` を composite build で解決する（`generator/src/main/kotlin/lean2kotlin/gradle/Lean2KotlinPlugin.kt`。利用側の断片は gradle-wiring.md）。タスクは 2 つ:
 
-- `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml`。
-- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
+- `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml` / `lake-manifest.json` と対象の `lean-toolchain`（ワークスペースには対象の `lean-toolchain` を写し、抽出器もそれでビルドする）。
+- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。配線は `org.jetbrains.kotlin.jvm` を適用したプロジェクトだけ: `compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存する（`wireSourceSets` に依らない）。`wireSourceSets` が true（既定）なら、生成ディレクトリを sourceSets に配線し、source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
 
 拡張 `lean2kotlin { }`:
 
@@ -165,7 +165,10 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - 脇書きの `version` があって 1 でない（外部能力かに依らない）。
 - 外部能力の golden の init / flow 応答がトップに `ok` を持たない（`error` / `harnessError` — 採り直す）。
 - golden の fault のエントリが指名した障害契約（`faultContract` の `<UseCase>.<def>` と `portCalls`）が IR の障害契約に無い、または `portCalls` が Lean の署名と違う。
+- Port の要求・観測が関数型を運ぶ（構成子の引数・`Option` などの入れ子の中も含む。直接の関数フィールドは抽出の失敗 — 上）。
 - Port の要求・観測が interface 化された語彙（Entity・ふるまい持ちの VO）を運ぶ（要求はモックが値で比較する）。
+- 内部入力（Observation）の型が名義（`@[actorContext]`）を運ぶ（入れ子の中も含む。通知・worker からの入力に利用者の名義は無い）。
+- 泉の状態 `<X>IdGeneratorState` に対になる Id 型 `<X>Id` が無い（泉ポートが導出されず、採番が注入されない）。
 
 生成が失敗する（衝突の手前まで書いた生成物は残り、次の再生成で消える）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。
 

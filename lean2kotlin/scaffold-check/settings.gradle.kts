@@ -11,3 +11,5 @@ pluginManagement {
 rootProject.name = "scaffold-check"
 // 外部能力の Port を持つ最小ドメイン（port/lean）を同じ経路で通す回帰
 include("port")
+// 抽出だけの回帰（extract-fixture/lean）。生成器が失敗にする診断を持つ IR を固定する — 生成もコンパイルもしない
+include("extract-fixture")
