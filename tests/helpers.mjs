@@ -20,10 +20,13 @@ export function tempProject(t, prefix, config = { project: "Example" }) {
   return root;
 }
 
-// Claude Code の中で走るとプロジェクトルートが cradle 自身に解決されるので、子プロセスにはルートを指す変数を渡さない
+// Claude Code の中で走るとプロジェクトルートが cradle 自身に解決されるので、子プロセスにはルートを指す変数を渡さない。
+// 子の git には利用者の設定（global・system・-c で渡した設定）を読ませず、git の hook から npm test を走らせたときに渡る
+// 呼び手のリポジトリ（GIT_DIR・GIT_INDEX_FILE など）も渡さない。git の設定を差し込むテストは extra に GIT_CONFIG_COUNT などを渡す（extra は最後に重ねる）
 export function cleanEnv(extra = {}) {
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR",
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"]) delete env[key];
   return { ...env, ...extra };
 }
 
@@ -39,7 +42,7 @@ export function writeTree(root, files) {
   }
 }
 
-// 利用者の git に作者の設定が無くても、コミットへの署名を求めていても通るよう、作者と署名を引数で固定する
+// cleanEnv が利用者の git 設定を切るので、作者は引数で渡す（署名もここで切る）
 export function git(root, ...args) {
   const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: root, env: cleanEnv(), encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);

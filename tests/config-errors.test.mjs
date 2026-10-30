@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
@@ -40,7 +40,8 @@ test("JSON として読めない cradle.json は、読めないファイルと�
 
 test("git の外の regen-impact は失敗した git の呼び出しの 1 行で止まる", (t) => {
   const root = tempProject(t, "cradle-config-nogit-");
-  const r = runNode(cradle, ["regen-impact", "--no-regen"], { cwd: root, env: cleanEnv() });
+  // 一時ディレクトリの祖先に git の作業ツリーがあっても、そこまで上がらせない
+  const r = runNode(cradle, ["regen-impact", "--no-regen"], { cwd: root, env: cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) }) });
   assert.equal(r.status, 1);
   assert.equal(r.stdout, "");
   assert.equal(r.stderr, "cradle: Command failed: git status --porcelain -- backend/src/generated\n");
