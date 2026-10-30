@@ -228,6 +228,30 @@ test("--dry-run で再生成が失敗すれば、作りかけの出力を HEAD �
   assert.equal(porcelain(), "");
 });
 
+// 別の git が index.lock を持つと後始末の git checkout が断る（ls-files と diff はロックを取らずに読むので通る）。
+// git の文は言語の設定で変わるので、git の stderr はロックのファイル名でだけ確かめる
+const unrestored = "--dry-run の後始末で生成ディレクトリを HEAD に戻せませんでした（今回の出力が残っています）: Command failed: git checkout -- backend/src/generated\n";
+test("--dry-run の後始末の git が失敗すれば、スタックトレースでなく戻せなかったことと git の理由を cradle: の文で言い、2 で終わる", (t) => {
+  // 再生成が通ったあと: 結果を出さずに止まり、今回の出力は生成ディレクトリに残る
+  const { run, porcelain } = fixture(t, "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt && touch ../.git/index.lock");
+  const ok = run("--no-golden", "--dry-run", "--json");
+  assert.equal(ok.status, 2);
+  assert.equal(ok.stdout, "");
+  assert.ok(ok.stderr.startsWith(`cradle: ${unrestored}`), ok.stderr);
+  assert.match(ok.stderr, /index\.lock/);
+  assert.doesNotMatch(ok.stderr, /^\s+at /m);
+  assert.equal(porcelain(), dirtyLines.join("\n") + "\n");
+  // 再生成が失敗したとき: 再生成の失敗の文と出力の末尾はそのままで、戻せなかったことを後ろに添える
+  const regenerate = "cp -R ../regen/. src/generated/ && touch ../.git/index.lock && echo boom && exit 3";
+  const { run: broken } = fixture(t, regenerate);
+  const failed = broken("--no-golden", "--dry-run");
+  assert.equal(failed.status, 2);
+  assert.equal(failed.stdout, "");
+  assert.ok(failed.stderr.startsWith(`cradle: 再生成に失敗しました（${regenerate}）:\nboom\n\n${unrestored}`), failed.stderr);
+  assert.match(failed.stderr, /index\.lock/);
+  assert.doesNotMatch(failed.stderr, /^\s+at /m);
+});
+
 // 生成ディレクトリがまだ無いプロジェクト（初めての再生成の前）: 手書きだけをコミットし、書きかけの手書きとメモは未追跡で置く
 function fresh(t, regenerate) {
   const root = tempProject(t, "cradle-regen-fresh-", { project: "Example", backend: { regenerate } });

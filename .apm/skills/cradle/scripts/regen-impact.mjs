@@ -26,12 +26,17 @@ if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに
 // 元に戻す（checkout と clean）は始める前の差分とこの実行の出力を見分けないので、--no-regen・--force でも差分があれば --dry-run を断る
 if (opts["dry-run"] && dirty) fail(`--dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:\n${dirty}`);
 /** --dry-run の後始末: 生成ディレクトリを HEAD に戻す。checkout は追跡しているファイルのあるものだけ（無いパスは git が断る）、
-    clean は在るものだけに渡す（パスの無い git clean はリポジトリ全体の未追跡を消す）。 */
+    clean は在るものだけに渡す（パスの無い git clean はリポジトリ全体の未追跡を消す）。
+    git が断れば（別の git が index.lock を持つ・書く権限が無いなど）git の stderr ごとの理由の文を返し、戻せたら ""。スタックトレースにしない。 */
 function restoreGenerated() {
-  const tracked = gens.filter(g => git(cfg.root, ["ls-files", "--", g]));
-  if (tracked.length) git(cfg.root, ["checkout", "--", ...tracked]);
-  const present = gens.filter(g => existsSync(join(cfg.root, g)));
-  if (present.length) git(cfg.root, ["clean", "-fdq", "--", ...present]);
+  const run = (args) => git(cfg.root, args, { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    const tracked = gens.filter(g => run(["ls-files", "--", g]));
+    if (tracked.length) run(["checkout", "--", ...tracked]);
+    const present = gens.filter(g => existsSync(join(cfg.root, g)));
+    if (present.length) run(["clean", "-fdq", "--", ...present]);
+    return "";
+  } catch (e) { return `--dry-run の後始末で生成ディレクトリを HEAD に戻せませんでした（今回の出力が残っています）: ${e.message.trimEnd()}`; }
 }
 
 let regenOut = null;
@@ -39,9 +44,9 @@ if (!opts["no-regen"]) {
   const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
   if (r.status !== 0) {
-    // 作りかけの出力を残さない
-    if (opts["dry-run"]) restoreGenerated();
-    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}`, 2);
+    // 作りかけの出力を残さない。戻せなければ再生成の失敗の後ろに添える
+    const unrestored = opts["dry-run"] ? restoreGenerated() : "";
+    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}${unrestored && `\n${unrestored}`}`, 2);
   }
 }
 
@@ -83,7 +88,8 @@ if (!opts["no-golden"]) {
   try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
 }
 
-if (opts["dry-run"]) restoreGenerated();
+// 戻せなければ結果を出さない（--json の restored: true が嘘になる）。再生成の失敗と同じく途中で止まった 2
+if (opts["dry-run"]) { const unrestored = restoreGenerated(); if (unrestored) fail(unrestored, 2); }
 
 const result = { changedGeneratedFiles: changed, symbols: impact, unwiredContractTests: unwired, golden, restored: !!opts["dry-run"] };
 if (opts.json) console.log(JSON.stringify(result, null, 2));
