@@ -56,7 +56,7 @@ internal fun EmitTests.emitTransitionTheoremTest(
 	val portDeps = k.portsOf(s)
 	val extraImports = sortedParts.map {
 		"${out.basePackage}.${k.repositoryPackage}.${it.root.kotlin}Repository"
-	} + genParts.map { "${out.basePackage}.application.${it.port.port}" } +
+	} + genParts.map { "${out.basePackage}.${k.fountainPortPackage}.${it.port.port}" } +
 		portDeps.flatMap { p -> listOf("${out.basePackage}.${k.portPackage(p)}.${p.name}", "${out.basePackage}.${k.portPackage(p)}.${k.portMockName(p)}") }
 	emitFile(k.useCasePackage(s.module), "${ucName}ContractTest",
 		framework = junitImports + extraImports,
@@ -258,7 +258,7 @@ internal fun EmitTests.emitFaultContractTests() {
 		val portDeps = k.portsOf(s)
 		val extraImports = sortedParts.map {
 			"${out.basePackage}.${k.repositoryPackage}.${it.root.kotlin}Repository"
-		} + genParts.map { "${out.basePackage}.application.${it.port.port}" } +
+		} + genParts.map { "${out.basePackage}.${k.fountainPortPackage}.${it.port.port}" } +
 			portDeps.flatMap { p -> listOf("${out.basePackage}.${k.portPackage(p)}.${p.name}", "${out.basePackage}.${k.portPackage(p)}.${k.portMockName(p)}") }
 		emitFile(k.useCasePackage(s.module), "${ucName}FaultContractTest",
 			framework = junitImports + extraImports) {

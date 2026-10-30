@@ -269,6 +269,9 @@ class Kotlinize(private val ir: Ir) {
 	    専用ディレクトリを切る。 */
 	val repositoryPackage = "domain.repository"
 
+	/** 泉(IdGenerator ポート)の在処。interface(main)と契約テストの import が同じ値を使う。 */
+	val fountainPortPackage = "application"
+
 	/** Repository 操作の導出(ドメインの遷移から許可されるものだけ)。add / update は観測モデル
 	    (`<Root>RepositoryState`)の同名の操作(保存に要る証明を引数に取る add / update)から導く。
 	    観測モデルに操作を書かないモデルは Entity 側(ファクトリ・自分自身を返すふるまい)から導く。 */
@@ -391,16 +394,23 @@ class Kotlinize(private val ir: Ir) {
 	/** UseCase が使う Port を Port 名順に(契約テストのフック引数の並び)。 */
 	fun portsOf(s: IrService): List<IrPort> = s.ports.map { ir.port(it.port) }.distinctBy { it.name }.sortedBy { it.name }
 
+	/** 泉の状態(@[repositoryState] の `<X>IdGeneratorState`)か。 */
+	fun isFountainState(td: IrTypeDef): Boolean =
+		td.role == "repositoryState" && td.kotlin.endsWith("IdGeneratorState")
+
+	/** 泉の状態 `<X>IdGeneratorState` が供給する Id 型の Kotlin 名 `<X>Id`。対になる Id 型が無い泉の検査(Runner)も同じ名前を引く。 */
+	fun fountainIdName(st: IrTypeDef): String = st.kotlin.removeSuffix("IdGeneratorState") + "Id"
+
 	/** 泉(IdGenerator ポート)の導出:
 	    @[repositoryState] の `<X>IdGeneratorState` ↔ ポート `<X>IdGenerator`
 	    (命名規約 `<X>State ↔ <X>` — RepositoryState.lean)。供給する Id 型は
 	    `<X>Id`。表現(Long 連番 / UUID)はモデルの具体化の写し。 */
 	data class FountainPort(val stateTd: IrTypeDef, val port: String, val idTd: IrTypeDef)
 	fun fountainPorts(): List<FountainPort> =
-		ir.types.filter { it.role == "repositoryState" && it.kotlin.endsWith("IdGeneratorState") }
+		ir.types.filter { isFountainState(it) }
 			.mapNotNull { st ->
-				val prefix = st.kotlin.removeSuffix("IdGeneratorState")
-				val idTd = ir.types.find { it.isId && it.kotlin == prefix + "Id" }
+				val idName = fountainIdName(st)
+				val idTd = ir.types.find { it.isId && it.kotlin == idName }
 					?: return@mapNotNull null
 				FountainPort(st, st.kotlin.removeSuffix("State"), idTd)
 			}.sortedBy { it.port }

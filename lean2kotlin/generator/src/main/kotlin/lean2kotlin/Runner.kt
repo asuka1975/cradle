@@ -103,8 +103,8 @@ object Lean2KotlinGeneration {
 			if (k.reachesRole(IrType.Ref(td.lean), "actorPort")) error("内部入力 ${td.lean} が名義(@[actorContext])を運んでいる — 通知・worker からの入力に利用者の名義は無い")
 		}
 		// 泉の状態 <X>IdGeneratorState には対になる Id 型 <X>Id が要る(無いと泉ポートが黙って導出されず、採番が注入されない)
-		for (st in ir.types.filter { it.role == "repositoryState" && it.kotlin.endsWith("IdGeneratorState") }) {
-			val idName = st.kotlin.removeSuffix("IdGeneratorState") + "Id"
+		for (st in ir.types.filter { k.isFountainState(it) }) {
+			val idName = k.fountainIdName(st)
 			if (ir.types.none { it.isId && it.kotlin == idName }) error("泉の状態 ${st.lean} に対応する Id 型 $idName がありません(Runtime/Ids.lean の structure $idName — lean-conventions §9)")
 		}
 		// 閉じていない Port の型は要求の比較・Arb・リテラルの生成が成立しない — 生成に進まず、ここまでの診断で止める

@@ -147,7 +147,7 @@ class EmitMain(
 		// 泉ごとの IdGenerator ポート: @[repositoryState] の <X>IdGeneratorState から
 		// 命名規約 <X>State ↔ <X> で導出。供給値の型はモデルの具体化の写し(Long 連番 / UUID)
 		for (p in k.fountainPorts()) {
-			emitFile("application", p.port) { fountainPortBody(p) }
+			emitFile(k.fountainPortPackage, p.port) { fountainPortBody(p) }
 		}
 		// 外部能力の Port: 操作ごとに「要求 → 観測」の 1 メソッド。Adapter(外部の呼び方)は手書き
 		for (p in ir.ports) {
