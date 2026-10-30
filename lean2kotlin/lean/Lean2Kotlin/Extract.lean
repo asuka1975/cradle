@@ -1208,7 +1208,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     let errTyName := rootNs ++ `DomainError
     let ucNs := appNs ++ `UseCase
     -- 関数フィールドを持つ structure はポート束(Fountain 等)— DTO ではない
-    let hasFunctionField (n : Name) : Elab.TermElabM Bool := do
+    let scanFunctionField (n : Name) : Elab.TermElabM Bool := do
       if !isStructure env n then return false
       let some (.inductInfo ii) := env.find? n | return false
       let some (.ctorInfo ci) := env.find? ii.ctors.head! | return false
@@ -1219,6 +1219,13 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           if ← Meta.isProp t then continue
           if (← whnf t).isForall then return true
         return false
+    -- 署名の binder・契約の引数ごとに呼ばれる。env はコマンドの間変わらないので型名ごとに 1 度だけ調べる
+    let fnFieldMemo : IO.Ref (Std.HashMap Name Bool) ← IO.mkRef {}
+    let hasFunctionField (n : Name) : Elab.TermElabM Bool := do
+      if let some b := (← fnFieldMemo.get).get? n then return b
+      let b ← scanFunctionField n
+      fnFieldMemo.modify (·.insert n b)
+      return b
     -- 時計ポート: 全フィールドが標準時間型の structure(Clock)。
     -- ポート束(関数フィールドの structure)と同格の「調達の引数種」— 型で識別する
     let isClockStruct (n : Name) : Elab.TermElabM Bool := do
