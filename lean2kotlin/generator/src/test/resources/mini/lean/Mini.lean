@@ -18,6 +18,9 @@ import Mini.Application.UseCase.ShelfUseCase.UseCase
 import Mini.Application.UseCase.CatalogUseCase.ReadModel
 import Mini.Application.UseCase.CatalogUseCase.QueryService
 import Mini.Application.UseCase.CatalogUseCase.UseCase
+import Mini.Application.UseCase.LoansUseCase.ReadModel
+import Mini.Application.UseCase.LoansUseCase.QueryService
+import Mini.Application.UseCase.LoansUseCase.UseCase
 import Mini.Runtime.Ids
 import Mini.Runtime.Machine
 import Mini.Runtime.Views

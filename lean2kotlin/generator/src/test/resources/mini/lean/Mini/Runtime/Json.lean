@@ -28,6 +28,6 @@ instance : ToJson Snapshot where
   toJson s := Json.mkObj [("books", toJson s.books.books)]
 
 instance : ToJson Views where
-  toJson v := Json.mkObj [("shelf", toJson v.shelf), ("catalog", toJson v.catalog)]
+  toJson v := Json.mkObj [("shelf", toJson v.shelf), ("catalog", toJson v.catalog), ("loans", toJson v.loans)]
 
 end Mini.Runtime

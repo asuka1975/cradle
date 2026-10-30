@@ -155,25 +155,36 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 	// Runner の note(該当の参照系ケースは生成されない)に反するので、同じくケースを生成しない
 	val wallInputs = kept.filter { k.reachesEntityLike(it.type) }
 	val inputWall = wallInputs.isNotEmpty()
-	// 配管(ReadModel・鍵・主体)はファクトリ引数へ — ReadModel はフィールドに展開、
-	// 主体(actorPort)は丸ごと 1 引数(値は定理由来のケースの args が運ぶ)
+	// 配管(ReadModel・鍵・主体・時計)は役割ごとにファクトリ引数へ — ReadModel はフィールドに展開、
+	// 主体(actorPort)は丸ごと 1 引数(値は定理由来のケースの args が運ぶ)、時計(clockPort)は
+	// Clock のフィールドごと(遷移契約と同じ固定の today。値はケースの args の時計が運ぶ)
 	data class FactoryParam(
 		val name: String, val type: IrType, val fromRmField: IrField?,
 		val fromArgs: Boolean = false,
+		/** 時計のフィールドなら時計の引数名。 */
+		val clockParam: String? = null,
 	)
 	val factoryParams = mutableListOf<FactoryParam>()
+	// 参照系の配線を持たない配管(State・外部能力の観測・precise な入力)と役割 — note してケースを生成しない
+	val unwired = mutableListOf<Pair<IrField, String>>()
 	for (p in m.params.filter { k.isUseCasePlumbing(it.type) }) {
 		when (val t = p.type) {
-			is IrType.Ref ->
-				if (ir.typeDef(t.lean).role == "actorPort") {
-					factoryParams += FactoryParam(p.name, p.type, null, fromArgs = true)
-				} else {
-					val shape = ir.typeDef(t.lean).shape as IrShape.Structure
-					for (f in shape.fields) factoryParams += FactoryParam(f.name, f.type, f)
+			is IrType.Ref -> {
+				val td = ir.typeDef(t.lean)
+				val fields = (td.shape as? IrShape.Structure)?.fields
+				when {
+					td.role == "actorPort" -> factoryParams += FactoryParam(p.name, p.type, null, fromArgs = true)
+					td.role == "readModel" && fields != null ->
+						for (f in fields) factoryParams += FactoryParam(f.name, f.type, f)
+					td.role == "clockPort" && fields != null ->
+						for (f in fields) factoryParams += FactoryParam(f.name, f.type, null, clockParam = p.name)
+					else -> unwired += p to (if (k.isPlumbing(t)) td.role else "precise な入力")
 				}
+			}
 			else -> factoryParams += FactoryParam(p.name, p.type, null)
 		}
 	}
+	val noCases = viewWall || inputWall || unwired.isNotEmpty()
 	emitFile(k.useCasePackage(s.module), "${s.name}ContractTest",
 		framework = junitImports, usesDomainResult = errT != null) {
 		val sb = StringBuilder()
@@ -195,7 +206,10 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 		for (p in wallInputs) {
 			log("  note: ${s.name}: View→ドメイン語彙の壁の破れ(入力 ${p.name} が interface 化された語彙を運ぶ)— 参照系ケースは生成できません(モデル側の是正待ち)")
 		}
-		if (golden != null && !viewWall && !inputWall) for (snap in goldenSnapshots) {
+		for ((p, role) in unwired) {
+			log("  note: ${s.name}.${m.name}: 配線 ${p.name}(${role})は参照系の契約テストに写せません — 参照系ケースは生成できません")
+		}
+		if (golden != null && !noCases) for (snap in goldenSnapshots) {
 			val viewJson = if (screenKey == null) snap.views else snap.views[screenKey]
 			if (viewJson == null) {
 				log("  note: ${s.name}.${m.name}: golden ${snap.source} に $screenKey がないためスキップ")
@@ -204,6 +218,8 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 			val realArgs = kept.map { p -> synthesizeArg(p.type, snap.state) }
 			val wired = factoryParams.map { fp ->
 				if (fp.fromRmField != null) synthesizeArg(fp.fromRmField.type, snap.state)
+				// golden の状態は時計を運ばない — 時計を受ける参照系の golden は合成できずスキップする
+				else if (fp.clockParam != null) null
 				else synthesizeArg(m.params.first { it.name == fp.name }.type, snap.state)
 			}
 			if (realArgs.any { it == null } || wired.any { it == null }) {
@@ -228,7 +244,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 				log("  note: ${c.theorem}: 対象 ${c.method} は参照系の検証面(${m.name})ではないため読み飛ばし")
 				continue
 			}
-			if (viewWall || inputWall) continue
+			if (noCases) continue
 			c.cases.forEachIndexed { i, case ->
 				if (case.kind != "value" || case.readModel == null) {
 					log("  note: ${c.theorem}(${i + 1}): 値形でないためスキップ")
@@ -249,6 +265,13 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 							return@forEachIndexed
 						}
 						k.literal(fp.type, j)
+					} else if (fp.clockParam != null) {
+						// 時計(clockPort): 定理が選んだ日を配線する(ケースに無ければ既定値 — 遷移契約と同じ)
+						(case.args[fp.clockParam] as? JsonObject)?.get(fp.name)?.let { k.literal(fp.type, it) }
+							?: defaultLiteral(fp.type) ?: run {
+								log("  note: ${c.theorem}: 時計 ${fp.name} の値を構成できません")
+								return@forEachIndexed
+							}
 					} else {
 						// 鍵などの矢印は仮置き表現の写し
 						synthesizeArg(fp.type, JsonObject(emptyMap())) ?: run {

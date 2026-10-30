@@ -38,8 +38,10 @@ class MiniGenerationTest {
 			"  note: BookRepositoryState: State のふるまいは Kotlin に写さない(Lean 側の意味論装置)",
 			"  note: CatalogEntry: 本番語彙が entity-like へ到達するため Arb は生成しない(View→ドメイン語彙の壁)",
 			"  note: TitleRow: 本番語彙が entity-like へ到達するため Arb は生成しない(View→ドメイン語彙の壁)",
-			"  note: Retrieve テスト: ReadModel 2 種 — golden+射影定理で 1 ケース",
+			"  note: Retrieve テスト: ReadModel 3 種 — golden+射影定理で 2 ケース",
 			"  note: 契約定理テスト: LendBookUseCase — 定理 5 本から 17 ケース(遷移形 — Repository 直参照)",
+			"  note: LoansUseCase.execute: 引数を合成できないため basic-init をスキップ",
+			"  note: 契約テスト: LoansUseCase — golden+定理で 4 ケース(参照系)",
 			"  note: CatalogUseCase: View→ドメイン語彙の壁の破れ(期待値が interface 化された語彙を運ぶ)— 参照系ケースは生成できません(モデル側の是正待ち)",
 			"  note: 契約テスト: CatalogUseCase — golden+定理で 0 ケース(参照系)",
 			"  note: 契約テスト: ShelfUseCase — golden+定理で 1 ケース(参照系)",
@@ -47,7 +49,7 @@ class MiniGenerationTest {
 			"  note: 契約定理テスト: Book(Entity)— 定理 3 本から 12 ケース",
 			"  note: 契約定理テスト: Title(Entity)— 定理 1 本から 4 ケース",
 			"  note: 障害契約テスト: LendBookUseCase — 1 宣言から 2 ケース(障害注入フックつき)",
-			"生成完了: main 23 ファイル -> <out>/kotlin-main / test 15 ファイル -> <out>/kotlin-test",
+			"生成完了: main 26 ファイル -> <out>/kotlin-main / test 17 ファイル -> <out>/kotlin-test",
 		)
 		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
 		assertEquals(expected, lines)

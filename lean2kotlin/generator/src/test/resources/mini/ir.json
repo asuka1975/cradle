@@ -62,6 +62,36 @@
      "doc": "始まる前の拒否: 宛先の本が無い。成功なら作用対象を返す。 "}],
    "kind": "command",
    "input": "Mini.Application.LendBookUseCase.Command"},
+  {"name": "LoansUseCase",
+   "module": "LoansUseCase",
+   "methods":
+   [{"ret":
+     {"ok":
+      {"of": {"name": "Mini.Application.BookView", "k": "ref"}, "k": "list"},
+      "k": "result",
+      "err": {"name": "Mini.Application.QueryError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Mini.Application.Clock", "k": "ref"}, "name": "clock"},
+      {"type": {"name": "Mini.Application.LoansUseCase.Query", "k": "ref"},
+       "name": "q"},
+      {"type": {"name": "Mini.Application.LoansUseCase.ReadModel", "k": "ref"},
+       "name": "rm"}],
+     "name": "execute",
+     "doc": ""},
+    {"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Mini.Application.QueryError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Mini.Application.Clock", "k": "ref"},
+       "name": "_clock"},
+      {"type": {"name": "Mini.Application.LoansUseCase.Query", "k": "ref"},
+       "name": "_q"},
+      {"type": {"name": "Mini.Application.LoansUseCase.ReadModel", "k": "ref"},
+       "name": "_rm"}],
+     "name": "validate",
+     "doc": "検証対象が無いので常に成功（型の形が表明）。 "}],
+   "kind": "query"},
   {"name": "ShelfUseCase",
    "module": "ShelfUseCase",
    "methods":
@@ -176,6 +206,22 @@
    "module": "Mini.Application.UseCase.LendBookUseCase.Command",
    "lean": "Mini.Application.LendBookUseCase.Command",
    "kotlin": "LendBookCommand"},
+  {"shape": {"kind": "structure", "fields": []},
+   "role": "viewDto",
+   "module": "Mini.Application.UseCase.LoansUseCase.QueryService",
+   "lean": "Mini.Application.LoansUseCase.Query",
+   "kotlin": "LoansQuery",
+   "doc": "問い合わせ。運ぶ値は無い。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type":
+      {"of": {"name": "Mini.Application.BookRow", "k": "ref"}, "k": "list"},
+      "name": "books"}]},
+   "role": "readModel",
+   "module": "Mini.Application.UseCase.LoansUseCase.ReadModel",
+   "lean": "Mini.Application.LoansUseCase.ReadModel",
+   "kotlin": "LoansReadModel"},
   {"shape": {"kind": "enum", "ctors": ["unavailable"]},
    "role": "error",
    "module": "Mini.Application.View",
@@ -293,6 +339,19 @@
        "name": "rm"}],
      "name": "query",
      "doc": "本番の取得契約（固定名）。棚の本の題がすべて、並べた順のまま見える。 "}]},
+  {"name": "LoansQueryService",
+   "module": "LoansUseCase",
+   "methods":
+   [{"ret":
+     {"of": {"name": "Mini.Application.BookView", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Mini.Application.Clock", "k": "ref"}, "name": "clock"},
+      {"type": {"name": "Mini.Application.LoansUseCase.Query", "k": "ref"},
+       "name": "_q"},
+      {"type": {"name": "Mini.Application.LoansUseCase.ReadModel", "k": "ref"},
+       "name": "rm"}],
+     "name": "query",
+     "doc": "本番の取得契約（固定名）。今日貸した本だけが、並べた順のまま見える。 "}]},
   {"name": "ShelfQueryService",
    "module": "ShelfUseCase",
    "methods":
@@ -829,6 +888,39 @@
         "id": {"id": 91},
         "edition": {"title": {"text": "s11"}, "number": 4},
         "condition": "good"}]}}]},
+  {"useCase": "LoansUseCase",
+   "theorem": "execute_ok",
+   "target": "usecase",
+   "method": "execute",
+   "doc": "今日の貸出は、時計の今日に貸した本だけを見せる。 ",
+   "cases":
+   [{"readModelType": "Mini.Application.LoansUseCase.ReadModel",
+     "readModel":
+     {"books":
+      [{"lentOn": "2024-10-04", "id": {"id": 91}, "condition": "good"}]},
+     "ok": [{"lent": true, "lendable": true, "id": {"id": 91}}],
+     "kind": "value",
+     "args": {"q": {}, "clock": {"today": "2024-10-04"}}},
+    {"readModelType": "Mini.Application.LoansUseCase.ReadModel",
+     "readModel": {"books": []},
+     "ok": [],
+     "kind": "value",
+     "args": {"q": {}, "clock": {"today": "2024-10-04"}}},
+    {"readModelType": "Mini.Application.LoansUseCase.ReadModel",
+     "readModel":
+     {"books":
+      [{"lentOn": "2024-10-04", "id": {"id": 93}, "condition": "damaged"}]},
+     "ok": [{"lent": true, "lendable": false, "id": {"id": 93}}],
+     "kind": "value",
+     "args": {"q": {}, "clock": {"today": "2024-10-04"}}},
+    {"readModelType": "Mini.Application.LoansUseCase.ReadModel",
+     "readModel":
+     {"books":
+      [{"lentOn": "2024-10-04", "id": {"id": 91}, "condition": "good"},
+       {"lentOn": null, "id": {"id": 92}, "condition": "worn"}]},
+     "ok": [{"lent": true, "lendable": true, "id": {"id": 91}}],
+     "kind": "value",
+     "args": {"q": {}, "clock": {"today": "2024-10-04"}}}]},
   {"useCase": "Mini.Condition",
    "theorem": "lendable_iff",
    "target": "behaviors",

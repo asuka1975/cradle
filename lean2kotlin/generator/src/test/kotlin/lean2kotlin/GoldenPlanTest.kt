@@ -46,7 +46,7 @@ class GoldenPlanTest {
 	fun `対象は views のキーの順でなく ir の UseCase の順に並ぶ`() {
 		val mini = miniIr()
 		val loaded = planGoldenTargets(mini, Golden.load(testResources.resolve("mini/golden")).snapshots)
-		assertEquals(listOf("CatalogUseCase" to "catalog", "ShelfUseCase" to "shelf"),
+		assertEquals(listOf("CatalogUseCase" to "catalog", "LoansUseCase" to "loans", "ShelfUseCase" to "shelf"),
 			loaded.map { (name, t) -> name to t.screenKey })
 		val reversed = planGoldenTargets(mini, listOf(snap("shelf", "catalog")))
 		assertEquals(listOf("CatalogUseCase", "ShelfUseCase"), reversed.keys.toList())

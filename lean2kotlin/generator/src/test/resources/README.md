@@ -28,6 +28,7 @@ Sprout と Lobby のスナップショットに出ない生成の枝を通す最
 - entity-like でない主体（列挙 `Condition`）のふるまいの契約 — `ConditionBehaviors` と `ConditionBehaviorsContractTest`。
 - ふるまい持ちの VO（`Title`）を運ぶ sealed（`Place`）と structure（`Edition`）の VO — 平行 fixture・`toFixture`・リテラル・Arb の橋渡し。
 - View がふるまい持ちの VO を運ぶ参照系 `CatalogUseCase`（View→ドメイン語彙の壁の note。参照系ケースは出ない）と、golden の状態から引数を合成できる参照系 `ShelfUseCase`（golden 回帰と Retrieve が 1 ケースずつ）。
+- 時計ポートを受ける参照系 `LoansUseCase`（今日貸した本）— 参照系の契約テストのフックに Clock のフィールド（today）が配線され、定理由来のケースは時計の値をケースの args から取る。golden の状態は時計を運ばないので golden 回帰は合成できずスキップする（note）。CLI の views は採取の今日（`Runtime/Views.lean` の `goldenClock`）で評価する。
 
 CLI（`mini/lean/Main.lean`）は golden の採取用で、init だけを答える。`basic.request.json` は採取に使ったリクエストの脇書き。
 採り直し（`$M` = `lean2kotlin/generator/src/test/resources/mini`、`$L` = このリポジトリの `lean2kotlin/lean`、`$W` はリポジトリの外の作業ディレクトリ — `mini/lean` の下に `.lake` を作らない）:

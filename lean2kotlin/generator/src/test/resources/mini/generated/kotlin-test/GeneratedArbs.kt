@@ -7,6 +7,7 @@ import dev.cradle.mini.application.BookRow
 import dev.cradle.mini.application.BookView
 import dev.cradle.mini.application.QueryError
 import dev.cradle.mini.application.usecase.catalogusecase.CatalogQuery
+import dev.cradle.mini.application.usecase.loansusecase.LoansQuery
 import dev.cradle.mini.application.usecase.shelfusecase.ShelfQuery
 import dev.cradle.mini.domain.DomainError
 import dev.cradle.mini.domain.entity.Book
@@ -32,6 +33,9 @@ internal fun arbBookView(): Arb<BookView> =
 
 internal fun arbCatalogQuery(): Arb<CatalogQuery> =
 	Arb.constant(CatalogQuery)
+
+internal fun arbLoansQuery(): Arb<LoansQuery> =
+	Arb.constant(LoansQuery)
 
 internal fun arbQueryError(): Arb<QueryError> = Arb.enum<QueryError>()
 

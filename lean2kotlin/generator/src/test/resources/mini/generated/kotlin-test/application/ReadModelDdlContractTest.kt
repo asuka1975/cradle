@@ -8,6 +8,7 @@ import dev.cradle.mini.EditionFixture
 import dev.cradle.mini.PlaceFixture
 import dev.cradle.mini.TitleFixture
 import dev.cradle.mini.application.usecase.catalogusecase.CatalogReadModel
+import dev.cradle.mini.application.usecase.loansusecase.LoansReadModel
 import dev.cradle.mini.application.usecase.shelfusecase.ShelfReadModel
 import dev.cradle.mini.domain.entity.Book
 import dev.cradle.mini.domain.valueobject.BookId
@@ -29,8 +30,16 @@ import org.junit.jupiter.api.Test
 abstract class ReadModelDdlContractTest {
 	/** 集約をスキーマへ載せ、Retrieve で CatalogReadModel(観測の Set)を復元して返す。 */
 	protected abstract fun retrieveCatalogReadModel(books: List<BookFixture>): CatalogReadModel
+	/** 集約をスキーマへ載せ、Retrieve で LoansReadModel(観測の Set)を復元して返す。 */
+	protected abstract fun retrieveLoansReadModel(books: List<BookFixture>): LoansReadModel
 	/** 集約をスキーマへ載せ、Retrieve で ShelfReadModel(観測の Set)を復元して返す。 */
 	protected abstract fun retrieveShelfReadModel(books: List<BookFixture>): ShelfReadModel
+
+	@Test
+	fun `LoansReadModel は golden basic-init の状態から Retrieve できる`() {
+		assertEquals(LoansReadModel(books = listOf<BookRow>(BookRow(id = BookId(id = 1L), condition = Condition.Good, lentOn = null), BookRow(id = BookId(id = 2L), condition = Condition.Worn, lentOn = java.time.LocalDate.parse("2026-01-05")), BookRow(id = BookId(id = 3L), condition = Condition.Damaged, lentOn = null))),
+			retrieveLoansReadModel(listOf<BookFixture>(BookFixture(id = BookId(id = 1L), edition = EditionFixture(title = TitleFixture(text = "羅生門"), number = 1L), place = PlaceFixture.Shelf, condition = Condition.Good, lentOn = null), BookFixture(id = BookId(id = 2L), edition = EditionFixture(title = TitleFixture(text = "こころ"), number = 3L), place = PlaceFixture.Box(label = TitleFixture(text = "文庫")), condition = Condition.Worn, lentOn = java.time.LocalDate.parse("2026-01-05")), BookFixture(id = BookId(id = 3L), edition = EditionFixture(title = TitleFixture(text = "三四郎"), number = 2L), place = PlaceFixture.Shelf, condition = Condition.Damaged, lentOn = null))))
+	}
 
 	@Test
 	fun `ShelfReadModel は golden basic-init の状態から Retrieve できる`() {
