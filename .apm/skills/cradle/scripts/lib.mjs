@@ -495,10 +495,11 @@ export function productLine(cfg) {
   return { value, placeholder: !value || value === PRODUCT_PLACEHOLDER };
 }
 
-/** 用語集の英語候補 → 用語。`/`・`、`・`,` で割り、空白を除いて小文字化した名前で引く。 */
+/** 用語集の英語候補 → 用語。`/`・`、`・`,` で割り、空白を除いて小文字化した名前で引く。
+    用語集が無ければ空 — 名前の正本は用語集だけなので、形式化が付けた名前はどれも行が無いものとして数える（読めない用語集は投げる）。 */
 export function glossaryEnglish(cfg) {
   const map = new Map();
-  for (const line of readFileSync(join(cfg.root, cfg.documents.ddd, "ubiquitous-language.md"), "utf8").split("\n")) {
+  for (const line of readText(join(cfg.root, cfg.documents.ddd, "ubiquitous-language.md")).split("\n")) {
     const cells = line.split("|").map(c => c.trim());
     if (cells.length < 4 || !cells[1] || cells[1] === "用語" || /^-+$/.test(cells[1])) continue;
     for (const e of cells[2].split(/[\/、,]/).map(x => x.trim()).filter(Boolean)) map.set(e.replace(/\s+/g, "").toLowerCase(), cells[1]);
