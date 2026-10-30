@@ -10,6 +10,7 @@
 // 既にあるファイルは上書きしない（--force で上書き）。
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renameScaffold } from "../../cradle/scripts/lib.mjs";
 
 const args = process.argv.slice(2);
@@ -24,7 +25,8 @@ const force = args.includes("--force");
 const only = opt("only", null);
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
-const assets = join(import.meta.dirname, "..", "assets");
+// import.meta の dirname は Node 20.11 から。要件の Node 20 のどの版でも動くよう URL から引く
+const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
 const written = [], skipped = [], failed = [];
 // 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する

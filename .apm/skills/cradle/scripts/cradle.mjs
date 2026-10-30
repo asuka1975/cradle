@@ -2,7 +2,8 @@
 // cradle — 決定論的な道具の入口。`node <this> <command> [args]`
 //   spec-query | golden-check | lean-check | regen-impact | unslop | status | ddd-clean-check | doctor [--local] | refs <ID> | contract-skeleton <file> | hook
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 const [cmd, ...args] = process.argv.slice(2);
 if (cmd === "refs") {
   // refs <ID>: 撤回・訂正の伝播 — その ID を引いている場所を全部出す（documents / lean / 契約 / 設計 / README）
@@ -81,7 +82,8 @@ if (cmd === "doctor") {
     // モックアップのサーバーと CLI（Main.lean）は骨格の持ち物。Cradle を更新したら --only <path> --force で敷き直す（index.html は作り込みの正本なので触らない）
     const { loadConfig: lc, renameScaffold } = await import("./lib.mjs");
     let cfg = null; try { cfg = lc(root); } catch {}
-    const assets = join(import.meta.dirname, "..", "..", "cradle-init", "assets", "lean");
+    // import.meta の dirname は Node 20.11 から（init.mjs と同じく URL から引く）
+    const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "cradle-init", "assets", "lean");
     const owned = cfg ? [["mockup", `${cfg.lean.mockup}/server.mjs`, join(assets, "mockup", "server.mjs")], ["lean-main", `${cfg.lean.dir}/Main.lean`, join(assets, "Main.lean")]] : [];
     for (const [label, relPath, shipped] of owned) {
       const cur = join(root, relPath);
