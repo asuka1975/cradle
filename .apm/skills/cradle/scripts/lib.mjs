@@ -73,9 +73,15 @@ export function loadConfig(root = findProjectRoot(), env = process.env) {
     infra: { dir: "infra", ...(raw.infra ?? {}) },
     ports: { mockup: 8787, frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
     protected: raw.protected ?? ["documents/developer/**"],
-    unslop: raw.unslop ?? {},
+    unslop: { ...(raw.unslop ?? {}) },
     raw,
   };
+  // 配列のキーは文字列 1 つも 1 要素の配列として読む。文字列のままだと .some / .map が投げて hook は保護の拒否ごと黙って通し、
+  // スプレッド・for...of・Set は 1 文字ずつに割る（regen-impact の git に b a c k … を渡す）
+  for (const [o, key] of [[cfg, "protected"], [cfg.backend, "generated"], [cfg.frontend, "generated"], [cfg.lean, "entityImportAllow"], [cfg.lean, "forbiddenMentions"],
+    [cfg.api, "outletsWithoutEndpoint"], [cfg.infra, "containers"], ...["disable", "extraHedges", "ignorePaths", "skipFiles"].map(k => [cfg.unslop, k])]) {
+    if (typeof o[key] === "string") o[key] = [o[key]];
+  }
   cfg.lean.rootDir = join(root, cfg.lean.dir);
   cfg.lean.modelDir = join(cfg.lean.rootDir, cfg.lean.root);
   cfg.lean.bin = join(cfg.lean.rootDir, ".lake", "build", "bin", cfg.lean.exe);

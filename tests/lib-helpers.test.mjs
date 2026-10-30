@@ -144,6 +144,26 @@ test("findProjectRoot と loadConfig はルートを指す変数を渡された 
   assert.equal(loadConfig(join(root, "a"), { CRADLE_CONFIG: join(root, "x/cradle.json") }).project, "X");
 });
 
+test("loadConfig は配列のキーに書いた文字列 1 つを 1 要素の配列として読み、配列・既定値・書いていないキーはそのまま、cradle.json の中身（raw）は書き換えない", (t) => {
+  const root = tempDir(t, "cradle-config-lists-");
+  const unslop = { disable: "empty-catch", extraHedges: "ほげ", ignorePaths: "tmp/**", skipFiles: "vendor/**" };
+  writeTree(root, { "cradle.json": JSON.stringify({
+    project: "Example", protected: "owners/**",
+    lean: { entityImportAllow: "Application/View.lean", forbiddenMentions: "Kotlin" },
+    backend: { generated: "api/out" }, frontend: { generated: "web/out" },
+    api: { outletsWithoutEndpoint: "dashboard" }, infra: { containers: "app-local" }, unslop,
+  }) });
+  const cfg = loadConfig(root, {});
+  assert.deepEqual([cfg.protected, cfg.backend.generated, cfg.frontend.generated], [["owners/**"], ["api/out"], ["web/out"]]);
+  assert.deepEqual([cfg.lean.entityImportAllow, cfg.lean.forbiddenMentions, cfg.api.outletsWithoutEndpoint, cfg.infra.containers], [["Application/View.lean"], ["Kotlin"], ["dashboard"], ["app-local"]]);
+  assert.deepEqual(cfg.unslop, { disable: ["empty-catch"], extraHedges: ["ほげ"], ignorePaths: ["tmp/**"], skipFiles: ["vendor/**"] });
+  assert.deepEqual(cfg.raw.unslop, unslop);
+  writeTree(root, { "cradle.json": JSON.stringify({ project: "Example", protected: ["a/**", "b/**"], unslop: { disable: [] } }) });
+  const plain = loadConfig(root, {});
+  assert.deepEqual([plain.protected, plain.backend.generated, plain.frontend.generated, plain.lean.forbiddenMentions], [["a/**", "b/**"], ["backend/src/generated"], ["frontend/src/api/generated"], ["Lean2Kotlin"]]);
+  assert.deepEqual([plain.infra.containers, plain.unslop], [undefined, { disable: [] }]);
+});
+
 test("aiNoteProblems は ai-notes の下のノートの名前と冒頭 800 字の断りを見て、README.md・TEMPLATE.md（末尾の一致）と ai-notes の外は null を返す", () => {
   const dir = "documents/ai-notes";
   const header = "> **これは規約ではありません。**\n";

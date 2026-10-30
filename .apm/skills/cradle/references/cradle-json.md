@@ -54,4 +54,6 @@
 | `protected` | AI が書き込まない領域（glob） |
 | `unslop.*` | `cradle unslop` の調整。`disable` に規則 id、`ignorePaths` に実在しなくてよいパスの glob、`skipFiles` に検査しないファイルの glob（他リポジトリを引用する文書など。`apm.lock.yaml` は既定で除外） |
 
+上の例で配列を書いたキーは文字列 1 つでもよく、1 要素の配列として読む（`"protected": "documents/developer/**"` は `["documents/developer/**"]` と同じ）。
+
 環境変数 `CRADLE_PROJECT_DIR`（または Claude Code の `CLAUDE_PROJECT_DIR`）でルートを、`CRADLE_CONFIG` で設定ファイルを上書きできる。

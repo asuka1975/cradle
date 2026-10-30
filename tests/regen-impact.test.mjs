@@ -43,8 +43,8 @@ const runner = (root) => ({ root, run: (...args) => runNode(regenImpact, args, {
 
 // 一時プロジェクト（git 管理）: 生成物と手書きをコミットし、backend.regenerate は regen/ に置いた再生成後の写しを生成ディレクトリへ重ねて Legacy.kt を消す。
 // gradle も Lean も要らない（regenerate は backend/ を cwd に sh で走る）
-function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt", handFiles = hand) {
-  const root = tempProject(t, "cradle-regen-impact-", { project: "Example", backend: { regenerate } });
+function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt", handFiles = hand, backend = {}) {
+  const root = tempProject(t, "cradle-regen-impact-", { project: "Example", backend: { regenerate, ...backend } });
   writeTree(root, { ...before, ...handFiles });
   writeTree(join(root, "regen"), Object.fromEntries(Object.entries(after).map(([rel, text]) => [rel.replace("backend/src/generated/", ""), text])));
   commitAll(root);
@@ -109,6 +109,16 @@ test("再生成してから生成物の差分・変わったシンボルと参�
   const read = run("--no-regen", "--no-golden", "--json");
   assert.equal(read.status, 0, read.stderr);
   assert.equal(read.stdout, regen.stdout);
+});
+
+test("backend.generated に文字列 1 つを書いても、1 要素の配列と同じ生成ディレクトリの差分を読む", (t) => {
+  const { run } = fixture(t, undefined, hand, { generated: "backend/src/generated" });
+  const regen = run("--no-golden", "--json");
+  assert.equal(regen.status, 0, regen.stderr);
+  assert.equal(regen.stdout, JSON.stringify(expected, null, 2) + "\n");
+  const dirty = run("--no-golden");
+  assert.equal(dirty.status, 1);
+  assert.equal(dirty.stderr, `cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirtyLines.join("\n")}\n`);
 });
 
 test("文字の出力は差分・参照元のあるシンボル・参照元の無いシンボルの順。golden-check が動かなければその stderr を添える", (t) => {

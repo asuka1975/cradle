@@ -88,13 +88,21 @@ test("編集後の促しとStop再入時の許可を維持する", (t) => {
   assert.equal(invoke("stop", "", {}, { stop_hook_active: true }), null);
 });
 
-test("cradle.json の型が文書と違えば（protected・backend.generated が文字列）、投げる検査から先は黙って通し、それより前の拒否は変えない", (t) => {
+test("protected・backend.generated・frontend.generated に文字列 1 つを書いても、1 要素の配列と同じく拒否する", (t) => {
   const { invoke } = fixture(t, { project: "Example", protected: "documents/developer/**" });
   denied(invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }));
-  assert.equal(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }), null);
-  const generated = fixture(t, { project: "Example", backend: { generated: "backend/src/generated" } });
+  denied(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }));
+  const generated = fixture(t, { project: "Example", backend: { generated: "api/out" }, frontend: { generated: "web/out" } });
+  denied(generated.invoke("pre-guard", "Write", { file_path: "api/out/A.kt" }));
+  denied(generated.invoke("pre-guard", "Write", { file_path: "web/out/a.ts" }));
+  denied(generated.invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }, {}, true));
   assert.equal(generated.invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }), null);
-  assert.equal(generated.invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }, {}, true), null);
+});
+
+test("cradle.json の型が文書と違えば（protected が数）、投げる検査から先は黙って通し、それより前の拒否は変えない", (t) => {
+  const { invoke } = fixture(t, { project: "Example", protected: 5 });
+  denied(invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }));
+  assert.equal(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }), null);
 });
 
 test("骨格が置く ai-notes の TEMPLATE.md と README.md の編集には促さず、同じ中身でも名前の規則に合わないノートには促す", (t) => {
