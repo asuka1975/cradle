@@ -229,7 +229,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 			val expected = k.literal(okT, viewJson)
 			val expectedWrapped = if (errT != null) "DomainResult.Ok($expected)" else expected
 			sb.append("\n\t@Test\n")
-			sb.append("\tfun `${m.name} は golden ${snap.source} を再現する`() {\n")
+			sb.append("\tfun `${m.name} は golden ${testNameSafe(snap.source)} を再現する`() {\n")
 			sb.append("\t\tassertEquals($expectedWrapped,\n")
 			sb.append("\t\t\tuseCase(${wired.joinToString(", ") { it!! }})" +
 				".${ident(m.name)}(${realArgs.joinToString(", ") { it!! }}))\n")
@@ -365,7 +365,7 @@ internal fun EmitTests.emitDdlContractTest(projCs: List<IrContract>) {
 				}
 				if (fieldLits.any { it == null }) continue
 				sb.append("\n\t@Test\n")
-				sb.append("\tfun `${rm.kotlin} は golden ${snap.source} の状態から Retrieve できる`() {\n")
+				sb.append("\tfun `${rm.kotlin} は golden ${testNameSafe(snap.source)} の状態から Retrieve できる`() {\n")
 				sb.append("\t\tassertEquals(${k.typeRef(IrType.Ref(rm.lean))}(" +
 					"${fieldLits.joinToString(", ") { it!! }}),\n")
 				sb.append("\t\t\tretrieve${rm.kotlin}(${aggArgs.joinToString(", ") { it!! }}))\n")

@@ -61,6 +61,12 @@ internal fun kdocBody(doc: String): String = kdocSafe(doc).trim().lineSequence()
 internal fun theoremTestName(method: String, theorem: String, i: Int): String =
 	"$method は定理 $theorem を再現する(${i + 1})"
 
+private val JVM_NAME_ILLEGAL = Regex("""[.;\[\]/<>:\\]""")
+
+/** バッククォートのテスト名に埋める外来の文字列(golden の出どころ = ファイル名の接頭辞)。JVM はバッククォートの中でも
+    `. ; [ ] / < > : \` を名前に許さないので _ にする。ほかの文字(#・空白・括弧・日本語)はそのまま残す。 */
+internal fun testNameSafe(s: String): String = s.replace(JVM_NAME_ILLEGAL, "_")
+
 /** ファイル単位の参照収集の結果(インポート計算用)。 */
 data class Collected(val refs: Set<String>, val arbs: Set<String>, val fixtures: Set<String>)
 
