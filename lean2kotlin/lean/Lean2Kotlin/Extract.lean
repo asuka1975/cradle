@@ -389,8 +389,9 @@ def ratJson (r : Rat) : Json := Json.mkObj [("numerator", toJson r.num), ("denom
 /-- 有理数のサンプル式 `mkRat n d`。 -/
 def ratLit (n : Int) (d : Nat) : Expr := mkApp2 (mkConst ``mkRat) (toExpr n) (mkNatLit d)
 
-/-- 前方宣言用: ctorFieldTypes は下に定義される(シリアライザ合成が使う)。 -/
-private def ctorFieldTypesFwd (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
+/-- ctor のフィールド型(型引数適用後)と、それが制約(Prop)かを得る。制約の判定は
+    telescope の中で行う — 先行フィールドに依存する型は外に出すと判定できない。 -/
+def ctorFieldTypes (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
     MetaM (Array (Expr × Bool)) := do
   let app := mkAppN (mkConst ctorName lvls) typeArgs
   forallTelescopeReducing (← inferType app) fun xs _ =>
@@ -444,7 +445,7 @@ partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
     if isStructure env tn then do
       let ctor := ii.ctors.head!
       let fnames := getStructureFields env tn
-      let ftys ← ctorFieldTypesFwd ctor lvls args
+      let ftys ← ctorFieldTypes ctor lvls args
       -- 制約(Prop フィールド)は直列化しない
       let dataIdx := (List.range fnames.size).filter (fun i => !ftys[i]!.2)
       let mut sers : Array Expr := #[]
@@ -598,16 +599,6 @@ partial def valueToJson (e : Expr) : MetaM Json := do
             if ← Meta.isProof fields[i]! then continue
             obj := obj ++ [(toString argNames[i]!, ← valueToJson fields[i]!)]
           return Json.mkObj [(short, Json.mkObj obj)]
-
-/-- ctor のフィールド型(型引数適用後)と、それが制約(Prop)かを得る。制約の判定は
-    telescope の中で行う — 先行フィールドに依存する型は外に出すと判定できない。 -/
-def ctorFieldTypes (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr) :
-    MetaM (Array (Expr × Bool)) := do
-  let app := mkAppN (mkConst ctorName lvls) typeArgs
-  forallTelescopeReducing (← inferType app) fun xs _ =>
-    xs.mapM fun x => do
-      let t ← inferType x
-      return (t, ← Meta.isProp t)
 
 /-- 型が Id 型(と List / Option / Prod)だけから成るか(泉から導出する引数の判定)。 -/
 partial def isIdOnly (idHeads : List Name) (ty : Expr) : MetaM Bool := do
@@ -913,25 +904,6 @@ def binderConst (rootNs : Name) (nm : Name) : MetaM Expr := do
   unless (← getEnv).contains c do
     throwError "lean2kotlin: 型引数 {nm} に対応する {c} がありません(Runtime の表現規約。例外は plugin の binderOverrides 設定で)"
   return mkConst c
-
-/-- binder 名 → `<Root>.Runtime.<名前>` の対応で型引数を、synthInstance でインスタンス引数を
-    埋めて完全適用する(型・インスタンス以外の引数が現れたらそこで止める)。 -/
-partial def applyConv (rootNs : Name) (e ty : Expr) : MetaM Expr := do
-  let ty ← whnf ty
-  match ty with
-  | .forallE nm dom body bi => do
-    if bi == .instImplicit then
-      let inst ← synthInstance dom
-      applyConv rootNs (mkApp e inst) (body.instantiate1 inst)
-    else if dom.isSort then
-      let c := rootNs ++ `Runtime ++ nm
-      unless (← getEnv).contains c do
-        throwError "lean2kotlin: 型引数 {nm} に対応する {c} がありません(Runtime の表現規約)"
-      let arg := mkConst c
-      applyConv rootNs (mkApp e arg) (body.instantiate1 arg)
-    else
-      pure e
-  | _ => pure e
 
 /-- inductive の型引数を binder 名規約で単型化した引数列。 -/
 def monoArgsByConv (rootNs : Name) (n : Name) : MetaM (Array Expr) := do
@@ -1795,7 +1767,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
 
     -- 6. @[contract] 契約定理 → テストケース演繹
     let isContract ← tagChecker `contract
-    let idHeads : List Name := idTypes.toList.map (·.2.head)
+    let idHeads : List Name := (idTypes.toList.map (·.2.head)).eraseDups
     let taggedContracts := (env.constants.toList.filterMap fun (n, ci) =>
         if rootNs.isPrefixOf n && !n.hasMacroScopes && isContract n then some (n, ci) else none)
       |>.toArray.qsort (fun a b => toString a.1 < toString b.1)
@@ -2104,7 +2076,6 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             if caseJs.size ≥ 4 then break
             -- 2 パス: 泉値を出力の出現順の連番へ正規化
             let mut preset : List Nat := (List.range 20).map (100 + ·)
-            let mut result : Option Json := none
             for _pass in [0:2] do
               let queue : IO.Ref (List Nat) ← IO.mkRef preset
               -- 代入の構築(サンプル → 泉導出 → パターンは mvar)
@@ -2167,13 +2138,12 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 vals := vals.set! i (← mkDecideProof (← instantiateMVars (inst (← inferType xs[i]!))))
               let inst (e : Expr) : Expr := e.replaceFVars xs vals
               -- オラクル評価と泉の正規化
-              let pApp ← instantiateMVars (inst primary)
-              let expected := pApp   -- 評価は解釈側の whnf(頭だけ)+コンパイル実行が担う
+              let pApp ← instantiateMVars (inst primary)   -- 評価は解釈側の whnf(頭だけ)+コンパイル実行が担う
               -- 主対象の引数に裸で現れる Id 型の binder は泉から導出し、期待値に現れた泉値を出現順の連番に正規化する。
               -- 状態遷移契約は採番の種が before 状態(ids.next)に入るので derived が空になり素通りする
               let (appear, canonical) ←
                 if derived.isEmpty then pure (([] : List Nat), ([] : List Nat)) else do
-                  let expectedJ ← valueToJson expected
+                  let expectedJ ← valueToJson pApp
                   let allocated := preset.take 20
                   let ap := (scanWellNums allocated expectedJ #[]).toList
                   let unused := allocated.filter (!ap.contains ·)
@@ -2204,7 +2174,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     else
                       argJs := argJs ++ [(toString argNames[k]!, ← valueToJson a)]
                 -- 期待値の形で純値形(ふるまい)/ 遷移形 / 値形を判定
-                let expW ← whnf expected
+                let expW ← whnf pApp
                 let expHead := headOf (← whnf (← inferType expW))
                 -- Port の期待値: 要求は Lean の request を同じ引数で評価した値(validate が主対象なら
                 -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
@@ -2318,7 +2288,6 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 unless seenCase.contains key do
                   seenCase := seenCase.push key
                   caseJs := caseJs.push caseJ
-                result := some caseJ
                 break
                catch ex =>
                 whys := whys.push s!"解釈不可: {← ex.toMessageData.toString}"
@@ -2329,7 +2298,6 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   match appear.idxOf? (100 + i) with
                   | some k => 100 + k
                   | none => 900 + i
-            let _ := result
           let methodName := toString (execName.updatePrefix Name.anonymous)
           let groupKey :=
             if behaviorMode then toString ((behaviorDefs.get? execName).getD Name.anonymous)
@@ -2566,13 +2534,6 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     let roleList := roles.toList.toArray.qsort (fun a b => toString a.1 < toString b.1)
     let mut typeEntries : Array Json := #[]
     let mut allRefs : Array (Name × Name) := #[]
-    let mut kotlinNames : Std.HashMap Name String := {}
-    for (n, _) in roleList do
-      kotlinNames := kotlinNames.insert n (defaultKotlinName n)
-    let mut idTypeHeads : Array Name := #[]
-    for (_, m) in idTypes.toList do
-      unless idTypeHeads.contains m.head do
-        idTypeHeads := idTypeHeads.push m.head
 
     let monoMap ← reg.get
     for (n, role) in roleList do
@@ -2605,8 +2566,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           | _ => #[]
       for r in collectFromShape shape do
         allRefs := allRefs.push (n, r)
-      let some kname := kotlinNames.get? n |
-        throwError "lean2kotlin: 内部エラー: {n} の Kotlin 名が未計算です"
+      let kname := defaultKotlinName n
       unless isKotlinIdent kname do
         throwError "lean2kotlin: {n} の Kotlin 名 {kname} が識別子として不正です"
       let mut entry := [("lean", Json.str (toString n)), ("kotlin", Json.str kname),
@@ -2618,7 +2578,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       unless observed || unreadable.isEmpty do
         entry := entry ++ [("invariants", Json.arr (unreadable.map fun (f, pp) =>
           Json.mkObj [("name", Json.str f), ("lean", Json.str pp)]))]
-        let samples ← typeSamples idTypeHeads.toList n targs
+        let samples ← typeSamples idHeads n targs
         if samples.isEmpty then
           logInfo m!"lean2kotlin: note: {n} の制約を満たすサンプルを組めません — この型の Arb は作れません"
         entry := entry ++ [("samples", Json.arr samples)]
@@ -2631,7 +2591,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       if let some idM := idTypes.get? n then
         let idJ ← typeToIR rootNs reg idM.expr
         entry := entry ++ [("id", idJ)]
-      if idTypeHeads.contains n then
+      if idHeads.contains n then
         entry := entry ++ [("isId", Json.bool true)]
         -- ワイヤ形式の観測: Id 型の直列化が canonical UUID 文字列なら
         -- Kotlin 表現は java.util.UUID(値ラッパの中身)に写す
@@ -2665,7 +2625,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         throwError "lean2kotlin: Kotlin 名 {k} が衝突しています: {prev} と {portMod}"
       seen := seen.insert k portMod
     for (n, _) in roleList do
-      let k := kotlinNames.get? n |>.getD ""
+      let k := defaultKotlinName n
       if let some prev := seen.get? k then
         throwError "lean2kotlin: Kotlin 名 {k} が衝突しています: {prev} と {n}"
       seen := seen.insert k n
