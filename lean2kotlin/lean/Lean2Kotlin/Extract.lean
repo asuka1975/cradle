@@ -320,6 +320,12 @@ structure PortDep where
 /-- Port モジュール `<Root>.<Layer>.Port.<Port>` の Port 名 `<Port>`。 -/
 def portName (portMod : Name) : String := toString portMod.components.getLast!
 
+/-- 契約・障害契約のケースが持つ Port の期待値。要求・観測の評価は呼び手 — Except.error の扱いが両者で違う。 -/
+def portCaseJson (dep : PortDep) (requestJ outcomeJ : Json) : Json :=
+  Json.mkObj [("port", Json.str (portName dep.portMod)),
+    ("operation", Json.str (decapitalize dep.op)),
+    ("request", requestJ), ("outcome", outcomeJ)]
+
 /-! ### 役割 -/
 
 inductive Role
@@ -424,6 +430,11 @@ def ratJson (r : Rat) : Json := Json.mkObj [("numerator", toJson r.num), ("denom
 
 /-- 有理数のサンプル式 `mkRat n d`。 -/
 def ratLit (n : Int) (d : Nat) : Expr := mkApp2 (mkConst ``mkRat) (toExpr n) (mkNatLit d)
+
+/-- 状態遷移のケースのフィールド(テストは before から after / error を観測する)。 -/
+def transitionFields (st : Name) (bj afterJ errJ : Json) : List (String × Json) :=
+  [("kind", Json.str "transition"), ("stateType", Json.str (toString st)), ("before", bj),
+    ("after", afterJ), ("error", errJ)]
 
 /-- ctor のフィールド型(型引数適用後)と、それが制約(Prop)かを得る。制約の判定は
     telescope の中で行う — 先行フィールドに依存する型は外に出すと判定できない。 -/
@@ -2184,10 +2195,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                         if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
                         else if r.getAppFn.isConstOf ``Except.error then pure Json.null
                         else throwError "request の評価結果が Except の構成子ではありません: {r}"
-                    pure [("ports", Json.arr #[Json.mkObj [
-                      ("port", Json.str (portName dep.portMod)),
-                      ("operation", Json.str (decapitalize dep.op)),
-                      ("request", requestJ), ("outcome", outcomeJ)]])]
+                    pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
                 let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
                 if behaviorMode || ruleMode then
                   -- ふるまい・UseCase の判断: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
@@ -2200,9 +2208,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 else if roles.get? expHead == some .repositoryState then
                   -- 全域の状態遷移(unlike)
                   let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-                  caseFields := caseFields ++ [("kind", Json.str "transition"),
-                    ("stateType", Json.str (toString st)), ("before", bj),
-                    ("after", ← valueToJson expW), ("error", Json.null)]
+                  caseFields := caseFields ++ transitionFields st bj (← valueToJson expW) Json.null
                 else if expW.getAppFn.isConstOf ``Except.ok ||
                     expW.getAppFn.isConstOf ``Except.error then
                   let payload := expW.getAppArgs[2]!
@@ -2211,15 +2217,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   if isOk && roles.get? (headOf pty) == some .repositoryState then
                     -- Except E State(like / rename 系)の成功
                     let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-                    caseFields := caseFields ++ [("kind", Json.str "transition"),
-                      ("stateType", Json.str (toString st)), ("before", bj),
-                      ("after", ← valueToJson payload), ("error", Json.null)]
+                    caseFields := caseFields ++ transitionFields st bj (← valueToJson payload) Json.null
                   else if !isOk && beforeJ.isSome then
                     -- Except の失敗: 状態は変わらない(after = before)
                     let some (bj, st) := beforeJ | unreachable!
-                    caseFields := caseFields ++ [("kind", Json.str "transition"),
-                      ("stateType", Json.str (toString st)), ("before", bj), ("after", bj),
-                      ("error", ← valueToJson payload)]
+                    caseFields := caseFields ++ transitionFields st bj bj (← valueToJson payload)
                   else if isOk && beforeJ.isSome then
                     -- validate の成功 — 状態は一切変わらない。
                     -- validate は「解決の成果物」(作用対象の
@@ -2233,9 +2235,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                           pRole == some .viewDto then
                         pure [("ok", ← valueToJson payload)]
                       else pure []
-                    caseFields := caseFields ++ [("kind", Json.str "transition"),
-                      ("stateType", Json.str (toString st)), ("before", bj), ("after", bj),
-                      ("error", Json.null)] ++ okExtra
+                    caseFields := caseFields ++ transitionFields st bj bj Json.null ++ okExtra
                   else
                     -- 参照系(値形): ok = View 列 / error = QueryError
                     let some (rj, rmT) := rmJ | throwError "ReadModel 引数が見つかりません"
@@ -2264,9 +2264,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                     let fn := toString fnames[fi]!
                     if fn == "after" then afterJ ← valueToJson dFields[fi]!
                     else if fn == "error" then errJ ← valueToJson dFields[fi]!
-                  caseFields := caseFields ++ [("kind", Json.str "transition"),
-                    ("stateType", Json.str (toString st)), ("before", bj),
-                    ("after", afterJ), ("error", errJ)]
+                  caseFields := caseFields ++ transitionFields st bj afterJ errJ
                 let caseJ := Json.mkObj caseFields
                 let key := caseJ.compress
                 unless seenCase.contains key do
@@ -2465,10 +2463,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   -- execute が成功する入力で request が拒否するのは固定形（request と execute は同じ validate）の破れ
                   throwError "execute が成功する入力で request が拒否しています(request と execute は同じ validate を通る固定形)"
                 else throwError "request の評価結果が Except の構成子ではありません: {r}"
-              pure [("ports", Json.arr #[Json.mkObj [
-                ("port", Json.str (portName dep.portMod)),
-                ("operation", Json.str (decapitalize dep.op)),
-                ("request", requestJ), ("outcome", outcomeJ)]])]
+              pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
           let caseJ := Json.mkObj ([("args", Json.mkObj argJs)] ++ portsExtra ++ [
             ("stateType", Json.str (toString st)), ("before", bj), ("after", afterJ)])
           unless collected.any (·.2.compress == caseJ.compress) do
