@@ -72,16 +72,19 @@ class Kotlinize(private val ir: Ir) {
 	private var arbSink: MutableSet<String>? = null
 	private var fixtureSink: MutableSet<String>? = null
 
-	/** block 中に参照された生成型(lean 名)・Arb 関数・fixture(lean 名)を収集する。 */
+	/** block 中に参照された生成型(lean 名)・Arb 関数・fixture(lean 名)を収集する。
+	    本文を作る Kotlinize の呼び出しは block の内側で行う(外の呼び出しは import に載らない)。 */
 	fun <T> collecting(block: () -> T): Pair<T, Collected> {
 		val r = mutableSetOf<String>()
 		val a = mutableSetOf<String>()
 		val f = mutableSetOf<String>()
+		// 入れ子で呼ばれても、戻った後は外側の収集を続ける
+		val outerRefs = refSink; val outerArbs = arbSink; val outerFixtures = fixtureSink
 		refSink = r; arbSink = a; fixtureSink = f
 		try {
 			return block() to Collected(r, a, f)
 		} finally {
-			refSink = null; arbSink = null; fixtureSink = null
+			refSink = outerRefs; arbSink = outerArbs; fixtureSink = outerFixtures
 		}
 	}
 

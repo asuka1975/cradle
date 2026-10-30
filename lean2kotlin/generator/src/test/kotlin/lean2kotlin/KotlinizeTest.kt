@@ -288,4 +288,25 @@ class KotlinizeTest {
 		assertEquals(setOf("NoteView"), c.arbs)
 		assertEquals(setOf(note), c.fixtures)
 	}
+
+	@Test
+	fun `入れ子の collecting から戻ると外側の収集が続き、内側の参照は内側にだけ集まる`() {
+		val (inner, outer) = k.collecting {
+			k.typeRef(IrType.Ref(noteId))
+			val (_, inner) = k.collecting {
+				k.typeRef(IrType.Ref(userId))
+				k.arbOf(IrType.Ref(noteView))
+			}
+			k.typeRef(IrType.Ref(title))
+			k.arbOf(IrType.Ref(noteId))
+			k.fixtureName(td(note))
+			inner
+		}
+		assertEquals(setOf(userId), inner.refs)
+		assertEquals(setOf("NoteView"), inner.arbs)
+		assertEquals(emptySet(), inner.fixtures)
+		assertEquals(setOf(noteId, title), outer.refs)
+		assertEquals(setOf("NoteId"), outer.arbs)
+		assertEquals(setOf(note), outer.fixtures)
+	}
 }
