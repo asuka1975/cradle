@@ -23,7 +23,7 @@
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, callLean, leanEval, parseArgs, jsonArg, fail, walk, traceInputOf, ports } from "./lib.mjs";
+import { loadConfigOrFail, callLean, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames } from "./lib.mjs";
 import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
@@ -32,29 +32,6 @@ const cfg = loadConfigOrFail();
 const build = opts.build ?? "auto";
 
 const printJson = (v) => process.stdout.write(JSON.stringify(v, null, 2) + "\n");
-
-function scenarios() {
-  const files = walk(cfg.lean.rootDir, { ext: [".lean"] });
-  const names = new Set();
-  for (const f of files) {
-    const text = readFileSync(f, "utf8");
-    const m = text.match(/def\s+scenarioByName[\s\S]*?(?=\n\S|$)/);
-    if (!m) continue;
-    for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
-  }
-  return [...names];
-}
-
-/** 名前付きの環境（外部能力の script）: Runtime/Scenarios.lean の environmentByName の腕。持たないプロジェクトでは空。 */
-function environments() {
-  const file = join(cfg.lean.modelDir, "Runtime", "Scenarios.lean");
-  if (!existsSync(file)) return [];
-  const m = readFileSync(file, "utf8").match(/def\s+environmentByName[\s\S]*?(?=\n\S|$)/);
-  if (!m) return [];
-  const names = new Set();
-  for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
-  return [...names];
-}
 
 /** 外部能力の経路（cmd external）の版。CLI に views を 1 回流して決める（ファイルの有無では決めない）—
     旧実行器は未知の cmd として拒否し（null）、新しい実行器は state が無いというプロトコルエラーで応じる（版 1 を持つ）。 */
@@ -124,7 +101,7 @@ function observationSchemas() {
 }
 
 async function outlets() {
-  const s = scenarios();
+  const s = scenarioNames(cfg);
   if (!s.length) return { error: "シナリオが見つかりません（scenarioByName）", outlets: [] };
   const res = await callLean(cfg, { cmd: "init", scenario: s[0] }, { build });
   if (!res.ok) return { error: res, outlets: [] };
@@ -193,8 +170,8 @@ function externalRequest(action) {
 
 try {
   switch (cmd) {
-    case "scenarios": printJson(scenarios()); break;
-    case "environments": printJson(environments()); break;
+    case "scenarios": printJson(scenarioNames(cfg)); break;
+    case "environments": printJson(environmentNames(cfg)); break;
     case "commands": printJson(commands()); break;
     case "errors": printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
@@ -203,7 +180,7 @@ try {
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
       printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
-        scenarios: scenarios(), environments: environments(), external: await externalProtocol(),
+        scenarios: scenarioNames(cfg), environments: environmentNames(cfg), external: await externalProtocol(),
         commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
         ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });

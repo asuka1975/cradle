@@ -276,6 +276,25 @@ export function stripLeanComments(text) {
   return out;
 }
 
+/** `def <defName>` の最初のブロック（次の字下げの無い行まで）にある文字列の腕 `| "<名前>" => some` の名前を出てくる順に。コメントも読む（元テキストのまま）。 */
+export function leanStringArms(text, defName) {
+  const m = text.match(new RegExp(`def\\s+${defName}[\\s\\S]*?(?=\\n\\S|$)`));
+  return m ? [...m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)].map(c => c[1]) : [];
+}
+
+/** 出発点の名前: lean/ の .lean ファイル（walk の順）ごとの scenarioByName の腕を、重複を除いて出てくる順に。 */
+export function scenarioNames(cfg) {
+  const names = new Set();
+  for (const f of walk(cfg.lean.rootDir, { ext: [".lean"] })) for (const n of leanStringArms(readFileSync(f, "utf8"), "scenarioByName")) names.add(n);
+  return [...names];
+}
+
+/** 名前付きの環境（外部能力の script）: Runtime/Scenarios.lean の environmentByName の腕。持たないプロジェクトでは空。 */
+export function environmentNames(cfg) {
+  const file = join(cfg.lean.modelDir, "Runtime", "Scenarios.lean");
+  return existsSync(file) ? [...new Set(leanStringArms(readFileSync(file, "utf8"), "environmentByName"))] : [];
+}
+
 /** sorry の残数: コメントを消した写しで `sorry` を含む行の数（1 行に幾つあっても 1）。lean-check が sorryMax で止める数え方と同じ。 */
 export function leanSorryLines(text) { return stripLeanComments(text).split("\n").filter(l => /\bsorry\b/.test(l)).length; }
 
