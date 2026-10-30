@@ -37,7 +37,7 @@ class EmitMain(
 					"(実装は java.time.Clock を直接注入。契約テストは固定 today を配線)")
 				// 主体ポート(@[actorContext]): 調達の引数種だが、Clock と違い
 				// JDK に正準型が無いため型(data class)は main に生成する。
-				// 本番の UseCase 署名からは落ちる(isPlumbing — 実装の配線)
+				// 本番の UseCase 署名からは落ちる(k.isPlumbing — 実装の配線)
 				"actorPort" -> emitFile(k.packagePathOf(td), td.kotlin) { actorPortBody(td) }
 				else -> emitFile(k.packagePathOf(td), td.kotlin) { dataTypeBody(td) }
 			}
@@ -53,7 +53,7 @@ class EmitMain(
 			// interface に写せない — 除外して note で明示する(取得の契約面には
 			// Row によらない形が必要 = モデル側の宿題)
 			val kept = s.methods.filter { m ->
-				val refs = m.params.filterNot { isPlumbing(it.type) }
+				val refs = m.params.filterNot { k.isPlumbing(it.type) }
 					.flatMap { it.type.leafRefs() } + m.ret.leafRefs()
 				refs.none { ir.typeDef(it).role == "readModelRow" && it !in mainReachable }
 			}
@@ -141,7 +141,7 @@ class EmitMain(
 				log("  note: ${td.kotlin}.${m.name}: 契約指名のないふるまい — 本番から除外")
 			}
 			if (contracted.isEmpty()) continue
-			val toTest = td.role in setOf("repositoryState", "readModel", "readModelRow")
+			val toTest = td.role in setOf("readModel", "readModelRow")
 			emitFile(k.packagePathOf(td), "${td.kotlin}Behaviors", toTest = toTest,
 				usesDomainResult = contracted.any { it.ret is IrType.Result }) {
 				serviceInterfaceBody(
@@ -180,12 +180,12 @@ class EmitMain(
 		val seeds = mutableListOf<String>()
 		for (td in ir.types) if (td.role !in testRoles) seeds += shapeRefs(td)
 		for (s in ir.useCases) for (m in s.methods) {
-			seeds += m.params.filterNot { isPlumbing(it.type) || isPreciseInput(it.type) }
+			seeds += m.params.filterNot { k.isUseCasePlumbing(it.type) }
 				.flatMap { it.type.leafRefs() }
 			seeds += m.ret.leafRefs()
 		}
 		for (s in ir.domainServices) for (m in s.methods) {
-			seeds += m.params.filterNot { isPlumbing(it.type) }.flatMap { it.type.leafRefs() }
+			seeds += m.params.filterNot { k.isPlumbing(it.type) }.flatMap { it.type.leafRefs() }
 			seeds += m.ret.leafRefs()
 		}
 		val reach = mutableSetOf<String>()
@@ -293,7 +293,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 
 	/** 主体を取らず主体も返さない静的語彙のうち、@[contract] 定理が指名するもの。
 	    指名のないもの(isLeap 等)は証明の分解装置 — 本番に写さない。 */
-	fun contractedStaticsOf(td: IrTypeDef): List<IrMethod> =
+	private fun contractedStaticsOf(td: IrTypeDef): List<IrMethod> =
 		(ir.behaviors.find { it.subject == td.lean }?.methods ?: emptyList())
 			.filter { m ->
 				m.params.none { isSubjectParam(it, td) } &&
@@ -330,7 +330,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 			} else if (shape.fields.isEmpty()) {
 				"${docFor(td)}\ndata object ${td.kotlin}"
 			} else {
-				val fixtureTyped = td.role == "repositoryState" || td.role == "readModelRow"
+				val fixtureTyped = td.role == "readModelRow"
 				val params = shape.fields.joinToString("\n") { f ->
 					val dflt = (f.type as? IrType.WithDefault)?.let { " = ${k.defaultExpr(it)}" } ?: ""
 					val tr = if (fixtureTyped) k.typeRefFixture(f.type) else k.typeRef(f.type)
@@ -469,32 +469,6 @@ interface ${rootK}Repository {$ops
 			"interface ${p.name} {$ops\n}"
 	}
 
-	/** モデル配管(観測の Set・乱択の鍵・時計・主体・外部能力の観測)— 本番署名から落とし、実装の配線とする。 */
-	fun isPlumbing(t: IrType): Boolean = when (t) {
-		is IrType.Ref -> ir.typeDef(t.lean).role in
-			setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
-		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
-			t.to == IrType.Nat
-		else -> false
-	}
-
-	/**
-	 * precise な入力(lookup 結果・採番列)の判定: 参照の葉がすべて
-	 * Id・集約ルート・Entity・Row のもの。ペイロード(Command / Query / View の DTO)は
-	 * 残る。UseCase の固定形にのみ適用する(DomainService の resolve の lu/nid 等は
-	 * ドメイン語彙なので落とさない)。
-	 */
-	private fun isPreciseInput(t: IrType): Boolean {
-		// 内部入力(Observation)は相関 Id だけを運んでも入力。leafRefs は構造体の中へ降りないので今は到達しない —
-		// 降りる変更への防波堤として明示しておく
-		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
-		val refs = t.leafRefs()
-		return refs.isNotEmpty() && refs.all {
-			val td = ir.typeDef(it)
-			td.isId || td.role in setOf("aggregateRoot", "entity", "readModelRow")
-		}
-	}
-
 	/** QueryService / UseCase の interface(Lean モジュール内 def の署名写し)。 */
 	private fun serviceInterfaceBody(
 		s: IrService, roleDoc: String, fixedForm: Boolean = false, raw: Boolean = false,
@@ -502,7 +476,7 @@ interface ${rootK}Repository {$ops
 		var dropped = false
 		val methods = s.methods.joinToString("\n") { m ->
 			val real = if (raw) m.params else m.params.filterNot {
-				isPlumbing(it.type) || (fixedForm && isPreciseInput(it.type))
+				k.isPlumbing(it.type) || (fixedForm && k.isPreciseInput(it.type))
 			}
 			if (real.size != m.params.size) dropped = true
 			val ps = real.joinToString(", ") { f -> "${ident(f.name)}: ${k.typeRef(f.type)}" }

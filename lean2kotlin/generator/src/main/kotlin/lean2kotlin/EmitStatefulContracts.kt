@@ -24,7 +24,7 @@ internal fun EmitTests.emitTransitionTheoremTest(
 	val cmdMats = linkedMapOf<String, IrTypeDef>()
 	for (c in contracts) {
 		val mm = s.methods.find { it.name == c.method } ?: continue
-		for (p in mm.params.filterNot { isPlumbing(it.type) }) {
+		for (p in mm.params.filterNot { k.isUseCasePlumbing(it.type) }) {
 			for (e in entityRefsOf(p.type)) cmdMats[e.lean] = e
 		}
 	}
@@ -104,7 +104,7 @@ internal fun EmitTests.emitTransitionTheoremTest(
 				log("  note: ${c.theorem}: メソッド ${c.method} が interface にありません")
 				continue
 			}
-			val kept = m.params.filterNot { isPlumbing(it.type) }
+			val kept = m.params.filterNot { k.isUseCasePlumbing(it.type) }
 			val errT = (m.ret as? IrType.Result)?.err
 			c.cases.forEachIndexed { i, case ->
 				if (case.kind != "transition" || case.stateType != stateLean ||
@@ -239,7 +239,7 @@ internal fun EmitTests.emitFaultContractTests() {
 		val sortedParts = es.parts.sortedBy { it.root.kotlin }
 		val genParts = es.genParts
 		fun repoVar(root: IrTypeDef) = decapitalizeFirst(root.kotlin) + "Repository"
-		val kept = m.params.filterNot { isPlumbing(it.type) }
+		val kept = m.params.filterNot { k.isUseCasePlumbing(it.type) }
 		val cmdMats = linkedMapOf<String, IrTypeDef>()
 		for (p in kept) for (e in entityRefsOf(p.type)) cmdMats[e.lean] = e
 		// 時計ポート(固定 today — 遷移契約テストと同じ配線)

@@ -234,6 +234,37 @@ class Kotlinize(private val ir: Ir) {
 	/** 入力語彙の役割: 利用者の Command と内部入力の Observation。ふるまい・Arb を持たず、値は定理由来のケースが運ぶ。 */
 	fun isInputRole(role: String): Boolean = role == "command" || role == "observation"
 
+	private val plumbingRoles = setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
+	private val preciseInputRoles = setOf("aggregateRoot", "entity", "readModelRow")
+
+	/** モデル配管(観測の Set・乱択の鍵・時計・主体・外部能力の観測)— 本番署名から落とし、実装の配線とする。 */
+	fun isPlumbing(t: IrType): Boolean = when (t) {
+		is IrType.Ref -> ir.typeDef(t.lean).role in plumbingRoles
+		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
+			t.to == IrType.Nat
+		else -> false
+	}
+
+	/**
+	 * precise な入力(lookup 結果・採番列)の判定: 参照の葉がすべて
+	 * Id・集約ルート・Entity・Row のもの。ペイロード(Command / Query / View の DTO)は
+	 * 残る。UseCase の固定形にのみ適用する(DomainService の resolve の lu/nid 等は
+	 * ドメイン語彙なので落とさない)。
+	 */
+	fun isPreciseInput(t: IrType): Boolean {
+		// 内部入力(Observation)は相関 Id だけを運んでも入力。leafRefs は構造体の中へ降りないので今は到達しない —
+		// 降りる変更への防波堤として明示しておく
+		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
+		val refs = t.leafRefs()
+		return refs.isNotEmpty() && refs.all {
+			val td = ir.typeDef(it)
+			td.isId || td.role in preciseInputRoles
+		}
+	}
+
+	/** UseCase の固定形で本番署名から落ちる引数(配管と precise な入力)。契約テストの呼び出し引数もこれで決まる。 */
+	fun isUseCasePlumbing(t: IrType): Boolean = isPlumbing(t) || isPreciseInput(t)
+
 	/** Repository の在処: ドメインの持ち物だが、Entity / ValueObject と同格の
 	    専用ディレクトリを切る。 */
 	val repositoryPackage = "domain.repository"

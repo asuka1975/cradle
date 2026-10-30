@@ -7,9 +7,9 @@ internal fun EmitTests.arbsBody(): String {
 	body.append("// 生成テスト(PBT・リポジトリ契約)が使う Kotest ジェネレータ。\n\n")
 	body.append("@Suppress(\"unused\")\nprivate val suppressUnused = Unit\n\n")
 	for (td in ir.types) {
+		if (k.isInputRole(td.role)) continue   // 入力語彙(data class)— 値は定理由来のケースが運ぶ、乱択不要
 		when (td.role) {
 			"repositoryState", "readModel" -> {}   // fixture は焼き込み — Arb 不要
-			"command", "observation" -> {}   // 入力語彙(data class)— 値は定理由来のケースが運ぶ、乱択不要
 			"clockPort" -> {}   // 時計ポート — Kotlin 型を生成しないため Arb もない
 			"actorPort" -> {}   // 主体ポート — 値は定理由来のケースが運ぶ(固定 actor の注入)、乱択不要
 			else -> {

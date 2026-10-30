@@ -108,7 +108,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 	val m = golden?.first ?: s.methods.find { it.name == "execute" }
 		?: s.methods.firstOrNull() ?: return
 	val screenKey = golden?.second
-	val kept = m.params.filterNot { isPlumbing(it.type) }
+	val kept = m.params.filterNot { k.isUseCasePlumbing(it.type) }
 	val errT = (m.ret as? IrType.Result)?.err
 	val okT = (m.ret as? IrType.Result)?.ok ?: m.ret
 	// View→ドメイン語彙の壁: 期待値(View)が interface 化された語彙へ
@@ -122,7 +122,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 		val fromArgs: Boolean = false,
 	)
 	val factoryParams = mutableListOf<FactoryParam>()
-	for (p in m.params.filter { isPlumbing(it.type) }) {
+	for (p in m.params.filter { k.isUseCasePlumbing(it.type) }) {
 		when (val t = p.type) {
 			is IrType.Ref ->
 				if (ir.typeDef(t.lean).role == "actorPort") {

@@ -82,24 +82,6 @@ class EmitTests(
 	internal val notedRows = mutableSetOf<Pair<String, String>>()
 
 	/**
-	 * モデル配管(観測の Set・乱択の鍵・precise な入力)の判定 — 本番署名から落ち、
-	 * 契約テストではファクトリ引数(実装への配線)になる。UseCase の契約テスト
-	 * 専用なので、EmitMain の固定形(fixedForm)と同じ判定に揃える。
-	 */
-	internal fun isPlumbing(t: IrType): Boolean = when (t) {
-		is IrType.Ref -> ir.typeDef(t.lean).role in
-			setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
-		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
-			t.to == IrType.Nat
-		else -> false
-	} || ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } != "observation" && t.leafRefs().let { refs ->
-		refs.isNotEmpty() && refs.all {
-			val td = ir.typeDef(it)
-			td.isId || td.role in setOf("aggregateRoot", "entity", "readModelRow")
-		}
-	})
-
-	/**
 	 * @[contract] 契約定理から演繹された UseCase パラメトリックテスト。
 	 * 定理 1 本 = テストファミリ 1 本。入力は抽出時に定理の量化変数からサンプル
 	 * (前提が選択器)、期待値は Lean 内評価のオラクルの焼き込み。
