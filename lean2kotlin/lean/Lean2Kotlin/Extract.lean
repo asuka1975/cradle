@@ -1175,6 +1175,705 @@ where
       return some ("atMost", collName, field,
         [("op", Json.str op), ("value", value), ("max", Json.num n)])
 
+/-- 契約定理と障害契約の演繹が `#kotlin_ir` の前段(生成区分・interface 面・判断と射影・Port の対応)から受け取る値。
+    走査の途中では変わらない — 演繹の前に 1 度だけ組む。 -/
+structure DeriveCtx where
+  rootNs : Name
+  env : Environment
+  ucNs : Name
+  modOf : Name → Option Name
+  roles : Std.HashMap Name Role
+  idHeads : List Name
+  execByDir : Std.HashMap Name Name
+  ucPorts : Std.HashMap Name PortDep
+  behaviorDefs : Std.HashMap Name Name
+  judgmentDefs : Std.HashMap Name Name
+  projDefs : Std.HashMap Name (Name × Name)
+  ruleDefs : Std.HashMap Name String
+  hasFunctionField : Name → Elab.TermElabM Bool
+  valueBinders : Name → Elab.TermElabM (Array (Name × Expr))
+  applyWith : Name → (Name → Expr → Elab.TermElabM (Option Expr)) →
+    Elab.TermElabM (Option (Expr × Array (Name × Expr × Expr)))
+
+/-- 契約定理 1 本の演繹の結果。診断と件数は呼び出し側が積む。 -/
+inductive ContractDerivation where
+  /-- 主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない -/
+  | untouched
+  /-- 有効なケースが無い。whys は組合せを試した順の理由 -/
+  | noCases (whys : Array String)
+  | derived (contract : Json)
+
+/-- `@[contract]` 定理 1 本をテストケースに演繹する。投げた例外は呼び出し側が「翻訳できない」の診断にする。 -/
+def deriveContract (cx : DeriveCtx) (thmName : Name) : Elab.TermElabM ContractDerivation := do
+  let rootNs := cx.rootNs
+  let env := cx.env
+  let ucNs := cx.ucNs
+  let modOf := cx.modOf
+  let roles := cx.roles
+  let idHeads := cx.idHeads
+  let execByDir := cx.execByDir
+  let ucPorts := cx.ucPorts
+  let behaviorDefs := cx.behaviorDefs
+  let judgmentDefs := cx.judgmentDefs
+  let projDefs := cx.projDefs
+  let ruleDefs := cx.ruleDefs
+  let hasFunctionField := cx.hasFunctionField
+  let applyWith := cx.applyWith
+  let ci ← getConstInfo thmName
+  let stmt := ci.type.instantiateLevelParams ci.levelParams
+    (ci.levelParams.map fun _ => .zero)
+  -- 事前選別の対象: 結論と、結論の適用に引数として現れない仮定。結論が消費する仮定
+  -- (制約の証明 — 泉の新鮮性など)は主対象の義務で、選別に働かない(searchIn と同じ規則)
+  let view ← forallTelescopeReducing stmt fun xs concl => do
+    let mut parts : Array Expr := #[concl]
+    for x in xs do
+      let ty ← inferType x
+      if (← Meta.isProp ty) && !concl.containsFVar x.fvarId! then parts := parts.push ty
+    pure parts
+  let viewHas (pred : Expr → Bool) : Bool := view.any fun e => (e.find? pred).isSome
+  -- 事前選別: UseCase(execute / validate)に触れる定理は UseCase モード、
+  -- ふるまい(Entity / VO / State の def)に触れる定理はふるまいモード、
+  -- どちらでもなければ対象外(判断関数・Projection — 次段)
+  let touchesExec := viewHas (fun e =>
+    match e with
+    | .const fn _ =>
+      ["execute", "validate"].contains (toString (fn.updatePrefix Name.anonymous)) &&
+        (match modOf fn with
+         | some m => ucNs.isPrefixOf m && m.components.getLast! == `UseCase
+         | none => false)
+    | _ => false)
+  let isBehaviorTarget (e : Expr) : Bool :=
+    match e.getAppFn with
+    | .const fn _ => behaviorDefs.contains fn
+    | _ => false
+  let isJudgmentTarget (e : Expr) : Bool :=
+    match e.getAppFn with
+    | .const fn _ => judgmentDefs.contains fn
+    | _ => false
+  let isProjectionTarget (e : Expr) : Bool :=
+    match e.getAppFn with
+    | .const fn _ => projDefs.contains fn
+    | _ => false
+  let isRuleTarget (e : Expr) : Bool :=
+    match e.getAppFn with
+    | .const fn _ => ruleDefs.contains fn
+    | _ => false
+  -- 優先順位: 射影 → 判断 → UseCase の判断(補助 def)→ ふるまい(射影・判断・補助の定理は
+  -- 結論や仮定に valid・markSending 等のふるまいを含むため、ふるまい判定を後段に置く)
+  let projectionMode := !touchesExec && viewHas isProjectionTarget
+  let judgmentMode := !touchesExec && !projectionMode && viewHas isJudgmentTarget
+  let ruleMode := !touchesExec && !projectionMode && !judgmentMode && viewHas isRuleTarget
+  let behaviorMode := !touchesExec && !projectionMode && !judgmentMode && !ruleMode &&
+    viewHas isBehaviorTarget
+  unless touchesExec || behaviorMode || judgmentMode || projectionMode || ruleMode do
+    return .untouched
+  -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
+  let mut core := stmt
+  repeat
+    let core' ← whnf core
+    match core' with
+    | .forallE nm dom body bi =>
+      if bi == .instImplicit then
+        core := body.instantiate1 (← synthInstance dom)
+      else if dom.isSort then
+        core := body.instantiate1 (← binderConst rootNs nm)
+      else break
+    | _ => break
+  -- 残りの binder(値・仮定)を fvar でテレスコープ
+  let cases ← forallTelescopeReducing core fun xs concl => do
+    -- 主対象: UseCase モジュールの execute の適用(仮定 or 結論)
+    let ucPred (nm : String) (e : Expr) : Bool :=
+      match e.getAppFn with
+      | .const fn _ =>
+        (toString (fn.updatePrefix Name.anonymous)) == nm &&
+          (match modOf fn with
+           | some m => ucNs.isPrefixOf m
+           | none => false)
+      | _ => false
+    let mut hypIdx : Array Nat := #[]
+    let mut valIdx : Array Nat := #[]
+    for i in [0:xs.size] do
+      let t ← inferType xs[i]!
+      if (← Meta.isProp t) then hypIdx := hypIdx.push i
+      else valIdx := valIdx.push i
+    -- 主対象の探索: 仮定 → 結論の順。UseCase モードは execute を validate より優先
+    -- (execute_invalid の仮定に validate が現れるため)
+    -- 結論の適用に引数として現れる仮定(制約の証明 — 泉の新鮮性など)は主対象の
+    -- 選択器ではなく主対象の義務。その型の中は探さない
+    let searchIn (pred : Expr → Bool) : Elab.TermElabM (Option Expr) := do
+      for i in hypIdx do
+        if concl.containsFVar xs[i]!.fvarId! then continue
+        if let some app := (← inferType xs[i]!).find? pred then return some app
+      pure (concl.find? pred)
+    let primary? ←
+      if behaviorMode then searchIn isBehaviorTarget
+      else if ruleMode then searchIn isRuleTarget
+      else if judgmentMode then do
+        -- 判断定理はケース選択器 — 観測は本番契約面(UseCase の execute)。
+        -- 定理の binder(行の列・パラメータ・鍵)を execute の引数へ割り付け、
+        -- ReadModel / クエリ DTO はフィールド単位で組んで execute の適用を合成する
+        let some japp ← searchIn isJudgmentTarget
+          | throwError "判断の適用が見つかりません"
+        let .const jfn _ := japp.getAppFn | unreachable!
+        let dir := (judgmentDefs.get? jfn).getD Name.anonymous
+        let some execC := execByDir.get? dir
+          | throwError "UseCase {dir} の execute が見つかりません"
+        let valIdxF := valIdx
+        let strCtrJ : IO.Ref Nat ← IO.mkRef 700
+        -- binder の割り付け: 名前+型一致 → 型の一意一致 → なし
+        let matchBinder : Name → Expr → Elab.TermElabM (Option Expr) := fun nm ty => do
+          for j in valIdxF do
+            let d ← xs[j]!.fvarId!.getDecl
+            if d.userName == nm && (← isDefEq d.type ty) then return some xs[j]!
+          let mut found : Option Expr := none
+          let mut cnt := 0
+          for j in valIdxF do
+            if ← isDefEq (← inferType xs[j]!) ty then
+              found := some xs[j]!
+              cnt := cnt + 1
+          return if cnt == 1 then found else none
+        let matchHyp : Expr → Elab.TermElabM (Option Expr) := fun ty => do
+          for j in hypIdx do
+            if ← isDefEq (← inferType xs[j]!) ty then return some xs[j]!
+          return none
+        let fillLeaf : Name → Expr → Elab.TermElabM Expr := fun nm ty => do
+          if let some x ← matchBinder nm ty then return x
+          match ← buildValue idHeads strCtrJ ty 0 with
+          | some v => return v
+          | none => throwError "execute の引数 {nm} を合成できません: {ty}"
+        let fillArg : Name → Expr → Elab.TermElabM Expr := fun nm ty => do
+          if let some x ← matchBinder nm ty then return x
+          let tyW ← whnf ty
+          if let .const tn _ := tyW.getAppFn then
+            if (roles.get? tn == some .readModel || roles.get? tn == some .viewDto) &&
+                isStructure env tn then
+              let ctor := getStructureCtor env tn
+              let ctorCi ← getConstInfo ctor.name
+              let lvls := ctorCi.levelParams.map fun _ => Level.zero
+              let mut cty := ctorCi.type.instantiateLevelParams ctorCi.levelParams lvls
+              let mut cargs : Array Expr := #[]
+              -- 構造体の型パラメータは適用済みの型から写す
+              for a in tyW.getAppArgs do
+                let .forallE _ _ body _ ← whnf cty | break
+                cargs := cargs.push a
+                cty := body.instantiate1 a
+              repeat
+                match ← whnf cty with
+                | .forallE fnm fdom fbody bi =>
+                  let v ← if bi == .instImplicit then synthInstance fdom
+                    else if ← Meta.isProp fdom then
+                      -- 制約: 定理が同じ命題を仮定に持てばそれを使い、無ければ decide の証明
+                      match ← matchHyp fdom with
+                      | some h => pure h
+                      | none =>
+                        match ← decideProp fdom with
+                        | some true => mkDecideProof fdom
+                        | _ => throwError "制約 {fnm} を満たす fixture を組めません"
+                    else fillLeaf fnm fdom
+                  cargs := cargs.push v
+                  cty := fbody.instantiate1 v
+                | _ => break
+              return mkAppN (mkConst ctor.name lvls) cargs
+          fillLeaf nm ty
+        let execCi ← getConstInfo execC
+        let eLvls := execCi.levelParams.map fun _ => Level.zero
+        let mut ety := execCi.type.instantiateLevelParams execCi.levelParams eLvls
+        let mut eArgs : Array Expr := #[]
+        repeat
+          match ← whnf ety with
+          | .forallE nm dom body bi =>
+            let v ←
+              if bi == .instImplicit then synthInstance dom
+              else if dom.isSort then binderConst rootNs nm
+              else if ← Meta.isProp dom then
+                match ← decideProp dom with
+                | some true => mkDecideProof dom
+                | _ => throwError "execute の制約 {nm} を満たす引数を組めません"
+              else fillArg nm dom
+            eArgs := eArgs.push v
+            ety := body.instantiate1 v
+          | _ => break
+        pure (some (mkAppN (mkConst execC eLvls) eArgs))
+      else if projectionMode then searchIn isProjectionTarget
+      else do
+        match ← searchIn (ucPred "execute") with
+        | some a => pure (some a)
+        | none => searchIn (ucPred "validate")
+    let some primary := primary?
+      | throwError "主対象(execute / validate / ふるまい)の適用が見つかりません"
+    let .const execName _ := primary.getAppFn | unreachable!
+    -- 主対象の明示引数: (名前, binder の fvar か / Id 導出か)
+    let execArgs := primary.getAppArgs
+    let (argNames, argKinds) ← forallTelescopeReducing
+        ((← getConstInfo execName).type) fun ys _ => do
+      let mut names : Array Name := #[]
+      let mut kinds : Array String := #[]   -- "type" | "inst" | "value"
+      let mut vi := 0
+      for y in ys do
+        let d ← y.fvarId!.getDecl
+        let isConstraint ← Meta.isProp d.type
+        let kind := if d.binderInfo == .instImplicit then "inst"
+          else if d.type.isSort then "type"
+          else if isConstraint then "prop" else "value"
+        -- 無名 binder は interface 側と同じ規約(arg<値引数の序数>)で消毒
+        let nm := if kind == "value" then
+            (if d.userName.hasMacroScopes then Name.mkSimple s!"arg{vi}" else d.userName)
+          else d.userName
+        if kind == "value" then vi := vi + 1
+        names := names.push nm
+        kinds := kinds.push kind
+      pure (names, kinds)
+    -- 束縛の役割分け: パターン束縛(仮定 Eq の右辺に裸で現れる)→ mvar、
+    -- 主対象の引数に裸で現れ型が Id のみ → 泉導出、それ以外の値 → サンプル
+    let mut patternBound : Array Nat := #[]
+    for i in hypIdx do
+      let t ← inferType xs[i]!
+      if let some (_, _, rhs) := t.eq? then
+        -- パターン(ctor 適用)の右辺だけが束縛する(fs.length 等の関数適用は対象外)
+        let isCtorApp ← match rhs.getAppFn with
+          | .const cn _ => pure ((env.find? cn) matches some (.ctorInfo _))
+          | _ => pure false
+        if isCtorApp then
+          for j in valIdx do
+            if rhs.containsFVar xs[j]!.fvarId! then
+              unless patternBound.contains j do patternBound := patternBound.push j
+    let mut derived : Array Nat := #[]
+    for k in [0:execArgs.size] do
+      if argKinds[k]! == "value" then
+        let a := execArgs[k]!
+        if a.isFVar then
+          if let some j := xs.findIdx? (· == a) then
+            if (← isIdOnly idHeads (← inferType a)) then
+              unless patternBound.contains j do derived := derived.push j
+    -- サンプルするのは主対象の適用に現れる binder だけ。
+    -- それ以外(結論だけに現れる binder・∀ の b 等)は mvar
+    let sampled := valIdx.filter fun j =>
+      !patternBound.contains j && !derived.contains j &&
+        primary.containsFVar xs[j]!.fvarId!
+    -- 泉の形(shape): 主対象の引数のうち、Id のみでない List 型の値
+    let mut shapeIdx : Option Nat := none
+    for k in [0:execArgs.size] do
+      if argKinds[k]! == "value" && execArgs[k]!.isFVar then
+        let a := execArgs[k]!
+        let ta ← whnf (← inferType a)
+        if ta.getAppFn.isConstOf ``List && !(← isIdOnly idHeads ta) then
+          shapeIdx := xs.findIdx? (· == a)
+    -- サンプル候補(binder ごとのプール)
+    let strCtr : IO.Ref Nat ← IO.mkRef 0
+    let mut pools : Array (Nat × Array Expr) := #[]
+    for j in sampled do
+      let ty ← inferType xs[j]!
+      let tyW ← whnf ty
+      let variants : List Nat ←
+        if tyW.getAppFn.isConstOf ``List then pure [0, 1, 2]
+        else if tyW.getAppFn.isConstOf ``Option then pure [0, 1]
+        else match tyW.getAppFn with
+          | .const tn _ => do
+            match (← getEnv).find? tn with
+            | some (.inductInfo ii) =>
+              -- structure は通常+境界(リスト空)+別 ctor+混在 2 種+空文字列+
+              -- 境界×第 1 構成子の 7 variant(5 = 空文字列の境界 —「空でない」
+              -- 制約の失敗枝、6 = 空リスト+第 1 構成子 — noFolders×既存作者等)。
+              -- ポート束(関数フィールド — 構築が variant に依らない)は 1 つ
+              if (← hasFunctionField tn) then pure [0]
+              else if isStructure (← getEnv) tn then pure [0, 1, 2, 3, 4, 5, 6]
+              else pure (List.range ii.ctors.length)
+            | _ => pure [0]
+          | _ => pure [0]
+      let mut pool : Array Expr := #[]
+      for v in variants do
+        strCtr.set (j * 3 + v)   -- 文字列の一意性(組合せに依らず決定的)
+        -- List の複合 variant 2 は混在リスト [通常, 境界](buildValue の variant 3)
+        let bv := if v == 2 && tyW.getAppFn.isConstOf ``List then 3 else v
+        if let some x ← buildValue idHeads strCtr ty bv then pool := pool.push x
+      if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
+      pools := pools.push (j, pool)
+    -- 組合せ列挙(積、上限つき)
+    let combos := cartesianTake (pools.map fun (j, pool) => pool.map ((j, ·))) 64
+    let mut caseJs : Array Json := #[]
+    let mut seenCase : Array String := #[]
+    let mut whys : Array String := #[s!"組合せ {combos.size}"]
+    for combo in combos do
+      if caseJs.size ≥ 4 then break
+      -- 2 パス: 泉値を出力の出現順の連番へ正規化
+      let mut preset : List Nat := (List.range 20).map (100 + ·)
+      for _pass in [0:2] do
+        let queue : IO.Ref (List Nat) ← IO.mkRef preset
+        -- 代入の構築(サンプル → 泉導出 → パターンは mvar)
+        let mut subst : Array (Option Expr) := xs.map fun _ => none
+        for (j, v) in combo do subst := subst.set! j (some v)
+        let shapeVal := shapeIdx.bind fun si => subst[si]!
+        let mut ok := true
+        for j in derived do
+          match ← deriveWellIds idHeads queue (← inferType xs[j]!) shapeVal with
+          | some v => subst := subst.set! j (some v)
+          | none => ok := false
+        unless ok do
+          whys := whys.push "泉導出不可"
+          break
+        for j in valIdx do
+          if subst[j]!.isNone then
+            let mv ← mkFreshExprMVar (some (← inferType xs[j]!))
+            subst := subst.set! j (some mv)
+        -- 仮定(Prop)の binder は代入対象外 — 自分自身で埋める(置換の no-op。
+        -- get! だと none で panic ログが出る — 挙動は同じでもノイズになる)
+        let mut vals : Array Expr := #[]
+        for idx in [0:subst.size] do
+          vals := vals.push ((subst[idx]!).getD xs[idx]!)
+        let inst (e : Expr) : Expr := e.replaceFVars xs vals
+        -- 仮定の検査: Eq(mvar あり)は左辺評価+単一化、他は decide
+        let mut keep := true
+        let mut provenIdx : Array Nat := #[]
+        for i in hypIdx do
+          let h ← instantiateMVars (inst (← inferType xs[i]!))
+          if h.hasExprMVar then
+            if let some (_, lhs, rhs) := h.eq? then
+              if !lhs.hasExprMVar then
+                unless (← withTransparency .all <| isDefEq lhs rhs) do
+                  -- 否定形(結論 False)の定理では不一致が主張そのもの —
+                  -- その入力での失敗ケースとして採用する
+                  if concl.isConstOf ``False then pure ()
+                  else
+                    whys := whys.push "パターン不一致"
+                    keep := false
+              else
+                whys := whys.push "左辺に未束縛の変数"
+                keep := false
+            else
+              -- 結論構造の残滓(∀ b ∈ notes 等)— 検査せず許容。
+              -- テストの主張はオラクル一致なので健全性は保たれる
+              pure ()
+          else
+            match ← decideProp h with
+            | some true => provenIdx := provenIdx.push i
+            | some false =>
+              whys := whys.push "仮定が偽"
+              keep := false
+            | none =>
+              whys := whys.push s!"decide 不可: {h}"
+              keep := false
+        unless keep do break
+        -- 真と決まった仮定は証明項に置き換える — 主対象が制約の証明(泉の新鮮性など)を
+        -- 引数に取るとき、評価する適用が閉じた項になる
+        for i in provenIdx do
+          vals := vals.set! i (← mkDecideProof (← instantiateMVars (inst (← inferType xs[i]!))))
+        let inst (e : Expr) : Expr := e.replaceFVars xs vals
+        -- オラクル評価と泉の正規化
+        let pApp ← instantiateMVars (inst primary)   -- 評価は解釈側の whnf(頭だけ)+コンパイル実行が担う
+        -- 主対象の引数に裸で現れる Id 型の binder は泉から導出し、期待値に現れた泉値を出現順の連番に正規化する。
+        -- 状態遷移契約は採番の種が before 状態(ids.next)に入るので derived が空になり素通りする
+        let (appear, canonical) ←
+          if derived.isEmpty then pure (([] : List Nat), ([] : List Nat)) else do
+            let expectedJ ← valueToJson pApp
+            let allocated := preset.take 20
+            let ap := (scanWellNums allocated expectedJ #[]).toList
+            let unused := allocated.filter (!ap.contains ·)
+            pure (ap, ap ++ unused)
+        if canonical == preset.take canonical.length || _pass == 1 then
+         try
+          -- 期待値の解釈(状態遷移契約):
+          --   更新系: (before, after, error) — テストは fromState / toState で観測
+          --   参照系: (readModel, ok / error) — rm は fixture、期待は View 列
+          let headOf (t : Expr) : Name :=
+            match t.getAppFn with | .const n _ => n | _ => Name.anonymous
+          -- 主対象の引数から before(State)/ readModel と payload 引数を仕分け
+          let mut beforeJ : Option (Json × Name) := none   -- (値, State 型名)
+          let mut rmJ : Option (Json × Name) := none
+          let mut argJs : List (String × Json) := []
+          for k in [0:execArgs.size] do
+            if argKinds[k]! == "value" then
+              let a := inst execArgs[k]!
+              let aty ← whnf (← inferType a)
+              let h := headOf aty
+              let pureMode := behaviorMode || projectionMode || ruleMode
+              if !pureMode && roles.get? h == some .repositoryState then
+                beforeJ := some (← valueToJson a, h)
+              else if !pureMode && roles.get? h == some .readModel then
+                rmJ := some (← valueToJson a, h)
+              else if aty.isForall || (← hasFunctionField h) then
+                pure ()   -- ポート(埋め込み・鍵)は配線 — 直列化しない
+              else
+                argJs := argJs ++ [(toString argNames[k]!, ← valueToJson a)]
+          -- 期待値の形で純値形(ふるまい)/ 遷移形 / 値形を判定
+          let expW ← whnf pApp
+          let expHead := headOf (← whnf (← inferType expW))
+          -- Port の期待値: 要求は Lean の request を同じ引数で評価した値(validate が主対象なら
+          -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
+          let portsExtra : List (String × Json) ← do
+            if behaviorMode || projectionMode || judgmentMode || ruleMode then pure [] else
+            let dir := ucDir ((modOf execName).getD Name.anonymous)
+            match ucPorts.get? dir with
+            | none => pure []
+            | some dep =>
+              let closedArgs := pApp.getAppArgs
+              let argOf (nm : Name) : Option Expr :=
+                (List.range (min argNames.size closedArgs.size)).findSome? fun k =>
+                  if argNames[k]! == nm then some closedArgs[k]! else none
+              let outcomeJ ← match argOf dep.param with
+                | some o => valueToJson o
+                | none => pure Json.null
+              let requestJ ←
+                if (execName.updatePrefix Name.anonymous) != `execute then pure Json.null else do
+                  let reqC := execName.getPrefix ++ `request
+                  let some (app, _) ← applyWith reqC (fun nm _ => pure (argOf nm))
+                    | throwError "request の引数を execute の引数から埋められません(request の引数名は execute のものと揃える)"
+                  let r ← whnf app
+                  if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
+                  else if r.getAppFn.isConstOf ``Except.error then pure Json.null
+                  else throwError "request の評価結果が Except の構成子ではありません: {r}"
+              pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
+          let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
+          if behaviorMode || ruleMode then
+            -- ふるまい・UseCase の判断: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
+            caseFields := caseFields ++ [("kind", Json.str "pure"),
+              ("ok", ← valueToJson expW)]
+          else if projectionMode then
+            -- 射影: DDL テストのケース(スキーマ抽出が Lean の射影を再現するか)
+            caseFields := caseFields ++ [("kind", Json.str "projection"),
+              ("ok", ← valueToJson expW)]
+          else if roles.get? expHead == some .repositoryState then
+            -- 全域の状態遷移(unlike)
+            let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
+            caseFields := caseFields ++ transitionFields st bj (← valueToJson expW) Json.null
+          else if expW.getAppFn.isConstOf ``Except.ok ||
+              expW.getAppFn.isConstOf ``Except.error then
+            let payload := expW.getAppArgs[2]!
+            let isOk := expW.getAppFn.isConstOf ``Except.ok
+            let pty ← whnf (← inferType payload)
+            if isOk && roles.get? (headOf pty) == some .repositoryState then
+              -- Except E State(like / rename 系)の成功
+              let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
+              caseFields := caseFields ++ transitionFields st bj (← valueToJson payload) Json.null
+            else if !isOk && beforeJ.isSome then
+              -- Except の失敗: 状態は変わらない(after = before)
+              let some (bj, st) := beforeJ | unreachable!
+              caseFields := caseFields ++ transitionFields st bj bj (← valueToJson payload)
+            else if isOk && beforeJ.isSome then
+              -- validate の成功 — 状態は一切変わらない。
+              -- validate は「解決の成果物」(作用対象の
+              -- 集約ルート)を返す — 成果物が Entity / 集約ルートなら ok に
+              -- 焼き込む(テストは返り値も観測で突き合わせる)。Unit のまま
+              -- の validate(save・参照系)は従来どおり ok なし
+              let some (bj, st) := beforeJ | unreachable!
+              let pRole := roles.get? (headOf pty)
+              let okExtra ←
+                if pRole == some .aggregateRoot || pRole == some .entity ||
+                    pRole == some .viewDto then
+                  pure [("ok", ← valueToJson payload)]
+                else pure []
+              caseFields := caseFields ++ transitionFields st bj bj Json.null ++ okExtra
+            else
+              -- 参照系(値形): ok = View 列 / error = QueryError
+              let some (rj, rmT) := rmJ | throwError "ReadModel 引数が見つかりません"
+              -- 判断モードの空振り防止: 合成した execute が validate の
+              -- 関門(認可等)で失敗する組合せは、定理の語る判断を一度も観測しない —
+              -- 定理名を冠した空テストを出さない(採用は成功する組合せだけ)
+              if judgmentMode && !isOk then
+                throwError "判断の関門(validate)で失敗する組合せ — 判断を観測しないため不採用"
+              let payloadJ ← valueToJson payload
+              caseFields := caseFields ++ [("kind", Json.str "value"),
+                ("readModelType", Json.str (toString rmT)), ("readModel", rj),
+                (if isOk then ("ok", payloadJ) else ("error", payloadJ))]
+          else
+            -- Result 構造体(save): after / error フィールドを読む
+            let .const dcn _ := expW.getAppFn
+              | throwError "期待値が ctor 正規形ではありません"
+            let some (.ctorInfo dci) := env.find? dcn
+              | throwError "期待値が ctor ではありません"
+            let dArgs := expW.getAppArgs
+            let dFields := dArgs.extract dci.numParams dArgs.size
+            let fnames := getStructureFields env dci.induct
+            let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
+            let mut afterJ : Json := Json.null
+            let mut errJ : Json := Json.null
+            for fi in [0:dFields.size] do
+              let fn := toString fnames[fi]!
+              if fn == "after" then afterJ ← valueToJson dFields[fi]!
+              else if fn == "error" then errJ ← valueToJson dFields[fi]!
+            caseFields := caseFields ++ transitionFields st bj afterJ errJ
+          let caseJ := Json.mkObj caseFields
+          let key := caseJ.compress
+          unless seenCase.contains key do
+            seenCase := seenCase.push key
+            caseJs := caseJs.push caseJ
+          break
+         catch ex =>
+          whys := whys.push s!"解釈不可: {← ex.toMessageData.toString}"
+          break
+        else
+          -- 2 パス目: 割当 i(旧値 100+i)へ「出現順の連番 or 未使用の退避値」を与える
+          preset := (List.range 20).map fun i =>
+            match appear.idxOf? (100 + i) with
+            | some k => 100 + k
+            | none => 900 + i
+    let methodName := toString (execName.updatePrefix Name.anonymous)
+    let groupKey :=
+      if behaviorMode then toString ((behaviorDefs.get? execName).getD Name.anonymous)
+      else if ruleMode then (ruleDefs.get? execName).getD ""
+      else if projectionMode then
+        toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).1)
+      else toString (ucDir ((modOf execName).getD Name.anonymous))
+    let rowTy :=
+      if projectionMode then
+        toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).2)
+      else ""
+    pure ((groupKey, methodName, rowTy, caseJs, whys) :
+      String × String × String × Array Json × Array String)
+  let (modLast, methodName, rowTy, caseJs, whys) := cases
+  if caseJs.isEmpty then return .noCases whys
+  let target := if behaviorMode then "behaviors"
+    else if ruleMode then "rules"
+    else if projectionMode then "projection"
+    else "usecase"
+  let extra := if projectionMode then [("rowType", Json.str rowTy)] else []
+  return .derived (Json.mkObj ([
+    ("target", Json.str target),
+    ("useCase", Json.str modLast),
+    ("method", Json.str methodName)] ++ extra ++ [
+    ("theorem", Json.str (toString (thmName.updatePrefix Name.anonymous))),
+    ("doc", Json.str ((← findDocString? env thmName).getD "")),
+    ("cases", Json.arr caseJs)]))
+
+/-- `@[faultContract]` の def 1 つを障害注入の期待値に演繹する。none は有効なケース(execute が成功する入力)が無い。
+    投げた例外は呼び出し側が「翻訳できない」の診断にする。 -/
+def deriveFault (cx : DeriveCtx) (fName : Name) : Elab.TermElabM (Option Json) := do
+  let env := cx.env
+  let ucNs := cx.ucNs
+  let modOf := cx.modOf
+  let roles := cx.roles
+  let idHeads := cx.idHeads
+  let execByDir := cx.execByDir
+  let ucPorts := cx.ucPorts
+  let hasFunctionField := cx.hasFunctionField
+  let valueBinders := cx.valueBinders
+  let applyWith := cx.applyWith
+  let some fMod := modOf fName
+    | throwError "在住モジュールを特定できません"
+  unless ucNs.isPrefixOf fMod && fMod.components.getLast! == `UseCase do
+    throwError "UseCase ディレクトリ在住ではありません: {fMod}"
+  let dir := ucDir fMod
+  let some execC := execByDir.get? dir
+    | throwError "UseCase {dir} の execute が見つかりません"
+  let fVals ← valueBinders fName
+  -- 消費位置: Port を使う UseCase の障害契約は、観測(Outcome)を引数に取るかどうかで
+  -- 「外部を呼ぶ前の中断」(0)/「応答を得た後の中断」(1)を宣言する(観測が無い中断点に観測は存在しない)
+  let portCalls : Nat ← match ucPorts.get? dir with
+    | none => pure 0
+    | some _ => do
+      let takesOutcome ← fVals.anyM fun (_, ty) => do
+        match (← whnf ty).getAppFn with
+        | .const h _ => pure (roles.get? h == some .portOutcome)
+        | _ => pure false
+      pure (if takesOutcome then 1 else 0)
+  -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
+  let strCtrF : IO.Ref Nat ← IO.mkRef 800
+  let mut pools : Array (Name × Array (Nat × Expr)) := #[]
+  for (nm, ty) in fVals do
+    let tyW ← whnf ty
+    let variants : List Nat ← match tyW.getAppFn with
+      | .const tn _ =>
+        if (← hasFunctionField tn) then pure [0]
+        else if isStructure env tn then pure [0, 1, 2, 3, 4, 5, 6]
+        else pure [0]
+      | _ => pure [0]
+    let mut pool : Array (Nat × Expr) := #[]
+    for v in variants do
+      if let some x ← buildValue idHeads strCtrF ty v then pool := pool.push (v, x)
+    if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
+    pools := pools.push (nm, pool)
+  let combos := cartesianTake (pools.map fun (nm, pool) => pool.map ((nm, ·))) 64
+  -- 有効ケースの収集(execute 成功のみ)→ ペイロードの多様性で ≤4 に選抜
+  let mut collected : Array (String × Json) := #[]
+  for combo in combos do
+    if collected.size ≥ 12 then break
+    -- execute の引数: fault 定義と同名はサンプル共有、それ以外(時計・他の泉)は
+    -- 組合せの最大 variant で構築(独立にサンプルされる日付の整合 — clock.today)
+    let vmax := combo.foldl (fun a (_, v, _) => max a v) 0
+    let some (eApp, eVals) ← applyWith execC (fun nm ty => do
+        match combo.find? (·.1 == nm) with
+        | some (_, _, x) => pure (some x)
+        | none => buildValue idHeads strCtrF ty vmax)
+      | continue
+    -- execute が成功する入力だけを採用: Except なら ok の構成子、Result 構造体なら error フィールドが none
+    let eRes ← whnf eApp
+    let .const rcn _ := eRes.getAppFn | continue
+    let some (.ctorInfo rci) := env.find? rcn | continue
+    let isOk ← do
+      if rcn == ``Except.ok then pure true
+      else if rcn == ``Except.error then pure false
+      else if isStructure env rci.induct then do
+        let rFields := eRes.getAppArgs.extract rci.numParams eRes.getAppArgs.size
+        let rNames := getStructureFields env rci.induct
+        let mut ok := false
+        for fi in [0:rFields.size] do
+          if toString rNames[fi]! == "error" then
+            if (← whnf rFields[fi]!).getAppFn.isConstOf ``Option.none then ok := true
+        pure ok
+      else pure false
+    unless isOk do continue
+    -- 期待値 = fault 定義の値(障害で中断されたときに観測される状態)
+    let some (fApp, _) ← applyWith fName (fun nm _ =>
+        pure ((combo.find? (·.1 == nm)).map (·.2.2)))
+      | continue
+    let afterJ ← valueToJson (← whnf fApp)
+    -- args(ペイロード・時計)と before(状態)の仕分け(usecase モードと同じ)
+    let mut beforeJ : Option (Json × Name) := none
+    let mut argJs : List (String × Json) := []
+    let mut cmdKey := ""
+    for (nm, ty, a) in eVals do
+      let tyW ← whnf ty
+      let h := match tyW.getAppFn with | .const hn _ => hn | _ => Name.anonymous
+      if roles.get? h == some .repositoryState then
+        beforeJ := some (← valueToJson a, h)
+      else if tyW.isForall || (← hasFunctionField h) then
+        pure ()
+      else
+        let aj ← valueToJson a
+        if roles.get? h == some .command || roles.get? h == some .observation then cmdKey := aj.compress
+        argJs := argJs ++ [(toString nm, aj)]
+    let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
+    -- Port の期待値(契約定理のケースと同じ形): 要求は request の評価、観測は execute の観測引数
+    let portsExtra : List (String × Json) ← match ucPorts.get? dir with
+      | none => pure []
+      | some dep =>
+        let valOf (nm : Name) : Option Expr := (eVals.find? (·.1 == nm)).map (·.2.2)
+        let outcomeJ ← match valOf dep.param with
+          | some o => valueToJson o
+          | none => pure Json.null
+        let some (app, _) ← applyWith (execC.getPrefix ++ `request) (fun nm _ => pure (valOf nm))
+          | throwError "request の引数を execute の引数から埋められません"
+        let r ← whnf app
+        let requestJ ←
+          if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
+          else if r.getAppFn.isConstOf ``Except.error then
+            -- execute が成功する入力で request が拒否するのは固定形（request と execute は同じ validate）の破れ
+            throwError "execute が成功する入力で request が拒否しています(request と execute は同じ validate を通る固定形)"
+          else throwError "request の評価結果が Except の構成子ではありません: {r}"
+        pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
+    let caseJ := Json.mkObj ([("args", Json.mkObj argJs)] ++ portsExtra ++ [
+      ("stateType", Json.str (toString st)), ("before", bj), ("after", afterJ)])
+    unless collected.any (·.2.compress == caseJ.compress) do
+      collected := collected.push (cmdKey, caseJ)
+  -- 選抜: ペイロードごとに 1 件を先に取り、残枠を先頭から埋める(≤4)
+  let mut caseJs : Array Json := #[]
+  let mut seenCmd : Array String := #[]
+  for (ck, cj) in collected do
+    if caseJs.size ≥ 4 then break
+    unless seenCmd.contains ck do
+      seenCmd := seenCmd.push ck
+      caseJs := caseJs.push cj
+  for (_, cj) in collected do
+    if caseJs.size ≥ 4 then break
+    unless caseJs.any (·.compress == cj.compress) do
+      caseJs := caseJs.push cj
+  if caseJs.isEmpty then return none
+  return some (Json.mkObj [
+    ("useCase", Json.str (toString dir)),
+    ("def", Json.str (toString (fName.updatePrefix Name.anonymous))),
+    ("doc", Json.str ((← findDocString? env fName).getD "")),
+    ("portCalls", Json.num portCalls),
+    ("cases", Json.arr caseJs)])
+
 elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
   let rootNs := nsStx.getString.toName
   let outPath := outStx.getString
@@ -1795,531 +2494,23 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         droppedJs := droppedJs.push (dropped "contract" (toString n) "@[contract] は theorem に付ける")
     let contractNames := taggedContracts.filterMap fun (n, ci) =>
       if ci matches .thmInfo _ then some n else none
+    let cx : DeriveCtx := {
+      rootNs, env, ucNs, modOf, roles, idHeads, execByDir, ucPorts,
+      behaviorDefs, judgmentDefs, projDefs, ruleDefs, hasFunctionField, valueBinders, applyWith }
     let mut contractJs : Array Json := #[]
     let mut nonUseCaseContracts : Nat := 0
     for thmName in contractNames do
       try
-        let ci ← getConstInfo thmName
-        let stmt := ci.type.instantiateLevelParams ci.levelParams
-          (ci.levelParams.map fun _ => .zero)
-        -- 事前選別の対象: 結論と、結論の適用に引数として現れない仮定。結論が消費する仮定
-        -- (制約の証明 — 泉の新鮮性など)は主対象の義務で、選別に働かない(searchIn と同じ規則)
-        let view ← forallTelescopeReducing stmt fun xs concl => do
-          let mut parts : Array Expr := #[concl]
-          for x in xs do
-            let ty ← inferType x
-            if (← Meta.isProp ty) && !concl.containsFVar x.fvarId! then parts := parts.push ty
-          pure parts
-        let viewHas (pred : Expr → Bool) : Bool := view.any fun e => (e.find? pred).isSome
-        -- 事前選別: UseCase(execute / validate)に触れる定理は UseCase モード、
-        -- ふるまい(Entity / VO / State の def)に触れる定理はふるまいモード、
-        -- どちらでもなければ対象外(判断関数・Projection — 次段)
-        let touchesExec := viewHas (fun e =>
-          match e with
-          | .const fn _ =>
-            ["execute", "validate"].contains (toString (fn.updatePrefix Name.anonymous)) &&
-              (match modOf fn with
-               | some m => ucNs.isPrefixOf m && m.components.getLast! == `UseCase
-               | none => false)
-          | _ => false)
-        let isBehaviorTarget (e : Expr) : Bool :=
-          match e.getAppFn with
-          | .const fn _ => behaviorDefs.contains fn
-          | _ => false
-        let isJudgmentTarget (e : Expr) : Bool :=
-          match e.getAppFn with
-          | .const fn _ => judgmentDefs.contains fn
-          | _ => false
-        let isProjectionTarget (e : Expr) : Bool :=
-          match e.getAppFn with
-          | .const fn _ => projDefs.contains fn
-          | _ => false
-        let isRuleTarget (e : Expr) : Bool :=
-          match e.getAppFn with
-          | .const fn _ => ruleDefs.contains fn
-          | _ => false
-        -- 優先順位: 射影 → 判断 → UseCase の判断(補助 def)→ ふるまい(射影・判断・補助の定理は
-        -- 結論や仮定に valid・markSending 等のふるまいを含むため、ふるまい判定を後段に置く)
-        let projectionMode := !touchesExec && viewHas isProjectionTarget
-        let judgmentMode := !touchesExec && !projectionMode && viewHas isJudgmentTarget
-        let ruleMode := !touchesExec && !projectionMode && !judgmentMode && viewHas isRuleTarget
-        let behaviorMode := !touchesExec && !projectionMode && !judgmentMode && !ruleMode &&
-          viewHas isBehaviorTarget
-        unless touchesExec || behaviorMode || judgmentMode || projectionMode || ruleMode do
+        match ← deriveContract cx thmName with
+        | .untouched =>
           nonUseCaseContracts := nonUseCaseContracts + 1
           droppedJs := droppedJs.push (dropped "contract" (toString thmName)
             "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する")
-          continue
-        -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
-        let mut core := stmt
-        repeat
-          let core' ← whnf core
-          match core' with
-          | .forallE nm dom body bi =>
-            if bi == .instImplicit then
-              core := body.instantiate1 (← synthInstance dom)
-            else if dom.isSort then
-              core := body.instantiate1 (← binderConst rootNs nm)
-            else break
-          | _ => break
-        -- 残りの binder(値・仮定)を fvar でテレスコープ
-        let cases ← forallTelescopeReducing core fun xs concl => do
-          -- 主対象: UseCase モジュールの execute の適用(仮定 or 結論)
-          let ucPred (nm : String) (e : Expr) : Bool :=
-            match e.getAppFn with
-            | .const fn _ =>
-              (toString (fn.updatePrefix Name.anonymous)) == nm &&
-                (match modOf fn with
-                 | some m => ucNs.isPrefixOf m
-                 | none => false)
-            | _ => false
-          let mut hypIdx : Array Nat := #[]
-          let mut valIdx : Array Nat := #[]
-          for i in [0:xs.size] do
-            let t ← inferType xs[i]!
-            if (← Meta.isProp t) then hypIdx := hypIdx.push i
-            else valIdx := valIdx.push i
-          -- 主対象の探索: 仮定 → 結論の順。UseCase モードは execute を validate より優先
-          -- (execute_invalid の仮定に validate が現れるため)
-          -- 結論の適用に引数として現れる仮定(制約の証明 — 泉の新鮮性など)は主対象の
-          -- 選択器ではなく主対象の義務。その型の中は探さない
-          let searchIn (pred : Expr → Bool) : Elab.TermElabM (Option Expr) := do
-            for i in hypIdx do
-              if concl.containsFVar xs[i]!.fvarId! then continue
-              if let some app := (← inferType xs[i]!).find? pred then return some app
-            pure (concl.find? pred)
-          let primary? ←
-            if behaviorMode then searchIn isBehaviorTarget
-            else if ruleMode then searchIn isRuleTarget
-            else if judgmentMode then do
-              -- 判断定理はケース選択器 — 観測は本番契約面(UseCase の execute)。
-              -- 定理の binder(行の列・パラメータ・鍵)を execute の引数へ割り付け、
-              -- ReadModel / クエリ DTO はフィールド単位で組んで execute の適用を合成する
-              let some japp ← searchIn isJudgmentTarget
-                | throwError "判断の適用が見つかりません"
-              let .const jfn _ := japp.getAppFn | unreachable!
-              let dir := (judgmentDefs.get? jfn).getD Name.anonymous
-              let some execC := execByDir.get? dir
-                | throwError "UseCase {dir} の execute が見つかりません"
-              let valIdxF := valIdx
-              let strCtrJ : IO.Ref Nat ← IO.mkRef 700
-              -- binder の割り付け: 名前+型一致 → 型の一意一致 → なし
-              let matchBinder : Name → Expr → Elab.TermElabM (Option Expr) := fun nm ty => do
-                for j in valIdxF do
-                  let d ← xs[j]!.fvarId!.getDecl
-                  if d.userName == nm && (← isDefEq d.type ty) then return some xs[j]!
-                let mut found : Option Expr := none
-                let mut cnt := 0
-                for j in valIdxF do
-                  if ← isDefEq (← inferType xs[j]!) ty then
-                    found := some xs[j]!
-                    cnt := cnt + 1
-                return if cnt == 1 then found else none
-              let matchHyp : Expr → Elab.TermElabM (Option Expr) := fun ty => do
-                for j in hypIdx do
-                  if ← isDefEq (← inferType xs[j]!) ty then return some xs[j]!
-                return none
-              let fillLeaf : Name → Expr → Elab.TermElabM Expr := fun nm ty => do
-                if let some x ← matchBinder nm ty then return x
-                match ← buildValue idHeads strCtrJ ty 0 with
-                | some v => return v
-                | none => throwError "execute の引数 {nm} を合成できません: {ty}"
-              let fillArg : Name → Expr → Elab.TermElabM Expr := fun nm ty => do
-                if let some x ← matchBinder nm ty then return x
-                let tyW ← whnf ty
-                if let .const tn _ := tyW.getAppFn then
-                  if (roles.get? tn == some .readModel || roles.get? tn == some .viewDto) &&
-                      isStructure env tn then
-                    let ctor := getStructureCtor env tn
-                    let ctorCi ← getConstInfo ctor.name
-                    let lvls := ctorCi.levelParams.map fun _ => Level.zero
-                    let mut cty := ctorCi.type.instantiateLevelParams ctorCi.levelParams lvls
-                    let mut cargs : Array Expr := #[]
-                    -- 構造体の型パラメータは適用済みの型から写す
-                    for a in tyW.getAppArgs do
-                      let .forallE _ _ body _ ← whnf cty | break
-                      cargs := cargs.push a
-                      cty := body.instantiate1 a
-                    repeat
-                      match ← whnf cty with
-                      | .forallE fnm fdom fbody bi =>
-                        let v ← if bi == .instImplicit then synthInstance fdom
-                          else if ← Meta.isProp fdom then
-                            -- 制約: 定理が同じ命題を仮定に持てばそれを使い、無ければ decide の証明
-                            match ← matchHyp fdom with
-                            | some h => pure h
-                            | none =>
-                              match ← decideProp fdom with
-                              | some true => mkDecideProof fdom
-                              | _ => throwError "制約 {fnm} を満たす fixture を組めません"
-                          else fillLeaf fnm fdom
-                        cargs := cargs.push v
-                        cty := fbody.instantiate1 v
-                      | _ => break
-                    return mkAppN (mkConst ctor.name lvls) cargs
-                fillLeaf nm ty
-              let execCi ← getConstInfo execC
-              let eLvls := execCi.levelParams.map fun _ => Level.zero
-              let mut ety := execCi.type.instantiateLevelParams execCi.levelParams eLvls
-              let mut eArgs : Array Expr := #[]
-              repeat
-                match ← whnf ety with
-                | .forallE nm dom body bi =>
-                  let v ←
-                    if bi == .instImplicit then synthInstance dom
-                    else if dom.isSort then binderConst rootNs nm
-                    else if ← Meta.isProp dom then
-                      match ← decideProp dom with
-                      | some true => mkDecideProof dom
-                      | _ => throwError "execute の制約 {nm} を満たす引数を組めません"
-                    else fillArg nm dom
-                  eArgs := eArgs.push v
-                  ety := body.instantiate1 v
-                | _ => break
-              pure (some (mkAppN (mkConst execC eLvls) eArgs))
-            else if projectionMode then searchIn isProjectionTarget
-            else do
-              match ← searchIn (ucPred "execute") with
-              | some a => pure (some a)
-              | none => searchIn (ucPred "validate")
-          let some primary := primary?
-            | throwError "主対象(execute / validate / ふるまい)の適用が見つかりません"
-          let .const execName _ := primary.getAppFn | unreachable!
-          -- 主対象の明示引数: (名前, binder の fvar か / Id 導出か)
-          let execArgs := primary.getAppArgs
-          let (argNames, argKinds) ← forallTelescopeReducing
-              ((← getConstInfo execName).type) fun ys _ => do
-            let mut names : Array Name := #[]
-            let mut kinds : Array String := #[]   -- "type" | "inst" | "value"
-            let mut vi := 0
-            for y in ys do
-              let d ← y.fvarId!.getDecl
-              let isConstraint ← Meta.isProp d.type
-              let kind := if d.binderInfo == .instImplicit then "inst"
-                else if d.type.isSort then "type"
-                else if isConstraint then "prop" else "value"
-              -- 無名 binder は interface 側と同じ規約(arg<値引数の序数>)で消毒
-              let nm := if kind == "value" then
-                  (if d.userName.hasMacroScopes then Name.mkSimple s!"arg{vi}" else d.userName)
-                else d.userName
-              if kind == "value" then vi := vi + 1
-              names := names.push nm
-              kinds := kinds.push kind
-            pure (names, kinds)
-          -- 束縛の役割分け: パターン束縛(仮定 Eq の右辺に裸で現れる)→ mvar、
-          -- 主対象の引数に裸で現れ型が Id のみ → 泉導出、それ以外の値 → サンプル
-          let mut patternBound : Array Nat := #[]
-          for i in hypIdx do
-            let t ← inferType xs[i]!
-            if let some (_, _, rhs) := t.eq? then
-              -- パターン(ctor 適用)の右辺だけが束縛する(fs.length 等の関数適用は対象外)
-              let isCtorApp ← match rhs.getAppFn with
-                | .const cn _ => pure ((env.find? cn) matches some (.ctorInfo _))
-                | _ => pure false
-              if isCtorApp then
-                for j in valIdx do
-                  if rhs.containsFVar xs[j]!.fvarId! then
-                    unless patternBound.contains j do patternBound := patternBound.push j
-          let mut derived : Array Nat := #[]
-          for k in [0:execArgs.size] do
-            if argKinds[k]! == "value" then
-              let a := execArgs[k]!
-              if a.isFVar then
-                if let some j := xs.findIdx? (· == a) then
-                  if (← isIdOnly idHeads (← inferType a)) then
-                    unless patternBound.contains j do derived := derived.push j
-          -- サンプルするのは主対象の適用に現れる binder だけ。
-          -- それ以外(結論だけに現れる binder・∀ の b 等)は mvar
-          let sampled := valIdx.filter fun j =>
-            !patternBound.contains j && !derived.contains j &&
-              primary.containsFVar xs[j]!.fvarId!
-          -- 泉の形(shape): 主対象の引数のうち、Id のみでない List 型の値
-          let mut shapeIdx : Option Nat := none
-          for k in [0:execArgs.size] do
-            if argKinds[k]! == "value" && execArgs[k]!.isFVar then
-              let a := execArgs[k]!
-              let ta ← whnf (← inferType a)
-              if ta.getAppFn.isConstOf ``List && !(← isIdOnly idHeads ta) then
-                shapeIdx := xs.findIdx? (· == a)
-          -- サンプル候補(binder ごとのプール)
-          let strCtr : IO.Ref Nat ← IO.mkRef 0
-          let mut pools : Array (Nat × Array Expr) := #[]
-          for j in sampled do
-            let ty ← inferType xs[j]!
-            let tyW ← whnf ty
-            let variants : List Nat ←
-              if tyW.getAppFn.isConstOf ``List then pure [0, 1, 2]
-              else if tyW.getAppFn.isConstOf ``Option then pure [0, 1]
-              else match tyW.getAppFn with
-                | .const tn _ => do
-                  match (← getEnv).find? tn with
-                  | some (.inductInfo ii) =>
-                    -- structure は通常+境界(リスト空)+別 ctor+混在 2 種+空文字列+
-                    -- 境界×第 1 構成子の 7 variant(5 = 空文字列の境界 —「空でない」
-                    -- 制約の失敗枝、6 = 空リスト+第 1 構成子 — noFolders×既存作者等)。
-                    -- ポート束(関数フィールド — 構築が variant に依らない)は 1 つ
-                    if (← hasFunctionField tn) then pure [0]
-                    else if isStructure (← getEnv) tn then pure [0, 1, 2, 3, 4, 5, 6]
-                    else pure (List.range ii.ctors.length)
-                  | _ => pure [0]
-                | _ => pure [0]
-            let mut pool : Array Expr := #[]
-            for v in variants do
-              strCtr.set (j * 3 + v)   -- 文字列の一意性(組合せに依らず決定的)
-              -- List の複合 variant 2 は混在リスト [通常, 境界](buildValue の variant 3)
-              let bv := if v == 2 && tyW.getAppFn.isConstOf ``List then 3 else v
-              if let some x ← buildValue idHeads strCtr ty bv then pool := pool.push x
-            if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
-            pools := pools.push (j, pool)
-          -- 組合せ列挙(積、上限つき)
-          let combos := cartesianTake (pools.map fun (j, pool) => pool.map ((j, ·))) 64
-          let mut caseJs : Array Json := #[]
-          let mut seenCase : Array String := #[]
-          let mut whys : Array String := #[s!"組合せ {combos.size}"]
-          for combo in combos do
-            if caseJs.size ≥ 4 then break
-            -- 2 パス: 泉値を出力の出現順の連番へ正規化
-            let mut preset : List Nat := (List.range 20).map (100 + ·)
-            for _pass in [0:2] do
-              let queue : IO.Ref (List Nat) ← IO.mkRef preset
-              -- 代入の構築(サンプル → 泉導出 → パターンは mvar)
-              let mut subst : Array (Option Expr) := xs.map fun _ => none
-              for (j, v) in combo do subst := subst.set! j (some v)
-              let shapeVal := shapeIdx.bind fun si => subst[si]!
-              let mut ok := true
-              for j in derived do
-                match ← deriveWellIds idHeads queue (← inferType xs[j]!) shapeVal with
-                | some v => subst := subst.set! j (some v)
-                | none => ok := false
-              unless ok do
-                whys := whys.push "泉導出不可"
-                break
-              for j in valIdx do
-                if subst[j]!.isNone then
-                  let mv ← mkFreshExprMVar (some (← inferType xs[j]!))
-                  subst := subst.set! j (some mv)
-              -- 仮定(Prop)の binder は代入対象外 — 自分自身で埋める(置換の no-op。
-              -- get! だと none で panic ログが出る — 挙動は同じでもノイズになる)
-              let mut vals : Array Expr := #[]
-              for idx in [0:subst.size] do
-                vals := vals.push ((subst[idx]!).getD xs[idx]!)
-              let inst (e : Expr) : Expr := e.replaceFVars xs vals
-              -- 仮定の検査: Eq(mvar あり)は左辺評価+単一化、他は decide
-              let mut keep := true
-              let mut provenIdx : Array Nat := #[]
-              for i in hypIdx do
-                let h ← instantiateMVars (inst (← inferType xs[i]!))
-                if h.hasExprMVar then
-                  if let some (_, lhs, rhs) := h.eq? then
-                    if !lhs.hasExprMVar then
-                      unless (← withTransparency .all <| isDefEq lhs rhs) do
-                        -- 否定形(結論 False)の定理では不一致が主張そのもの —
-                        -- その入力での失敗ケースとして採用する
-                        if concl.isConstOf ``False then pure ()
-                        else
-                          whys := whys.push "パターン不一致"
-                          keep := false
-                    else
-                      whys := whys.push "左辺に未束縛の変数"
-                      keep := false
-                  else
-                    -- 結論構造の残滓(∀ b ∈ notes 等)— 検査せず許容。
-                    -- テストの主張はオラクル一致なので健全性は保たれる
-                    pure ()
-                else
-                  match ← decideProp h with
-                  | some true => provenIdx := provenIdx.push i
-                  | some false =>
-                    whys := whys.push "仮定が偽"
-                    keep := false
-                  | none =>
-                    whys := whys.push s!"decide 不可: {h}"
-                    keep := false
-              unless keep do break
-              -- 真と決まった仮定は証明項に置き換える — 主対象が制約の証明(泉の新鮮性など)を
-              -- 引数に取るとき、評価する適用が閉じた項になる
-              for i in provenIdx do
-                vals := vals.set! i (← mkDecideProof (← instantiateMVars (inst (← inferType xs[i]!))))
-              let inst (e : Expr) : Expr := e.replaceFVars xs vals
-              -- オラクル評価と泉の正規化
-              let pApp ← instantiateMVars (inst primary)   -- 評価は解釈側の whnf(頭だけ)+コンパイル実行が担う
-              -- 主対象の引数に裸で現れる Id 型の binder は泉から導出し、期待値に現れた泉値を出現順の連番に正規化する。
-              -- 状態遷移契約は採番の種が before 状態(ids.next)に入るので derived が空になり素通りする
-              let (appear, canonical) ←
-                if derived.isEmpty then pure (([] : List Nat), ([] : List Nat)) else do
-                  let expectedJ ← valueToJson pApp
-                  let allocated := preset.take 20
-                  let ap := (scanWellNums allocated expectedJ #[]).toList
-                  let unused := allocated.filter (!ap.contains ·)
-                  pure (ap, ap ++ unused)
-              if canonical == preset.take canonical.length || _pass == 1 then
-               try
-                -- 期待値の解釈(状態遷移契約):
-                --   更新系: (before, after, error) — テストは fromState / toState で観測
-                --   参照系: (readModel, ok / error) — rm は fixture、期待は View 列
-                let headOf (t : Expr) : Name :=
-                  match t.getAppFn with | .const n _ => n | _ => Name.anonymous
-                -- 主対象の引数から before(State)/ readModel と payload 引数を仕分け
-                let mut beforeJ : Option (Json × Name) := none   -- (値, State 型名)
-                let mut rmJ : Option (Json × Name) := none
-                let mut argJs : List (String × Json) := []
-                for k in [0:execArgs.size] do
-                  if argKinds[k]! == "value" then
-                    let a := inst execArgs[k]!
-                    let aty ← whnf (← inferType a)
-                    let h := headOf aty
-                    let pureMode := behaviorMode || projectionMode || ruleMode
-                    if !pureMode && roles.get? h == some .repositoryState then
-                      beforeJ := some (← valueToJson a, h)
-                    else if !pureMode && roles.get? h == some .readModel then
-                      rmJ := some (← valueToJson a, h)
-                    else if aty.isForall || (← hasFunctionField h) then
-                      pure ()   -- ポート(埋め込み・鍵)は配線 — 直列化しない
-                    else
-                      argJs := argJs ++ [(toString argNames[k]!, ← valueToJson a)]
-                -- 期待値の形で純値形(ふるまい)/ 遷移形 / 値形を判定
-                let expW ← whnf pApp
-                let expHead := headOf (← whnf (← inferType expW))
-                -- Port の期待値: 要求は Lean の request を同じ引数で評価した値(validate が主対象なら
-                -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
-                let portsExtra : List (String × Json) ← do
-                  if behaviorMode || projectionMode || judgmentMode || ruleMode then pure [] else
-                  let dir := ucDir ((modOf execName).getD Name.anonymous)
-                  match ucPorts.get? dir with
-                  | none => pure []
-                  | some dep =>
-                    let closedArgs := pApp.getAppArgs
-                    let argOf (nm : Name) : Option Expr :=
-                      (List.range (min argNames.size closedArgs.size)).findSome? fun k =>
-                        if argNames[k]! == nm then some closedArgs[k]! else none
-                    let outcomeJ ← match argOf dep.param with
-                      | some o => valueToJson o
-                      | none => pure Json.null
-                    let requestJ ←
-                      if (execName.updatePrefix Name.anonymous) != `execute then pure Json.null else do
-                        let reqC := execName.getPrefix ++ `request
-                        let some (app, _) ← applyWith reqC (fun nm _ => pure (argOf nm))
-                          | throwError "request の引数を execute の引数から埋められません(request の引数名は execute のものと揃える)"
-                        let r ← whnf app
-                        if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
-                        else if r.getAppFn.isConstOf ``Except.error then pure Json.null
-                        else throwError "request の評価結果が Except の構成子ではありません: {r}"
-                    pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
-                let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
-                if behaviorMode || ruleMode then
-                  -- ふるまい・UseCase の判断: 期待値はオラクル値そのもの(観測の等式は全値一致に包含)
-                  caseFields := caseFields ++ [("kind", Json.str "pure"),
-                    ("ok", ← valueToJson expW)]
-                else if projectionMode then
-                  -- 射影: DDL テストのケース(スキーマ抽出が Lean の射影を再現するか)
-                  caseFields := caseFields ++ [("kind", Json.str "projection"),
-                    ("ok", ← valueToJson expW)]
-                else if roles.get? expHead == some .repositoryState then
-                  -- 全域の状態遷移(unlike)
-                  let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-                  caseFields := caseFields ++ transitionFields st bj (← valueToJson expW) Json.null
-                else if expW.getAppFn.isConstOf ``Except.ok ||
-                    expW.getAppFn.isConstOf ``Except.error then
-                  let payload := expW.getAppArgs[2]!
-                  let isOk := expW.getAppFn.isConstOf ``Except.ok
-                  let pty ← whnf (← inferType payload)
-                  if isOk && roles.get? (headOf pty) == some .repositoryState then
-                    -- Except E State(like / rename 系)の成功
-                    let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-                    caseFields := caseFields ++ transitionFields st bj (← valueToJson payload) Json.null
-                  else if !isOk && beforeJ.isSome then
-                    -- Except の失敗: 状態は変わらない(after = before)
-                    let some (bj, st) := beforeJ | unreachable!
-                    caseFields := caseFields ++ transitionFields st bj bj (← valueToJson payload)
-                  else if isOk && beforeJ.isSome then
-                    -- validate の成功 — 状態は一切変わらない。
-                    -- validate は「解決の成果物」(作用対象の
-                    -- 集約ルート)を返す — 成果物が Entity / 集約ルートなら ok に
-                    -- 焼き込む(テストは返り値も観測で突き合わせる)。Unit のまま
-                    -- の validate(save・参照系)は従来どおり ok なし
-                    let some (bj, st) := beforeJ | unreachable!
-                    let pRole := roles.get? (headOf pty)
-                    let okExtra ←
-                      if pRole == some .aggregateRoot || pRole == some .entity ||
-                          pRole == some .viewDto then
-                        pure [("ok", ← valueToJson payload)]
-                      else pure []
-                    caseFields := caseFields ++ transitionFields st bj bj Json.null ++ okExtra
-                  else
-                    -- 参照系(値形): ok = View 列 / error = QueryError
-                    let some (rj, rmT) := rmJ | throwError "ReadModel 引数が見つかりません"
-                    -- 判断モードの空振り防止: 合成した execute が validate の
-                    -- 関門(認可等)で失敗する組合せは、定理の語る判断を一度も観測しない —
-                    -- 定理名を冠した空テストを出さない(採用は成功する組合せだけ)
-                    if judgmentMode && !isOk then
-                      throwError "判断の関門(validate)で失敗する組合せ — 判断を観測しないため不採用"
-                    let payloadJ ← valueToJson payload
-                    caseFields := caseFields ++ [("kind", Json.str "value"),
-                      ("readModelType", Json.str (toString rmT)), ("readModel", rj),
-                      (if isOk then ("ok", payloadJ) else ("error", payloadJ))]
-                else
-                  -- Result 構造体(save): after / error フィールドを読む
-                  let .const dcn _ := expW.getAppFn
-                    | throwError "期待値が ctor 正規形ではありません"
-                  let some (.ctorInfo dci) := env.find? dcn
-                    | throwError "期待値が ctor ではありません"
-                  let dArgs := expW.getAppArgs
-                  let dFields := dArgs.extract dci.numParams dArgs.size
-                  let fnames := getStructureFields env dci.induct
-                  let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-                  let mut afterJ : Json := Json.null
-                  let mut errJ : Json := Json.null
-                  for fi in [0:dFields.size] do
-                    let fn := toString fnames[fi]!
-                    if fn == "after" then afterJ ← valueToJson dFields[fi]!
-                    else if fn == "error" then errJ ← valueToJson dFields[fi]!
-                  caseFields := caseFields ++ transitionFields st bj afterJ errJ
-                let caseJ := Json.mkObj caseFields
-                let key := caseJ.compress
-                unless seenCase.contains key do
-                  seenCase := seenCase.push key
-                  caseJs := caseJs.push caseJ
-                break
-               catch ex =>
-                whys := whys.push s!"解釈不可: {← ex.toMessageData.toString}"
-                break
-              else
-                -- 2 パス目: 割当 i(旧値 100+i)へ「出現順の連番 or 未使用の退避値」を与える
-                preset := (List.range 20).map fun i =>
-                  match appear.idxOf? (100 + i) with
-                  | some k => 100 + k
-                  | none => 900 + i
-          let methodName := toString (execName.updatePrefix Name.anonymous)
-          let groupKey :=
-            if behaviorMode then toString ((behaviorDefs.get? execName).getD Name.anonymous)
-            else if ruleMode then (ruleDefs.get? execName).getD ""
-            else if projectionMode then
-              toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).1)
-            else toString (ucDir ((modOf execName).getD Name.anonymous))
-          let rowTy :=
-            if projectionMode then
-              toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).2)
-            else ""
-          pure ((groupKey, methodName, rowTy, caseJs, whys) :
-            String × String × String × Array Json × Array String)
-        let (modLast, methodName, rowTy, caseJs, whys) := cases
-        if caseJs.isEmpty then
+        | .noCases whys =>
           logInfo m!"lean2kotlin: 契約定理 {thmName}: 有効なケースを演繹できませんでした({whys.toList.eraseDups})"
           droppedJs := droppedJs.push (dropped "contract" (toString thmName)
             s!"有効なケースを演繹できない({", ".intercalate whys.toList.eraseDups})")
-        else
-          let target := if behaviorMode then "behaviors"
-            else if ruleMode then "rules"
-            else if projectionMode then "projection"
-            else "usecase"
-          let extra := if projectionMode then [("rowType", Json.str rowTy)] else []
-          contractJs := contractJs.push (Json.mkObj ([
-            ("target", Json.str target),
-            ("useCase", Json.str modLast),
-            ("method", Json.str methodName)] ++ extra ++ [
-            ("theorem", Json.str (toString (thmName.updatePrefix Name.anonymous))),
-            ("doc", Json.str ((← findDocString? env thmName).getD "")),
-            ("cases", Json.arr caseJs)]))
+        | .derived c => contractJs := contractJs.push c
       catch e =>
         logInfo m!"lean2kotlin: 契約定理 {thmName} を翻訳できません: {← e.toMessageData.toString}"
         droppedJs := droppedJs.push (dropped "contract" (toString thmName)
@@ -2363,135 +2554,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     let mut faultJs : Array Json := #[]
     for fName in faultNames do
       try
-        let some fMod := modOf fName
-          | throwError "在住モジュールを特定できません"
-        unless ucNs.isPrefixOf fMod && fMod.components.getLast! == `UseCase do
-          throwError "UseCase ディレクトリ在住ではありません: {fMod}"
-        let dir := ucDir fMod
-        let some execC := execByDir.get? dir
-          | throwError "UseCase {dir} の execute が見つかりません"
-        let fVals ← valueBinders fName
-        -- 消費位置: Port を使う UseCase の障害契約は、観測(Outcome)を引数に取るかどうかで
-        -- 「外部を呼ぶ前の中断」(0)/「応答を得た後の中断」(1)を宣言する(観測が無い中断点に観測は存在しない)
-        let portCalls : Nat ← match ucPorts.get? dir with
-          | none => pure 0
-          | some _ => do
-            let takesOutcome ← fVals.anyM fun (_, ty) => do
-              match (← whnf ty).getAppFn with
-              | .const h _ => pure (roles.get? h == some .portOutcome)
-              | _ => pure false
-            pure (if takesOutcome then 1 else 0)
-        -- サンプルのプール(fault 定義の値引数から。ポート束は構築が variant 非依存)
-        let strCtrF : IO.Ref Nat ← IO.mkRef 800
-        let mut pools : Array (Name × Array (Nat × Expr)) := #[]
-        for (nm, ty) in fVals do
-          let tyW ← whnf ty
-          let variants : List Nat ← match tyW.getAppFn with
-            | .const tn _ =>
-              if (← hasFunctionField tn) then pure [0]
-              else if isStructure env tn then pure [0, 1, 2, 3, 4, 5, 6]
-              else pure [0]
-            | _ => pure [0]
-          let mut pool : Array (Nat × Expr) := #[]
-          for v in variants do
-            if let some x ← buildValue idHeads strCtrF ty v then pool := pool.push (v, x)
-          if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
-          pools := pools.push (nm, pool)
-        let combos := cartesianTake (pools.map fun (nm, pool) => pool.map ((nm, ·))) 64
-        -- 有効ケースの収集(execute 成功のみ)→ ペイロードの多様性で ≤4 に選抜
-        let mut collected : Array (String × Json) := #[]
-        for combo in combos do
-          if collected.size ≥ 12 then break
-          -- execute の引数: fault 定義と同名はサンプル共有、それ以外(時計・他の泉)は
-          -- 組合せの最大 variant で構築(独立にサンプルされる日付の整合 — clock.today)
-          let vmax := combo.foldl (fun a (_, v, _) => max a v) 0
-          let some (eApp, eVals) ← applyWith execC (fun nm ty => do
-              match combo.find? (·.1 == nm) with
-              | some (_, _, x) => pure (some x)
-              | none => buildValue idHeads strCtrF ty vmax)
-            | continue
-          -- execute が成功する入力だけを採用: Except なら ok の構成子、Result 構造体なら error フィールドが none
-          let eRes ← whnf eApp
-          let .const rcn _ := eRes.getAppFn | continue
-          let some (.ctorInfo rci) := env.find? rcn | continue
-          let isOk ← do
-            if rcn == ``Except.ok then pure true
-            else if rcn == ``Except.error then pure false
-            else if isStructure env rci.induct then do
-              let rFields := eRes.getAppArgs.extract rci.numParams eRes.getAppArgs.size
-              let rNames := getStructureFields env rci.induct
-              let mut ok := false
-              for fi in [0:rFields.size] do
-                if toString rNames[fi]! == "error" then
-                  if (← whnf rFields[fi]!).getAppFn.isConstOf ``Option.none then ok := true
-              pure ok
-            else pure false
-          unless isOk do continue
-          -- 期待値 = fault 定義の値(障害で中断されたときに観測される状態)
-          let some (fApp, _) ← applyWith fName (fun nm _ =>
-              pure ((combo.find? (·.1 == nm)).map (·.2.2)))
-            | continue
-          let afterJ ← valueToJson (← whnf fApp)
-          -- args(ペイロード・時計)と before(状態)の仕分け(usecase モードと同じ)
-          let mut beforeJ : Option (Json × Name) := none
-          let mut argJs : List (String × Json) := []
-          let mut cmdKey := ""
-          for (nm, ty, a) in eVals do
-            let tyW ← whnf ty
-            let h := match tyW.getAppFn with | .const hn _ => hn | _ => Name.anonymous
-            if roles.get? h == some .repositoryState then
-              beforeJ := some (← valueToJson a, h)
-            else if tyW.isForall || (← hasFunctionField h) then
-              pure ()
-            else
-              let aj ← valueToJson a
-              if roles.get? h == some .command || roles.get? h == some .observation then cmdKey := aj.compress
-              argJs := argJs ++ [(toString nm, aj)]
-          let some (bj, st) := beforeJ | throwError "before 状態の引数が見つかりません"
-          -- Port の期待値(契約定理のケースと同じ形): 要求は request の評価、観測は execute の観測引数
-          let portsExtra : List (String × Json) ← match ucPorts.get? dir with
-            | none => pure []
-            | some dep =>
-              let valOf (nm : Name) : Option Expr := (eVals.find? (·.1 == nm)).map (·.2.2)
-              let outcomeJ ← match valOf dep.param with
-                | some o => valueToJson o
-                | none => pure Json.null
-              let some (app, _) ← applyWith (execC.getPrefix ++ `request) (fun nm _ => pure (valOf nm))
-                | throwError "request の引数を execute の引数から埋められません"
-              let r ← whnf app
-              let requestJ ←
-                if r.getAppFn.isConstOf ``Except.ok then valueToJson r.getAppArgs[2]!
-                else if r.getAppFn.isConstOf ``Except.error then
-                  -- execute が成功する入力で request が拒否するのは固定形（request と execute は同じ validate）の破れ
-                  throwError "execute が成功する入力で request が拒否しています(request と execute は同じ validate を通る固定形)"
-                else throwError "request の評価結果が Except の構成子ではありません: {r}"
-              pure [("ports", Json.arr #[portCaseJson dep requestJ outcomeJ])]
-          let caseJ := Json.mkObj ([("args", Json.mkObj argJs)] ++ portsExtra ++ [
-            ("stateType", Json.str (toString st)), ("before", bj), ("after", afterJ)])
-          unless collected.any (·.2.compress == caseJ.compress) do
-            collected := collected.push (cmdKey, caseJ)
-        -- 選抜: ペイロードごとに 1 件を先に取り、残枠を先頭から埋める(≤4)
-        let mut caseJs : Array Json := #[]
-        let mut seenCmd : Array String := #[]
-        for (ck, cj) in collected do
-          if caseJs.size ≥ 4 then break
-          unless seenCmd.contains ck do
-            seenCmd := seenCmd.push ck
-            caseJs := caseJs.push cj
-        for (_, cj) in collected do
-          if caseJs.size ≥ 4 then break
-          unless caseJs.any (·.compress == cj.compress) do
-            caseJs := caseJs.push cj
-        if caseJs.isEmpty then
+        match ← deriveFault cx fName with
+        | none =>
           logInfo m!"lean2kotlin: 障害契約 {fName}: 有効なケース(execute が成功する入力)を演繹できませんでした"
           droppedJs := droppedJs.push (dropped "faultContract" (toString fName) "有効なケース(execute が成功する入力)を演繹できない")
-        else
-          faultJs := faultJs.push (Json.mkObj [
-            ("useCase", Json.str (toString dir)),
-            ("def", Json.str (toString (fName.updatePrefix Name.anonymous))),
-            ("doc", Json.str ((← findDocString? env fName).getD "")),
-            ("portCalls", Json.num portCalls),
-            ("cases", Json.arr caseJs)])
+        | some f => faultJs := faultJs.push f
       catch e =>
         logInfo m!"lean2kotlin: 障害契約 {fName} を翻訳できません: {← e.toMessageData.toString}"
         droppedJs := droppedJs.push (dropped "faultContract" (toString fName)
