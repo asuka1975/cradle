@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadConfig, findProjectRoot, matchesAny, rel, git, cradleScript } from "./lib.mjs";
+import { unslopErrorSummary } from "./unslop-report.mjs";
 
 const mode = process.argv[2];
 let payload = {};
@@ -127,10 +128,9 @@ if (mode === "stop") {
   let result = null;
   try { result = JSON.parse(r.stdout || "null"); } catch { allow(); }
   if (!result || !result.findings?.length) allow();
-  const errors = result.findings.filter(f => f.severity === "error");
-  if (!errors.length) allow();
-  const lines = errors.slice(0, 15).map(f => `- ${f.file}:${f.line} [${f.rule}] ${f.message}`).join("\n");
-  out({ decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が ${errors.length} 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}${errors.length > 15 ? "\n…（cradle unslop --diff で全件）" : ""}` });
+  const reason = unslopErrorSummary(result.findings, { lead: (n) => `作業ツリーの差分に unslop 違反（error）が ${n} 件あります。止まる前に直すこと（規約は unslop と comments）:`, full: "cradle unslop --diff" });
+  if (reason === null) allow();
+  out({ decision: "block", reason });
 }
 
 allow();

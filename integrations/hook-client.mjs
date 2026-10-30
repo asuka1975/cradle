@@ -1,6 +1,7 @@
 // 既存CLIを無変更で呼び出す。判定規則はこのアダプターに複製しない。
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { unslopErrorSummary } from "../.apm/skills/cradle/scripts/unslop-report.mjs";
 
 const scripts = new URL("../.apm/skills/cradle/scripts/", import.meta.url);
 
@@ -38,8 +39,5 @@ export function reminder(result) {
 // Piでは未初期化のGitリポジトリでも検査するため、既存CLIの--allを利用する。
 export async function checkAll(root) {
   const result = await run("unslop-lint.mjs", ["--all", "--json"], root);
-  const errors = result?.findings?.filter(f => f.severity === "error") ?? [];
-  if (!errors.length) return null;
-  const lines = errors.slice(0, 15).map(f => `- ${f.file}:${f.line} [${f.rule}] ${f.message}`);
-  return `unslop --all の検査対象にerrorが ${errors.length} 件あります。終了前に修正してください。\n${lines.join("\n")}${errors.length > 15 ? "\n…（cradle unslop --all で全件）" : ""}`;
+  return unslopErrorSummary(result?.findings ?? [], { lead: (n) => `unslop --all の検査対象にerrorが ${n} 件あります。終了前に修正してください。`, full: "cradle unslop --all" });
 }
