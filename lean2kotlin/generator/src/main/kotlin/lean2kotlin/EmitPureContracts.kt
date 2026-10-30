@@ -43,9 +43,9 @@ internal fun EmitTests.emitRulesTheoremTest(s: IrService, contracts: List<IrCont
 					}
 					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${c.method} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
 				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
 				sb.append("\t\t\trules().${ident(c.method)}(" +
 					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
@@ -138,9 +138,9 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 					}
 					"${decapitalizeFirst(td.kotlin)}($dflt)"
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${c.method} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
 				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
 				sb.append("\t\t\t$receiver.${ident(c.method)}(" +
 					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
@@ -206,9 +206,9 @@ internal fun EmitTests.emitBehaviorsTheoremTest(subject: String, contracts: List
 					}
 					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${c.method} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
 				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
 				sb.append("\t\t\tbehaviors().${ident(c.method)}(" +
 					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")

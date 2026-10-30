@@ -161,10 +161,6 @@ class EmitMain(
 		}
 	}
 
-	/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
-	private fun docLine(doc: String): String? =
-		doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-
 	/**
 	 * 本番(main)面から参照が到達する型の集合。種は main に出る型の形
 	 * (フィールド・ctor 引数)と、main に出る interface(固定形フィルタ後の
@@ -324,7 +320,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 					val si = m.params.indexOfFirst { isSubjectParam(it, td) }
 					val ps = m.params.filterIndexed { idx, _ -> idx != si }
 						.joinToString(", ") { "${ident(it.name)}: ${k.typeRef(it.type)}" }
-					val doc = docLine(m.doc)?.let { "\t/** $it */\n" } ?: ""
+					val doc = kdocLine(m.doc)
 					"\n$doc\tfun ${ident(m.name)}($ps): ${k.typeRef(m.ret)}"
 				}
 				"${docFor(td)}\ninterface ${td.kotlin} {\n$props$methods\n}"
@@ -412,8 +408,7 @@ interface ${rootK}Repository {$ops
 	private fun actorPortBody(td: IrTypeDef): String {
 		val shape = td.shape as? IrShape.Structure
 			?: error("${td.lean}: actorPort は structure である必要があります")
-		val docBody = td.doc.trim().lineSequence()
-			.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+		val docBody = kdocBody(td.doc)
 		val params = shape.fields.joinToString("\n") { f ->
 			"\tval ${ident(f.name)}: ${k.typeRef((f.type as? IrType.WithDefault)?.of ?: f.type)},"
 		}
@@ -440,8 +435,7 @@ interface ${rootK}Repository {$ops
 	/** 泉ごとの IdGenerator ポート。KDoc には Lean 側の生成器状態の docstring を
 	    全文写す — 泉の単調性(保存順の担い手)のような法則の所在が実装者に見える。 */
 	private fun fountainPortBody(p: Kotlinize.FountainPort): String {
-		val docBody = p.stateTd.doc.trim().lineSequence()
-			.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+		val docBody = kdocBody(p.stateTd.doc)
 		return "/**\n" +
 			" * Lean: `${p.stateTd.lean}` — 泉(同一性の供給)の観測モデルに対応する\n" +
 			" * IdGenerator ポート(命名規約 `<X>State ↔ <X>`)。\n" +
@@ -462,7 +456,7 @@ interface ${rootK}Repository {$ops
 	    外部の呼び方(HTTP・SDK・認証・再試行)は Adapter の持ち物。 */
 	private fun portBody(p: IrPort): String {
 		val ops = p.operations.joinToString("") { op ->
-			val doc = docLine(op.doc)?.let { "\t/** $it */\n" } ?: ""
+			val doc = kdocLine(op.doc)
 			"\n$doc\tfun ${ident(op.method)}(request: ${k.name(op.request)}): ${k.name(op.outcome)}"
 		}
 		return "/**\n" +
@@ -519,7 +513,7 @@ interface ${rootK}Repository {$ops
 				"\t/**\n$head\t * 本番では execute の内部第一段として呼ばれる(実装は「execute は\n" +
 					"\t * validate を呼ぶ」形に一本化する — 分岐条件を再実装しない)。\n" +
 					"\t * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。\n\t */\n"
-			} else docLine(m.doc)?.let { "\t/** $it */\n" } ?: ""
+			} else kdocLine(m.doc)
 			"$doc\tfun ${ident(m.name)}($ps): ${k.typeRef(m.ret)}"
 		}
 		val plumbingDoc = if (dropped)

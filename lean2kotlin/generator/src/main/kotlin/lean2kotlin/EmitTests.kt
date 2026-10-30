@@ -99,10 +99,6 @@ class EmitTests(
 		}
 	})
 
-	/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
-	internal fun docLine(doc: String): String? =
-		doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-
 	/**
 	 * @[contract] 契約定理から演繹された UseCase パラメトリックテスト。
 	 * 定理 1 本 = テストファミリ 1 本。入力は抽出時に定理の量化変数からサンプル

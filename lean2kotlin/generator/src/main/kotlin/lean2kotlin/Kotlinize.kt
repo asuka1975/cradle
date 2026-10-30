@@ -41,6 +41,21 @@ fun stringLit(s: String): String {
 	return sb.append('"').toString()
 }
 
+/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
+internal fun docLine(doc: String): String? =
+	doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+
+/** メンバ 1 つ分の 1 行 KDoc。doc が空なら何も出さない。 */
+internal fun kdocLine(doc: String): String = docLine(doc)?.let { "\t/** $it */\n" } ?: ""
+
+/** doc の全文を KDoc の本文(行ごとに ` * `)にする。 */
+internal fun kdocBody(doc: String): String = doc.trim().lineSequence()
+	.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+
+/** 定理由来のケースのテスト名。利用者のテストレポートに出る名前なので文言を変えない。 */
+internal fun theoremTestName(method: String, theorem: String, i: Int): String =
+	"$method は定理 $theorem を再現する(${i + 1})"
+
 /** ファイル単位の参照収集の結果(インポート計算用)。 */
 data class Collected(val refs: Set<String>, val arbs: Set<String>, val fixtures: Set<String>)
 

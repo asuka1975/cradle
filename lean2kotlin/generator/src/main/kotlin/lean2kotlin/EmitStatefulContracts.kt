@@ -121,9 +121,9 @@ internal fun EmitTests.emitTransitionTheoremTest(
 					}
 					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${c.method} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
 				for (part in sortedParts) {
 					sb.append("\t\tval ${repoVar(part.root)} = ${repoVar(part.root)}()\n")
 				}
@@ -317,7 +317,7 @@ internal fun EmitTests.emitFaultContractTests() {
 						}
 						"${ident(p.name)} = ${inputLiteral(p.type, j)}"
 					}
-					val doc = docLine(fc.doc)?.let { "\t/** $it */\n" } ?: ""
+					val doc = kdocLine(fc.doc)
 					sb.append("\n$doc\t@Test\n")
 					sb.append("\tfun `${m.name} の途中の技術的障害の観測は ${fc.def} の宣言と一致する(${i + 1})`() {\n")
 					for (part in sortedParts) {

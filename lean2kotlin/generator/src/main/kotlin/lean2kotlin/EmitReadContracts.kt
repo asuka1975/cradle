@@ -230,9 +230,9 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 					}
 					else -> return@forEachIndexed
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${m.name} は定理 ${c.theorem} を再現する(${i + 1})`() {\n")
+				sb.append("\tfun `${theoremTestName(m.name, c.theorem, i)}`() {\n")
 				sb.append("\t\tassertEquals($expected,\n")
 				sb.append("\t\t\tuseCase(${wired.joinToString(", ")})" +
 					".${ident(m.name)}(${callArgs.joinToString(", ")}))\n")
@@ -342,7 +342,7 @@ internal fun EmitTests.emitDdlContractTest(projCs: List<IrContract>) {
 						"${ident(f.name)} = ${k.literal(f.type, case.ok)}"
 					else "${ident(f.name)} = emptyList()"
 				}
-				val doc = docLine(c.doc)?.let { "\t/** $it */\n" } ?: ""
+				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
 				sb.append("\tfun `retrieve${rm.kotlin} は ${rowTd.kotlin} の定理 " +
 					"${c.theorem} を再現する(${i + 1})`() {\n")
