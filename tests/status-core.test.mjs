@@ -1,0 +1,82 @@
+// status の中身（status-core.mjs）の単体テスト。プロセスを起こさず、集めた事実・文章の行・バックエンドの数え方を直に見る。
+import test from "node:test";
+import assert from "node:assert/strict";
+import { tempProject, writeTree } from "./helpers.mjs";
+import { loadConfig } from "../.apm/skills/cradle/scripts/lib.mjs";
+import { collectStatus, renderStatus, generatedPorts, adaptedPorts, wiredCount } from "../.apm/skills/cradle/scripts/status-core.mjs";
+
+function setup(t, files = {}) {
+  const root = tempProject(t, "cradle-status-core-");
+  writeTree(root, files);
+  return loadConfig(root, {});
+}
+
+test("collectStatus は cradle.json だけのプロジェクトで 9 フェーズを順に未着手で返し、キーは project・phases・aiNotes の順", (t) => {
+  const s = collectStatus(setup(t));
+  assert.deepEqual(Object.keys(s), ["project", "phases", "aiNotes"]);
+  assert.equal(s.project, "Example");
+  assert.deepEqual(s.phases.map(p => [p.name, p.state]), [
+    ["探索 (DDD)", "未着手"], ["インフラ設計", "未着手"], ["Lean 実行可能仕様", "未着手"], ["API 契約 (OpenAPI)", "未着手"], ["フロントエンド", "未着手"],
+    ["バックエンド", "未着手"], ["インフラ実装", "未着手"], ["E2E（Lean × REST の一致）", "未着手"], ["本番投入", "未投入"],
+  ]);
+  for (const p of s.phases) assert.deepEqual(Object.keys(p), ["name", "state", "facts", "next"]);
+  // 投入表が無いのはインフラ実装と本番投入の事実に出る
+  assert.deepEqual(s.phases[8].facts, ["投入表が無い（README の末尾に骨格と同じ「投入」の節を足す）"]);
+  assert.equal(s.aiNotes, 0);
+});
+
+test("collectStatus は閉じていない HS / MQ を探索とフロントエンドの両方に、投入表の local / prod をインフラ実装と本番投入に出す", (t) => {
+  const s = collectStatus(setup(t, {
+    "documents/ddd/hotspots.md": "| HS-001 | x | open |\n| HS-002 | y | resolved |\n",
+    "documents/ddd/model-review.md": "| MQ-001 | x | open |\n",
+    "documents/infra-design/README.md": "# インフラ設計\n\n## 投入\n\n| 環境 | 状態 |\n|---|---|\n| `local` | 未 |\n| prod | 済（2026-10-01） |\n",
+    "documents/ai-notes/20261001-01-a.md": "x\n",
+    "documents/ai-notes/README.txt": "x\n",
+  }));
+  const byName = Object.fromEntries(s.phases.map(p => [p.name, p]));
+  assert.ok(byName["探索 (DDD)"].facts.includes("open: HS 1 / UX 0 / MQ 1"));
+  assert.deepEqual(byName["フロントエンド"].facts, ["open の HS 1 / MQ 1（業務の流れを止めている問いがあれば先に閉じる）"]);
+  assert.ok(byName["インフラ実装"].facts.includes("投入表 local: 未"));
+  assert.deepEqual([byName["本番投入"].state, byName["本番投入"].facts, byName["本番投入"].next], ["投入済", ["投入表 prod: 済（2026-10-01）"], "—"]);
+  assert.equal(s.aiNotes, 1);
+});
+
+test("renderStatus は見出しと空行・フェーズごとの見出し・事実・次の一手（空か — なら出さない）・空行・申し送りの行を返す", () => {
+  const s = { project: "Example", phases: [
+    { name: "A", state: "着手済", facts: ["x", "y"], next: "やる" },
+    { name: "B", state: "未着手", facts: [], next: "—" },
+    { name: "C", state: "未着手", facts: ["z"], next: "" },
+  ], aiNotes: 3 };
+  assert.deepEqual(renderStatus(s, { documents: { aiNotes: "docs/notes" } }), [
+    "# Example — Cradle status", "",
+    "## A — 着手済", "- x", "- y", "→ 次: やる", "",
+    "## B — 未着手", "",
+    "## C — 未着手", "- z", "",
+    "申し送り（docs/notes）: 3 件 — 規約ではない。ユーザー判断が要るものが無いか確かめる。",
+  ]);
+});
+
+test("generatedPorts は KDoc に「Lean: Port」を持つ interface だけを拾う", () => {
+  const port = (name) => `package p\n\n/**\n * Lean: Port \`Example.Application.Port.${name}\`(外部能力)。\n */\ninterface ${name} {\n\tfun f(): Unit\n}\n`;
+  const request = "package p\n\n/**\n * Lean: `Example.Application.Port.Directory.Find.Request`(portRequest)\n */\ndata class DirectoryFindRequest(val id: Long)\n";
+  const plain = "package p\n\ninterface BookRepository {\n\tfun find(): Unit\n}\n";
+  assert.deepEqual(generatedPorts([port("Directory"), request, plain, port("PaymentGateway")]), ["Directory", "PaymentGateway"]);
+});
+
+test("adaptedPorts は class / object の supertype に Port を持つものだけを数え、コンストラクタの引数の型は数えない", () => {
+  const ports = ["Directory", "PaymentGateway", "Mailer"];
+  const texts = [
+    "class HttpDirectory(private val client: Any) : Directory {\n}\n",
+    "class BookVisitUseCaseImpl(\n\tprivate val directory: Directory,\n\tprivate val mailer: Mailer,\n) : BookVisitUseCase {\n}\n",
+    "object FakePayments : Base(Mailer()), PaymentGateway {\n}\n",
+  ];
+  assert.deepEqual(adaptedPorts(ports, texts), ["Directory", "PaymentGateway"]);
+  // 語の途中の一致は数えない
+  assert.deepEqual(adaptedPorts(["Directory"], ["class A : CachedDirectoryX {\n}\n"]), []);
+});
+
+test("wiredCount は `: <名前>(` で継承されている抽象テストの数", () => {
+  const text = "class A : BookRepositoryContractTest() {\n}\nclass B :LoanContractTest (\n) {}\nval x: OtherContractTest = y\n";
+  assert.equal(wiredCount(text, ["BookRepositoryContractTest", "LoanContractTest", "OtherContractTest", "MissingContractTest"]), 2);
+  assert.equal(wiredCount("", ["A"]), 0);
+});
