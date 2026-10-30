@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -126,7 +126,8 @@ switch (cmd) {
     const tl = read("event-timeline.md");
     const events = countEvents(tl);
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");
-    const terms = (ul.match(/^\|(?!\s*用語)(?!---)[^|]+\|/gm) ?? []).length;
+    // 用語は表のデータ行。見出しと区切り行（Prettier の | --- | や揃えの |:---| も）は数えない
+    const terms = tableRows(ul).length;
     console.log(JSON.stringify({
       product: productLine(cfg).value,
       events, hotspots: { open: countStatusRows(hs, "HS-\\d+", "open"), resolved: countStatusRows(hs, "HS-\\d+", "resolved") },

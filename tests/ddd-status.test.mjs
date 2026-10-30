@@ -23,7 +23,7 @@ const timeline = `# イベント時系列マップ
 |---|---|---|---|---|
 | 3a | 本が返された | 利用者 | 返却 | |
 `;
-// 用語集の表 2 つ: Prettier が揃えた区切り行（| --- |）の表と、骨格と同じ |---| の表。データ行は 1 行ずつ
+// 用語集の表 3 つ: Prettier が揃えた区切り行（| --- |）の表、骨格と同じ |---| の表、左揃えの区切り行（|:---|）の表。データ行は 1 行ずつ
 const glossary = `# 用語集
 
 | 用語 | 英語 | 意味 |
@@ -35,10 +35,16 @@ const glossary = `# 用語集
 | 用語 | 英語 | 意味 |
 |---|---|---|
 | 投稿 | postNote | メモを書くこと |
+
+## 揃え
+
+| 用語 | 英語 | 意味 |
+|:---|:---|:---|
+| 返却 | returnBook | 本を戻すこと |
 `;
 const ledger = (head, rows) => `# ${head}\n\n| ID | 問い | 状況 |\n|---|---|---|\n${rows.map(([id, status]) => `| ${id} | 問い | ${status} |`).join("\n")}\n`;
 
-test("ddd status は出来事・状況ごとの HS / UX / MQ・用語数・命名の確認待ちを JSON で出す（| --- | の区切り行も用語に数える）", (t) => {
+test("ddd status は出来事・状況ごとの HS / UX / MQ・用語数・命名の確認待ちを JSON で出す（| --- | の区切り行は用語に数えない）", (t) => {
   const root = tempProject(t, "cradle-ddd-status-");
   writeTree(root, {
     "documents/ddd/event-timeline.md": timeline,
@@ -54,7 +60,7 @@ test("ddd status は出来事・状況ごとの HS / UX / MQ・用語数・命�
   const r = runNode(ddd, ["status"], { cwd: root, env: cleanEnv() });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr, "");
-  // terms は見出しを除いた行: Prettier の表で区切り行とデータ行の 2、|---| の表でデータ行の 1
+  // terms は見出しと区切り行を除いた行: どの区切り行の形の表もデータ行の 1 ずつ
   assert.equal(r.stdout, JSON.stringify({
     product: "図書の貸出",
     events: 4, hotspots: { open: 2, resolved: 1 },
