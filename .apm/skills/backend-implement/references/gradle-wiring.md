@@ -92,7 +92,6 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | 型引数 G に対応する `<Root>.Runtime.G` がありません | binder 名を Runtime の型名に合わせるか、`binderOverrides` で対応づける |
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
 | フィクスチャ / 期待値を構成できません | `Repr` / `DecidableEq` の deriving、契約定理の前提が Decidable か、量化変数が生成可能な型か |
-| 参照系の execute 面でない定理の契約 | `@[contract]` を外す（execute 面の系） |
 | 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`contract … 主対象の候補 … の署名を写像できない` はその def の署名の型を契約面の語彙にする（Lean）、`contract … 主対象の候補 … は主対象の型を決められない` は def を分類済みの型そのものの namespace に置く（Lean。名前空間の型に区分が無ければ区分を与える。理由が `区分 … でふるまいの主対象にならない`（error・clockPort・actorPort の型の def）なら指名を外すか、def をふるまいの主対象の型の namespace に置く）、`Port … interface 化された語彙` / `Port … 関数型を運ぶ` は要求・観測を閉じたデータ型にする（外部を呼ぶ関数は UseCase に渡さない）、`内部入力 … 名義` は Observation から名義を外す、`泉の状態 … Id 型 … がありません` は `Runtime/Ids.lean` に `structure <X>Id` を置く、`signature …` は固定形の署名の型を契約面の語彙にする |
 | UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
 | golden が無視された | flow に対の `<name>-init.json` があるか、名前が `<name>-init.json` / `<name>-flow.json` か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
@@ -104,7 +103,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | note | 意味 | 戻り先 |
 |---|---|---|
 | golden … 無視 | 命名か形が規約と違う | golden を採り直す |
-| View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
+| View→Row の壁 / View→ドメイン語彙の壁 | View が Row を、View かエラーの型がふるまい持ちの VO・Entity を運んでいる | View・エラー自身の語彙を導入（Lean） |
 | View→ドメイン語彙の壁の破れ(入力 … が interface 化された語彙を運ぶ) | 参照系の execute の入力（Query の DTO 等）がふるまい持ちの VO・Entity に届いている。参照系ケースは出ない | 入力の語彙を閉じたデータ型にする（Lean）。その UseCase に指名した契約定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
 | ふるまい … 主対象を決められない | def の名前空間が型でなく、その短い名前の型が複数ある（VO と UseCase の入力語彙が同名など） | def を型そのものの namespace に置く（Lean） |
