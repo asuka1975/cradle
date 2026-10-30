@@ -64,27 +64,23 @@ class EmitMain(
 				log("  note: ${s.name}: 本番に写せるメソッドがないため interface を生成しません")
 				continue
 			}
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = kept.any { it.ret is IrType.Result }) { serviceInterfaceBody(
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(
 				s.copy(methods = kept),
 				"取得ポート — 参照系 UseCase が内部で呼ぶ**アプリの持ち物**。") }
 		}
 		for (s in ir.useCases) {
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(s,
 				"アプリケーション層の UseCase(固定形 validate / execute)。",
 				fixedForm = true) }
 		}
 		for (s in ir.useCaseRules) {
 			// 純粋な判断 — 引数はすべて判断の入力(観測・集約ルートも配線ではない)
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(s,
 				"UseCase の判断(validate / apply が呼ぶ純粋な補助)。UseCase の実装はこれを呼び、分岐条件を再実装しない。",
 				raw = true) }
 		}
 		for (s in ir.domainServices) {
-			emitFile("domain.domainservice", s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile("domain.domainservice", s.name) { serviceInterfaceBody(s,
 				"**ドメインモデルの持ち物**(DomainService — 複数の集約ルートへの関心・参照透過)。") }
 		}
 		for (b in ir.behaviors) {
@@ -99,8 +95,7 @@ class EmitMain(
 					c.target == "behaviors" && c.useCase == td.lean && factory.any { it.name == c.method }
 				}
 				if (nominated) {
-					emitFile(k.packagePathOf(td), "${td.kotlin}Factory", toTest = true,
-						usesDomainResult = factory.any { it.ret is IrType.Result }) {
+					emitFile(k.packagePathOf(td), "${td.kotlin}Factory", toTest = true) {
 						serviceInterfaceBody(
 							IrService("${td.kotlin}Factory", b.module, factory),
 							"ファクトリ(`${b.subject}` を作るふるまい — テスト専用語彙。採番は呼び出し側の関心)。",
@@ -142,8 +137,7 @@ class EmitMain(
 			}
 			if (contracted.isEmpty()) continue
 			val toTest = td.role in setOf("readModel", "readModelRow")
-			emitFile(k.packagePathOf(td), "${td.kotlin}Behaviors", toTest = toTest,
-				usesDomainResult = contracted.any { it.ret is IrType.Result }) {
+			emitFile(k.packagePathOf(td), "${td.kotlin}Behaviors", toTest = toTest) {
 				serviceInterfaceBody(
 					IrService("${td.kotlin}Behaviors", b.module, contracted),
 					"ふるまい(`${b.subject}` の def の写し — @[contract] 定理群が単体テストで固定)。",
@@ -200,10 +194,9 @@ class EmitMain(
 
 	private val files = GeneratedFiles(ir, k, out.basePackage)
 
-	private fun emitFile(
-		subpkg: String?, name: String, usesDomainResult: Boolean = false,
-		toTest: Boolean = false, build: () -> String,
-	) = files.emit(if (toTest) testOut else out, subpkg, name, usesDomainResult = usesDomainResult, build = build)
+	// DomainResult の import は本文の参照が決める — Result を返すメソッドは typeRef が `DomainResult<` と書く
+	private fun emitFile(subpkg: String?, name: String, toTest: Boolean = false, build: () -> String) =
+		files.emit(if (toTest) testOut else out, subpkg, name, build = build)
 
 	private val domainResultBody = """
 /**
