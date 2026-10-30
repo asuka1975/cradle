@@ -283,7 +283,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 		} else if (td.invariants.isNotEmpty())
 			// 型は制約を検査しない — 構築する側(validate など)が満たしてから作る
 			"/**\n * Lean: `${td.lean}`(${td.role})\n *\n * 制約(Lean の Prop フィールド。この型は検査しない — 構築する側の義務):\n" +
-				td.invariants.joinToString("") { " * - ${it.name}: `${it.lean}`\n" } + " */"
+				td.invariants.joinToString("") { " * - ${it.name}: `${kdocSafe(it.lean)}`\n" } + " */"
 		else
 			"/**\n * Lean: `${td.lean}`(${td.role})\n */"
 

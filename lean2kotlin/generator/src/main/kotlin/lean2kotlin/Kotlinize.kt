@@ -41,15 +41,20 @@ fun stringLit(s: String): String {
 	return sb.append('"').toString()
 }
 
-/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
+/** KDoc に写す文の、コメントを閉じる並び(`*` の後に `/`)と入れ子のコメントを開く並び(`/` の後に `*`)に空白を挟む。
+    Kotlin のブロックコメントは入れ子になるので、残すと KDoc が途中で閉じるかファイルの終わりまで閉じない。
+    閉じる側を先に崩せば、崩した後の文にどちらの並びも残らない。 */
+internal fun kdocSafe(s: String): String = s.replace("*/", "* /").replace("/*", "/ *")
+
+/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。KDoc の区切りは kdocSafe で崩す。 */
 internal fun docLine(doc: String): String? =
-	doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+	doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let(::kdocSafe)
 
 /** メンバ 1 つ分の 1 行 KDoc。doc が空なら何も出さない。 */
 internal fun kdocLine(doc: String): String = docLine(doc)?.let { "\t/** $it */\n" } ?: ""
 
 /** doc の全文を KDoc の本文(行ごとに ` * `)にする。空の行は ` *` だけにして行末に空白を残さない。 */
-internal fun kdocBody(doc: String): String = doc.trim().lineSequence()
+internal fun kdocBody(doc: String): String = kdocSafe(doc).trim().lineSequence()
 	.joinToString("\n") { l -> l.trim().let { if (it.isEmpty()) " *" else " * $it" } }
 
 /** 定理由来のケースのテスト名。利用者のテストレポートに出る名前なので文言を変えない。 */
@@ -306,15 +311,15 @@ class Kotlinize(private val ir: Ir) {
 		return "x.${ident(key.field.name)} $cmp ${valueLiteral(key)}"
 	}
 
-	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。 */
+	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。値は文字列も運ぶので kdocSafe を通す。 */
 	fun constraintDoc(key: ConstraintKey): String {
 		val c = key.constraint
 		val pred = { "${key.field.name} ${if (c.op == "ne") "≠" else "="} ${c.value}" }
-		return when (c.kind) {
+		return kdocSafe(when (c.kind) {
 			"all" -> "${c.name}: 全件 ${pred()}"
 			"atMost" -> "${c.name}: ${pred()} は高々 ${c.max} 件"
 			else -> "${c.name}: ${key.field.name}"
-		}
+		})
 	}
 
 	/** 列 xs を制約どおりにする式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す。

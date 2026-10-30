@@ -48,6 +48,19 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `kdocSafe は閉じる並びを先に崩し、崩した後の文にどちらの並びも残さない`() {
+		assertEquals("a* /b/ *c", kdocSafe("a*/b/*c"))
+		assertEquals("/ * /", kdocSafe("/*/"))
+		assertEquals("a * b / c と 2/3", kdocSafe("a * b / c と 2/3"))
+	}
+
+	@Test
+	fun `docLine と kdocBody は KDoc を閉じる並びと入れ子を開く並びを崩す`() {
+		assertEquals("置き場は Application/Port/ * / の下", docLine("置き場は Application/Port/*/ の下\n二行目"))
+		assertEquals(" * **読み** / **書き**\n * a/ *b", kdocBody("**読み**/**書き**\na/*b"))
+	}
+
+	@Test
 	fun `typeRef は IR の型を Kotlin の型に写す`() {
 		assertEquals("Long", k.typeRef(IrType.Nat))
 		assertEquals("String", k.typeRef(IrType.Str))
@@ -254,6 +267,14 @@ class KotlinizeTest {
 			k.constrainExpr("xs", listOf(atMostOneUntitled)))
 		assertEquals("allOpen: 全件 closed = false", k.constraintDoc(allOpen))
 		assertEquals("atMostOneUntitled: title = {\"text\":\"\"} は高々 1 件", k.constraintDoc(atMostOneUntitled))
+	}
+
+	@Test
+	fun `constraintDoc は値の中の KDoc の区切りを崩す`() {
+		val titleField = (td(note).shape as IrShape.Structure).fields.single { it.name == "title" }
+		val key = Kotlinize.ConstraintKey(
+			IrConstraint("atMost", "atMostOneOdd", "notes", "title", op = "eq", value = json("{\"text\":\"*/ と /*\"}"), max = 1), titleField)
+		assertEquals("atMostOneOdd: title = {\"text\":\"* / と / *\"} は高々 1 件", k.constraintDoc(key))
 	}
 
 	@Test
