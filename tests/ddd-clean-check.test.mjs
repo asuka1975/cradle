@@ -79,6 +79,18 @@ test("ベースライン無しの ddd-clean-check は HEAD と比べていると
   assert.match(run(check, "--baseline").stderr, /usage/);
 });
 
+test("ベースライン無しの ddd-clean-check は lake build が書いた lean/lake-manifest.json を HEAD との差分に数えない", (t) => {
+  const { run, lean } = fixture(t);
+  writeFileSync(lean("lake-manifest.json"), "{}\n");
+  const r = run(check);
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /^OK /m);
+  writeFileSync(lean("Example/Runtime/Command.lean"), COMMAND + "  | bar\n");
+  const ng = run(check, "--json");
+  assert.equal(ng.status, 1);
+  assert.deepEqual(JSON.parse(ng.stdout).problems.map(p => p.split("\n").slice(1)), [[" M lean/Example/Runtime/Command.lean"]]);
+});
+
 test("印が残ったままの start は止まり、最初の記録が残る", (t) => {
   const { run, lean, marker } = fixture(t);
   assert.equal(run(ddd, "start").status, 0);

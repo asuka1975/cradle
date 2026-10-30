@@ -35,7 +35,8 @@ if (baseline) {
 } else {
   try {
     git(cfg.root, ["rev-parse", "--verify", "HEAD"]);   // コミットが 1 つも無ければ差分の比較はできない
-    const dirty = git(cfg.root, ["status", "--short", "--", cfg.lean.dir]);
+    // lake-manifest.json は lake build が書く（初回のビルドで現れる）ので、開始時点との比較（leanSnapshot）と同じく数えない
+    const dirty = git(cfg.root, ["status", "--short", "--", cfg.lean.dir, `:(exclude)${cfg.lean.dir}/lake-manifest.json`]);
     if (dirty) problems.push(`${cfg.lean.dir}/ に HEAD と違う差分があります（セッション開始時の記録が無いので HEAD と比べている。前回の形式化（フェーズ 2）が未コミットならそれも差分に出る — ddd.mjs end 経由なら開始時点と比べる）:\n${dirty}`);
   } catch {}
 }
