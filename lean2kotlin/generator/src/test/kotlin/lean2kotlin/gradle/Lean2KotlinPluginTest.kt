@@ -2,6 +2,7 @@ package lean2kotlin.gradle
 
 import org.gradle.api.Project
 import org.gradle.api.internal.project.ProjectInternal
+import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -94,10 +95,20 @@ class Lean2KotlinPluginTest {
 	}
 
 	@Test
-	fun `kotlin jvm が無ければ source set adapterTest とタスク adapterContractTest を作らない`(@TempDir dir: File) {
+	fun `JVM の plugin が無ければ sourceSets を持ち込まずタスク adapterContractTest も作らない`(@TempDir dir: File) {
 		val p = project(dir)
 		(p as ProjectInternal).evaluate()
 		assertNull(p.tasks.findByName("adapterContractTest"))
 		assertNull(p.extensions.findByName("sourceSets"))
+	}
+
+	@Test
+	fun `java だけで kotlin jvm が無ければ source set adapterTest とタスク adapterContractTest を作らない`(@TempDir dir: File) {
+		val p = project(dir)
+		// java で sourceSets はできる — 配線の門が java でなく kotlin jvm であることを見る
+		p.plugins.apply("java")
+		(p as ProjectInternal).evaluate()
+		assertNull(p.extensions.getByType(SourceSetContainer::class.java).findByName("adapterTest"))
+		assertNull(p.tasks.findByName("adapterContractTest"))
 	}
 }
