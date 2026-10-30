@@ -534,8 +534,7 @@ class Kotlinize(private val ir: Ir) {
 			else {
 				val o = j.jsonObject
 				val args = shape.fields.joinToString(", ") { f ->
-					require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
-					"${ident(f.name)} = ${literal(f.type, o.getValue(f.name))}"
+					"${ident(f.name)} = ${literal(f.type, fieldJson(td, o, f))}"
 				}
 				val ctor = if (isFixtureVocab(td)) fixtureName(td) else td.kotlin
 				"$ctor($args)"
@@ -552,28 +551,38 @@ class Kotlinize(private val ir: Ir) {
 			// literal() が fixture に写すため、本番 sealed に埋めると型が合わない。
 			// 本番語彙での構築(コマンド入力)は inputLiteral 側の仕事
 			val base = if (isFixtureBridged(td.lean)) fixtureName(td) else td.kotlin
-			// 引数なし ctor は "name"(文字列)、引数あり ctor は {"name": {"arg": ...}}
-			if (j is JsonPrimitive) {
-				val ctor = shape.ctors.find { it.name == j.content }
-					?: error("${td.lean}: 不明なコンストラクタ ${j.content}")
-				require(ctor.fields.isEmpty())
-				"$base.${ctorClassName(ctor.name)}"
-			} else {
-				val o = j.jsonObject
-				require(o.size == 1) { "${td.lean}: sealed 値の JSON が不正です: $j" }
-				val (name, body) = o.entries.single()
-				val ctor = shape.ctors.find { it.name == name }
-					?: error("${td.lean}: 不明なコンストラクタ $name")
-				if (ctor.fields.isEmpty()) "$base.${ctorClassName(name)}"
-				else {
-					val bo = body.jsonObject
-					val args = ctor.fields.joinToString(", ") { f ->
-						"${ident(f.name)} = ${literal(f.type, bo.getValue(f.name))}"
-					}
-					"$base.${ctorClassName(name)}($args)"
+			val (ctor, bo) = sealedCtorOf(td, shape, j)
+			if (bo == null) "$base.${ctorClassName(ctor.name)}"
+			else {
+				val args = ctor.fields.joinToString(", ") { f ->
+					"${ident(f.name)} = ${literal(f.type, bo.getValue(f.name))}"
 				}
+				"$base.${ctorClassName(ctor.name)}($args)"
 			}
 		}
+	}
+
+	/** 構造体 td の値の JSON o から、フィールド f の値を取り出す(無ければ生成を止める)。 */
+	fun fieldJson(td: IrTypeDef, o: JsonObject, f: IrField): JsonElement {
+		require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
+		return o.getValue(f.name)
+	}
+
+	/** sealed 値の JSON を構成子とその引数の object に分ける。引数なし ctor は "name"(文字列)、
+	    引数あり ctor は {"name": {"arg": ...}}。引数の無い ctor の引数は null(JSON の中身を読まない)。 */
+	fun sealedCtorOf(td: IrTypeDef, shape: IrShape.Sealed, j: JsonElement): Pair<IrCtor, JsonObject?> {
+		if (j is JsonPrimitive) {
+			val ctor = shape.ctors.find { it.name == j.content }
+				?: error("${td.lean}: 不明なコンストラクタ ${j.content}")
+			require(ctor.fields.isEmpty())
+			return ctor to null
+		}
+		val o = j.jsonObject
+		require(o.size == 1) { "${td.lean}: sealed 値の JSON が不正です: $j" }
+		val (name, body) = o.entries.single()
+		val ctor = shape.ctors.find { it.name == name }
+			?: error("${td.lean}: 不明なコンストラクタ $name")
+		return ctor to (if (ctor.fields.isEmpty()) null else body.jsonObject)
 	}
 
 	// ───────────────────────── Arb(Kotest ジェネレータ)
