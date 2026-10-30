@@ -2,7 +2,7 @@
 // regen-impact — Lean を変えたあと、生成物を作り直して「何が変わり、誰に効くか」を機械で出す。
 //   regen-impact [--report] [--dry-run] [--no-regen] [--no-golden] [--manifest file] [--json]
 //     --report   生成物の差分と参照元（手書き実装・契約テスト）の一覧を出す（既定）
-//     --dry-run  再生成の結果を見たあと生成ディレクトリを git で元に戻す
+//     --dry-run  再生成の結果を見たあと生成ディレクトリを git で元に戻す（生成ディレクトリがクリーンなときだけ）
 //     --no-regen 再生成せず、作業ツリーにある生成物の差分だけを読む
 //     --no-golden golden 回帰を省く
 import { existsSync, readFileSync } from "node:fs";
@@ -18,12 +18,26 @@ const gens = cfg.backend.generated;
 // git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない
 let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]); } catch (e) { fail(e.message); }
 if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirty}`);
+// 元に戻す（checkout と clean）は始める前の差分とこの実行の出力を見分けないので、--no-regen・--force でも差分があれば --dry-run を断る
+if (opts["dry-run"] && dirty) fail(`--dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:\n${dirty}`);
+/** --dry-run の後始末: 生成ディレクトリを HEAD に戻す。checkout は追跡しているファイルのあるものだけ（無いパスは git が断る）、
+    clean は在るものだけに渡す（パスの無い git clean はリポジトリ全体の未追跡を消す）。 */
+function restoreGenerated() {
+  const tracked = gens.filter(g => git(cfg.root, ["ls-files", "--", g]));
+  if (tracked.length) git(cfg.root, ["checkout", "--", ...tracked]);
+  const present = gens.filter(g => existsSync(join(cfg.root, g)));
+  if (present.length) git(cfg.root, ["clean", "-fdq", "--", ...present]);
+}
 
 let regenOut = null;
 if (!opts["no-regen"]) {
   const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}`, 2);
+  if (r.status !== 0) {
+    // 作りかけの出力を残さない
+    if (opts["dry-run"]) restoreGenerated();
+    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}`, 2);
+  }
 }
 
 const nameStatus = git(cfg.root, ["diff", "--name-status", "HEAD", "--", ...gens]).split("\n").filter(Boolean).map(l => { const [st, ...p] = l.split("\t"); return { status: st[0], path: p[p.length - 1] }; });
@@ -63,7 +77,7 @@ if (!opts["no-golden"]) {
   try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
 }
 
-if (opts["dry-run"]) { git(cfg.root, ["checkout", "--", ...gens.filter(g => existsSync(join(cfg.root, g)))]); git(cfg.root, ["clean", "-fdq", "--", ...gens.filter(g => existsSync(join(cfg.root, g)))]); }
+if (opts["dry-run"]) restoreGenerated();
 
 const result = { changedGeneratedFiles: changed, symbols: impact, unwiredContractTests: unwired, golden, restored: !!opts["dry-run"] };
 if (opts.json) console.log(JSON.stringify(result, null, 2));

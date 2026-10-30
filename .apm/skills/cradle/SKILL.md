@@ -26,7 +26,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 
 - 出力は要約せず、そのまま引用する。判断（意図した変化か・直すか）は出力を見てから書く。
 - `golden-check` で CHANGED が出たら、意図した変更だけを `--update` し、golden の差分を変更理由とともにコミットする。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。
-- `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。
+- `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。`--dry-run` はクリーンでなければ断る（元に戻すと未コミットの差分も消える）。
 - どの道具も `CRADLE_PROJECT_DIR` でルートを指定できる（hook は Claude Code の `CLAUDE_PROJECT_DIR`、無ければ stdin の `cwd` から `cradle.json` を持つ祖先を探す）。
 - 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。
 

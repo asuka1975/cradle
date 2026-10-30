@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
@@ -34,6 +36,11 @@ const hand = {
   "backend/src/adapterTest/kotlin/p/DirectoryAdapterContractTestImpl.kt": "package p\n\nclass DirectoryAdapterContractTestImpl : DirectoryAdapterContractTest() {\n\toverride fun adapter(): Directory = HttpDirectory()\n}\n",
 };
 
+// git status の未追跡の出し方（ディレクトリにまとめる）や diff の出力を利用者の git 設定に左右させない
+const env = cleanEnv({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
+// run は regen-impact、porcelain は作業ツリー全体の git status --porcelain（後始末が何を残し、何を消したか）
+const runner = (root) => ({ root, run: (...args) => runNode(regenImpact, args, { cwd: root, env }), porcelain: () => spawnSync("git", ["status", "--porcelain"], { cwd: root, env, encoding: "utf8" }).stdout });
+
 // 一時プロジェクト（git 管理）: 生成物と手書きをコミットし、backend.regenerate は regen/ に置いた再生成後の写しを生成ディレクトリへ重ねて Legacy.kt を消す。
 // gradle も Lean も要らない（regenerate は backend/ を cwd に sh で走る）
 function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt", handFiles = hand) {
@@ -41,9 +48,7 @@ function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/gene
   writeTree(root, { ...before, ...handFiles });
   writeTree(join(root, "regen"), Object.fromEntries(Object.entries(after).map(([rel, text]) => [rel.replace("backend/src/generated/", ""), text])));
   commitAll(root);
-  // git status の未追跡の出し方（ディレクトリにまとめる）や diff の出力を利用者の git 設定に左右させない
-  const env = cleanEnv({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
-  return { root, run: (...args) => runNode(regenImpact, args, { cwd: root, env }) };
+  return runner(root);
 }
 
 const files = {
@@ -89,6 +94,11 @@ const expectedText = [
   "",
   "参照元の無い生成シンボル（新規 interface など — これから実装するもの）: Directory, Directory.find, DirectoryAdapterContractTest, DirectoryAdapterContractTest.adapter, Legacy, NoteRepository.delete, NoteRepositoryContractTest.clock",
 ].join("\n") + "\n";
+// 既定の再生成を 1 度回した後の生成ディレクトリの git status --porcelain
+const dirtyLines = [
+  ` D ${files.legacy}`, ` M ${files.note}`, ` M ${files.repo}`, ` M ${files.contract}`,
+  "?? backend/src/generated/kotlin-adapter-test/", "?? backend/src/generated/kotlin-main/application/",
+];
 
 test("再生成してから生成物の差分・変わったシンボルと参照元・未配線の契約テストを --json で出し、--no-regen は作業ツリーの同じ差分を読む", (t) => {
   const { run } = fixture(t);
@@ -132,14 +142,84 @@ test("生成ディレクトリに未コミットの差分があれば再生成�
   const dirty = run("--no-golden", "--json");
   assert.equal(dirty.status, 1);
   assert.equal(dirty.stdout, "");
-  assert.equal(dirty.stderr, [
-    "cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:",
-    ` D ${files.legacy}`, ` M ${files.note}`, ` M ${files.repo}`, ` M ${files.contract}`,
-    "?? backend/src/generated/kotlin-adapter-test/", "?? backend/src/generated/kotlin-main/application/",
-  ].join("\n") + "\n");
+  assert.equal(dirty.stderr, ["cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:", ...dirtyLines].join("\n") + "\n");
   const { run: broken } = fixture(t, "echo boom; exit 3");
   const failed = broken("--no-golden", "--json");
   assert.equal(failed.status, 2);
   assert.equal(failed.stdout, "");
   assert.equal(failed.stderr, "cradle: 再生成に失敗しました（echo boom; exit 3）:\nboom\n\n");
+});
+
+test("--dry-run は生成ディレクトリがクリーンなら再生成して同じものを出し、生成ディレクトリだけを HEAD に戻す", (t) => {
+  const { root, run, porcelain } = fixture(t);
+  // 生成ディレクトリの外の未追跡（書きかけの手書き）は後始末の対象ではない
+  writeTree(root, { "backend/src/main/kotlin/p/Draft.kt": "package p\n\nclass Draft\n" });
+  const json = run("--no-golden", "--json", "--dry-run");
+  assert.equal(json.status, 0, json.stderr);
+  assert.equal(json.stdout, JSON.stringify({ ...expected, restored: true }, null, 2) + "\n");
+  assert.equal(porcelain(), "?? backend/src/main/kotlin/p/Draft.kt\n");
+  const text = run("--no-golden", "--dry-run");
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(text.stdout, `${expectedText}\n（--dry-run: 生成ディレクトリは元に戻した）\n`);
+  assert.equal(porcelain(), "?? backend/src/main/kotlin/p/Draft.kt\n");
+});
+
+test("生成ディレクトリに未コミットの差分があれば、--dry-run は --no-regen・--force でも断って何も戻さない。--force の無い再生成は差分の断りのまま", (t) => {
+  const { root, run, porcelain } = fixture(t);
+  assert.equal(run("--no-golden").status, 0);
+  // 再生成の後に手で重ねた編集（--force で上書きするつもりのもの）
+  writeTree(root, { [files.note]: `${GEN}data class Note(val id: NoteId, val title: String, val draft: Boolean)\n` });
+  const dirty = porcelain();
+  for (const args of [["--no-regen", "--no-golden", "--dry-run"], ["--force", "--no-golden", "--dry-run", "--json"]]) {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(" "));
+    assert.equal(r.stdout, "");
+    assert.equal(r.stderr, ["cradle: --dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:", ...dirtyLines].join("\n") + "\n");
+    assert.equal(porcelain(), dirty);
+    assert.match(readFileSync(join(root, files.note), "utf8"), /val draft: Boolean/);
+    assert.ok(existsSync(join(root, files.adapterTest)));
+  }
+  const plain = run("--no-golden", "--dry-run");
+  assert.equal(plain.status, 1);
+  assert.equal(plain.stderr, ["cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:", ...dirtyLines].join("\n") + "\n");
+  assert.equal(porcelain(), dirty);
+});
+
+test("--dry-run で再生成が失敗すれば、作りかけの出力を HEAD に戻してから同じ断りで 2 で終わる", (t) => {
+  const { run, porcelain } = fixture(t, "cp -R ../regen/. src/generated/ && echo boom && exit 3");
+  const failed = run("--no-golden", "--dry-run");
+  assert.equal(failed.status, 2);
+  assert.equal(failed.stdout, "");
+  assert.equal(failed.stderr, "cradle: 再生成に失敗しました（cp -R ../regen/. src/generated/ && echo boom && exit 3）:\nboom\n\n");
+  assert.equal(porcelain(), "");
+});
+
+// 生成ディレクトリがまだ無いプロジェクト（初めての再生成の前）: 手書きだけをコミットし、書きかけの手書きとメモは未追跡で置く
+function fresh(t, regenerate) {
+  const root = tempProject(t, "cradle-regen-fresh-", { project: "Example", backend: { regenerate } });
+  writeTree(root, { "backend/src/main/kotlin/p/Main.kt": "package p\n\nfun main() = Unit\n" });
+  commitAll(root);
+  writeTree(root, { "backend/src/main/kotlin/p/Draft.kt": "package p\n\nclass Draft\n", "notes.md": "メモ\n" });
+  return runner(root);
+}
+const untrackedHand = "?? backend/src/main/kotlin/p/Draft.kt\n?? notes.md\n";
+const writeA = "mkdir -p src/generated/kotlin-main && printf 'package p\\n\\nclass A\\n' > src/generated/kotlin-main/A.kt";
+
+test("生成ディレクトリがまだ無ければ、--dry-run の後始末は今回の出力だけを消し、生成ディレクトリの外の未追跡を消さない", (t) => {
+  const { run, porcelain } = fresh(t, writeA);
+  // 戻すものが何も無い: 生成ディレクトリの無い git clean はリポジトリ全体の未追跡を消してしまう
+  const read = run("--no-regen", "--no-golden", "--dry-run", "--json");
+  assert.equal(read.status, 0, read.stderr);
+  assert.equal(JSON.parse(read.stdout).restored, true);
+  assert.equal(porcelain(), untrackedHand);
+  // 再生成が作った（HEAD に無い）生成ディレクトリは checkout せず clean だけで消す
+  const regen = run("--no-golden", "--dry-run", "--json");
+  assert.equal(regen.status, 0, regen.stderr);
+  assert.deepEqual(JSON.parse(regen.stdout).changedGeneratedFiles, [{ status: "A", path: "backend/src/generated/kotlin-main/A.kt" }]);
+  assert.equal(porcelain(), untrackedHand);
+  const { run: broken, porcelain: brokenPorcelain } = fresh(t, `${writeA} && echo boom && exit 3`);
+  const failed = broken("--no-golden", "--dry-run");
+  assert.equal(failed.status, 2);
+  assert.equal(failed.stderr, `cradle: 再生成に失敗しました（${writeA} && echo boom && exit 3）:\nboom\n\n`);
+  assert.equal(brokenPorcelain(), untrackedHand);
 });
