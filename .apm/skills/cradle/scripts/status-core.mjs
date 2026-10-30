@@ -17,8 +17,9 @@ export function collectStatus(cfg) {
   const dddDir = cfg.documents.ddd;
   const ctx = {
     cfg, R, read,
-    // 閉じていない問いは探索とフロントエンドの両方が出す（探索のファイルが無くても 0 として）
+    // 閉じていない問いは探索とフロントエンドの両方が、出来事の数は探索と Lean（骨格のサンプルの次の一手）が使う（ファイルが無ければ 0）
     ddd: {
+      events: countEvents(read(`${dddDir}/event-timeline.md`) ?? ""),
       hsOpen: countStatusRows(read(`${dddDir}/hotspots.md`), ids, "open"),
       uxOpen: countStatusRows(read(`${dddDir}/ux-review.md`), ids, "open"),
       mqOpen: countStatusRows(read(`${dddDir}/model-review.md`), ids, "open"),
@@ -46,12 +47,10 @@ function deployTable(readme) {
 const deployFact = (env, v) => v === null ? "投入表が無い（README の末尾に骨格と同じ「投入」の節を足す）" : `投入表 ${env}: ${v}`;
 
 // 1. 探索（DDD）
-function exploration({ cfg, R, read, ddd: { hsOpen, uxOpen, mqOpen } }) {
+function exploration({ cfg, R, ddd: { events, hsOpen, uxOpen, mqOpen } }) {
   const dddDir = cfg.documents.ddd;
   const present = DDD_FILES.filter(f => existsSync(R(`${dddDir}/${f}`)));
   if (present.length === 0) return phase("探索 (DDD)", "未着手", [`${dddDir}/ が無い`], "cradle-init スキルで骨格を作り、ddd スキルで探索を始める");
-  const tl = read(`${dddDir}/event-timeline.md`) ?? "";
-  const events = countEvents(tl);
   const openQ = existsSync(R(`${dddDir}/questions.md`));
   const product = productLine(cfg);
   return phase("探索 (DDD)", events ? "進行中" : "着手済", [product.value !== null && !product.placeholder ? `プロダクト: ${product.value}` : `プロダクトの一言が無い（${dddDir}/event-timeline.md 冒頭の「プロダクト:」行。ddd.mjs start --domain で書く）`, `出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${DDD_FILES.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
@@ -71,7 +70,7 @@ function infraDesign({ cfg, R }) {
 }
 
 // 3. Lean モデル
-function leanModel({ cfg, R, read }) {
+function leanModel({ cfg, R, ddd: { events } }) {
   if (!existsSync(cfg.lean.modelDir)) return phase("Lean 実行可能仕様", "未着手", [`${cfg.lean.dir}/${cfg.lean.root}/ が無い`], "lean-domain-model スキルで初回生成");
   const leanFiles = walk(cfg.lean.modelDir, { ext: [".lean"] });
   // lean-check が sorryMax で止める数と同じ: モデルのファイルと lean/Main.lean の、sorry を含むコードの行
@@ -90,11 +89,8 @@ function leanModel({ cfg, R, read }) {
   // 骨格の注記が残っていれば汎用のまま（作り込みは注記をこの画面の一文に置き換える — domain-mockup スキル）
   const genericUi = existsSync(uiFile) && readFileSync(uiFile, "utf8").includes("Cradle 標準の汎用モックアップ");
   const sample = scaffoldSampleFiles(cfg);
-  if (sample.length) {
-    const events = countEvents(read(`${cfg.documents.ddd}/event-timeline.md`));
-    return phase("Lean 実行可能仕様", "骨格のサンプル", [`実ドメインは未形式化（メモのサンプル: ${sample.map(f => rel(cfg.root, f)).join(", ")}）`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`],
-      events ? "lean-domain-model スキルで骨格のサンプルを丸ごと置き換える" : "ddd スキルで探索する（サンプルは探索の根拠にしない）。事実が集まったら lean-domain-model スキルで置き換える");
-  }
+  if (sample.length) return phase("Lean 実行可能仕様", "骨格のサンプル", [`実ドメインは未形式化（メモのサンプル: ${sample.map(f => rel(cfg.root, f)).join(", ")}）`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`],
+    events ? "lean-domain-model スキルで骨格のサンプルを丸ごと置き換える" : "ddd スキルで探索する（サンプルは探索の根拠にしない）。事実が集まったら lean-domain-model スキルで置き換える");
   return phase("Lean 実行可能仕様", "進行中", [`${leanFiles.length} ファイル / UseCase ${useCases} 件`, `sorry ${sorry}`, `golden ${goldens} 組`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`, `画面の口（Views）${outlets} 個`, `モックアップ ${!mockup ? "なし" : genericUi ? "汎用 UI のまま" : "作り込み済"}`],
     !bin ? "cd lean && lake build"
       : outlets === 0 ? "lean-domain-model スキルで集約ごとの一覧の口を Views に足す（口が無いと画面でも golden でも観測できない）"
