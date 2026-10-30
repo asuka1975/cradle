@@ -12,7 +12,7 @@
 // 置き場の台本（from-golden.json と同じ steps の形）に同じ順であるかを見る。
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { resolve, dirname } from "node:path";
 import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenJson, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
@@ -65,7 +65,10 @@ for (const f of goldenFlowFiles(goldenDir)) {
 }
 
 const out = { generatedFrom: cfg.lean.golden, flows };
-if (opts.out) { mkdirSync(dirname(join(cfg.root, opts.out)), { recursive: true }); writeFileSync(join(cfg.root, opts.out), JSON.stringify(out, null, 2) + "\n"); console.log(`wrote ${opts.out} (${flows.length} flows)`); }
+if (opts.out === true) fail("--out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）");
+// 相対パスはプロジェクトルートから、絶対パスはそのまま（--check の置き場と同じ読み方）
+const outFile = opts.out ? resolve(cfg.root, opts.out) : null;
+if (outFile) { mkdirSync(dirname(outFile), { recursive: true }); writeFileSync(outFile, JSON.stringify(out, null, 2) + "\n"); console.log(`wrote ${opts.out} (${flows.length} flows)`); }
 else if (opts.json) console.log(JSON.stringify(out, null, 2));
 else for (const fl of flows) {
   console.log(`# ${fl.id}  scenario=${fl.scenario} viewer=${JSON.stringify(fl.viewer)} today=${fl.today}${fl.external ? ` external environment=${environmentLabel(fl.environment)}` : ""}`);

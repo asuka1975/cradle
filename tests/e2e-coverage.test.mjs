@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const flowsFromGolden = fileURLToPath(new URL("../.apm/skills/e2e-parity/scripts/flows-from-golden.mjs", import.meta.url));
 const status = fileURLToPath(new URL("../.apm/skills/cradle/scripts/status.mjs", import.meta.url));
@@ -208,4 +208,28 @@ test("flows-from-golden は外部能力の流れに external・environment・int
   const c = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
   assert.deepEqual({ covered: c.covered, uncovered: c.uncovered, scripts: c.scripts }, { covered: ["basic", "other", "pay", "stop"], uncovered: [], scripts: 4 });
   assert.deepEqual(c.flows.find(f => f.id === "stop").environment, { name: "paymentAuthorized", script: [authorize, inquire] });
+});
+
+test("flows-from-golden --out は相対パスをプロジェクトルートから、絶対パスをそのまま書き、値の無い --out は使い方の 1 行で止まる", (t) => {
+  const { root, run } = fixture(t);
+  const rel = run(flowsFromGolden, "--out", "e2e/scenarios/from-golden.json");
+  assert.equal(rel.stdout, "wrote e2e/scenarios/from-golden.json (2 flows)\n");
+  const written = readFileSync(join(root, "e2e/scenarios/from-golden.json"), "utf8");
+  assert.deepEqual(JSON.parse(written).flows.map(f => f.id), ["basic", "other"]);
+  const elsewhere = join(tempDir(t, "cradle-e2e-out-"), "nested/flows.json");
+  const abs = run(flowsFromGolden, "--out", elsewhere);
+  assert.equal(abs.status, 0, abs.stderr);
+  assert.equal(abs.stdout, `wrote ${elsewhere} (2 flows)\n`);
+  assert.equal(readFileSync(elsewhere, "utf8"), written);
+  assert.equal(existsSync(join(root, elsewhere)), false);
+  for (const args of [["--out"], ["--out", "--json"]]) {
+    const bare = run(flowsFromGolden, ...args);
+    assert.equal(bare.status, 1, args.join(" "));
+    assert.equal(bare.stdout, "");
+    assert.equal(bare.stderr, "cradle: --out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）\n");
+  }
+  // --check は --out を見ない（台本は最初に書いた from-golden.json）
+  const check = run(flowsFromGolden, "--check", "--out");
+  assert.equal(check.status, 0, check.stdout + check.stderr);
+  assert.match(check.stdout, /^golden の流れ 2 本のうち台本が対応しているのは 2 本/);
 });
