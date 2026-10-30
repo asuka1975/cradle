@@ -2145,7 +2145,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       guard (isPortModule m)
       pure (m.getPrefix, toString m.components.getLast!)
 
-    -- 署名の写し:型 binder は Runtime 規約、インスタンスは合成、明示引数がメソッド引数。
+    -- 署名の写し: 型 binder は Runtime 規約、インスタンスは合成、明示引数がメソッド引数。
     -- 引数と残りの型(whnf 前)を返す — 戻りの写像は呼び出し側。
     -- dropPortBundles はポート束の引数を落とす(UseCase interface の本番面)
     let sigParams (ty0 : Expr) (dropPortBundles : Bool) :
