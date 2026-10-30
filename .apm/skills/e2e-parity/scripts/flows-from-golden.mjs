@@ -11,9 +11,9 @@
 // --check は golden の各流れの手の列（kind と構成子名・command なら actor・outcome。台本に payload があればそれも）が、
 // 置き場の台本（from-golden.json と同じ steps の形）に同じ順であるかを見る。
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenJson, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
 const cfg = loadConfigOrFail();
@@ -22,9 +22,11 @@ if (!existsSync(goldenDir)) fail(`golden がありません: ${goldenDir}`);
 
 const stepLine = (s) => s.kind === "observation" ? `observation ${s.observation} → ${s.outcome}` : `${s.command} by ${JSON.stringify(s.actor)} → ${s.outcome}`;
 const environmentLabel = (e) => e ? `${e.name ?? "-"} (script ${e.script.length} 件)` : "-";
+// 読めない golden はファイル名つきの 1 行で 1 で終わる（--check は門なので、壊れた流れを飛ばして通さない）
+const orFail = (f) => { try { return f(); } catch (e) { fail(e.message); } };
 
 if (opts.check) {
-  const c = e2eCoverage(cfg, opts._[0] ?? cfg.e2e.scenarios);
+  const c = orFail(() => e2eCoverage(cfg, opts._[0] ?? cfg.e2e.scenarios));
   if (opts.json) console.log(JSON.stringify(c, null, 2));
   else {
     console.log(`golden の流れ ${c.golden.length} 本のうち台本が対応しているのは ${c.covered.length} 本（台本 ${c.scripts} 本: ${c.place}）`);
@@ -40,7 +42,7 @@ if (opts.check) {
 const flows = [];
 for (const f of goldenFlowFiles(goldenDir)) {
   const name = f.replace(/-flow\.json$/, "");
-  const trace = JSON.parse(readFileSync(join(goldenDir, f), "utf8")).ok?.trace ?? [];
+  const trace = orFail(() => readGoldenJson(goldenDir, f)).ok?.trace ?? [];
   let req = null, external = false;
   try { req = readSidecar(goldenDir, name); external = isExternalGolden(goldenDir, name); } catch (e) { fail(e.message); }
   // 人物は利用者の操作の当事者だけ — 内部入力に当事者は無い
@@ -59,7 +61,7 @@ for (const f of goldenFlowFiles(goldenDir)) {
     if (t.result === "fault") return { ...base, contract: t.faultContract?.name ?? null, observe };
     return { ...base, observe };
   });
-  flows.push({ id: name, external, environment: goldenEnvironment(goldenDir, name, req), scenario: req?.init?.scenario ?? req?.flow?.scenario ?? null, viewer: req?.flow?.viewer ?? null, today: req?.flow?.today ?? null, personas, steps });
+  flows.push({ id: name, external, environment: orFail(() => goldenEnvironment(goldenDir, name, req)), scenario: req?.init?.scenario ?? req?.flow?.scenario ?? null, viewer: req?.flow?.viewer ?? null, today: req?.flow?.today ?? null, personas, steps });
 }
 
 const out = { generatedFrom: cfg.lean.golden, flows };

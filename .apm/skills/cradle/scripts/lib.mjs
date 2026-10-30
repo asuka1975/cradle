@@ -414,23 +414,27 @@ export function readSidecar(goldenDir, name) {
 
 const sidecarIsExternal = (sidecar) => (sidecar.init ?? sidecar.flow)?.cmd === "external";
 
+/** golden の応答（`<name>-init.json` / `<name>-flow.json`）を読む。読めなければどのファイルかを添えて投げる — 壊れた 1 本で status や flows-from-golden が名前の無い SyntaxError で止まらないように。 */
+export function readGoldenJson(goldenDir, file) {
+  try { return readJson(join(goldenDir, file)); } catch (e) { throw new Error(`${file} を JSON として読めない: ${e.message}`); }
+}
+
 /** 外部能力の経路（cmd external）で採った golden か。sidecar があればその init（無ければ flow）の cmd で決まる（version は見ない）。
     sidecar が無ければ応答の形で見分ける — init の応答に env があるか、flow の trace の要素に env か result があるか（旧経路の応答にはどれも無い）。 */
 export function isExternalGolden(goldenDir, name) {
   const sidecar = readSidecar(goldenDir, name);
   if (sidecar) return sidecarIsExternal(sidecar);
-  const initFile = join(goldenDir, `${name}-init.json`);
-  if (existsSync(initFile) && readJson(initFile)?.ok?.env !== undefined) return true;
-  const flowFile = join(goldenDir, `${name}-flow.json`);
-  return existsSync(flowFile) && (readJson(flowFile)?.ok?.trace ?? []).some(t => t && (t.env !== undefined || t.result !== undefined));
+  const initFile = `${name}-init.json`, flowFile = `${name}-flow.json`;
+  if (existsSync(join(goldenDir, initFile)) && readGoldenJson(goldenDir, initFile)?.ok?.env !== undefined) return true;
+  return existsSync(join(goldenDir, flowFile)) && (readGoldenJson(goldenDir, flowFile)?.ok?.trace ?? []).some(t => t && (t.env !== undefined || t.result !== undefined));
 }
 
 /** golden の環境: { name, script }。name は sidecar の環境名（script を直に渡した golden や sidecar 無しでは null）、
     script は応答の env のもの（init の応答、無ければ flow の応答の env）— E2E の駆動側が stopAt の golden で「期待したのに呼ばれなかった」尾を知るのに要る。
     どちらの応答にも env が無ければ（旧経路）null。 */
 export function goldenEnvironment(goldenDir, name, sidecar) {
-  const envOf = (file) => existsSync(file) ? readJson(file)?.ok?.env : undefined;
-  const env = envOf(join(goldenDir, `${name}-init.json`)) ?? envOf(join(goldenDir, `${name}-flow.json`));
+  const envOf = (file) => existsSync(join(goldenDir, file)) ? readGoldenJson(goldenDir, file)?.ok?.env : undefined;
+  const env = envOf(`${name}-init.json`) ?? envOf(`${name}-flow.json`);
   if (!env || typeof env !== "object") return null;
   const named = [sidecar?.init?.environment, sidecar?.flow?.environment].find(n => typeof n === "string") ?? null;
   return { name: named, script: env.script };
@@ -454,7 +458,8 @@ export function goldenFlows(cfg) {
   if (!existsSync(dir)) return [];
   return goldenFlowFiles(dir).map(f => {
     const id = f.replace(/-flow\.json$/, "");
-    const trace = JSON.parse(readFileSync(join(dir, f), "utf8")).ok?.trace ?? [];
+    // 読めない応答は投げる（readGoldenJson がファイル名を添える）— 流れを黙って落とすと flows-from-golden --check の門が通ってしまう
+    const trace = readGoldenJson(dir, f).ok?.trace ?? [];
     // 壊れた sidecar は golden-check が報告する。ここでは流れ自体は数え、sidecar の情報だけ無いものとして扱う
     let sidecar = null, external = false;
     try { sidecar = readSidecar(dir, id); external = isExternalGolden(dir, id); } catch {}
