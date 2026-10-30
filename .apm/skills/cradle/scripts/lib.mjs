@@ -226,18 +226,21 @@ export function diffJson(a, b, path = "", out = [], max = 40) {
   return out;
 }
 
+/** `--key value` / `--key=value` / `--flag`。spec の "bool" は値を取らず、"list" は現れた順に配列へ積む（値の無い `--key` は true を積む）。
+    ほかの鍵は最後の値が勝ち、次の語が `--` で始まれば値の無い true。 */
 export function parseArgs(argv, spec = {}) {
   const opts = { _: [] };
+  const put = (key, v) => { if (spec[key] === "list") (opts[key] ??= []).push(v); else opts[key] = v; };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith("--")) {
       const key = a.slice(2);
       const eq = key.indexOf("=");
-      if (eq >= 0) { opts[key.slice(0, eq)] = key.slice(eq + 1); continue; }
+      if (eq >= 0) { put(key.slice(0, eq), key.slice(eq + 1)); continue; }
       if (spec[key] === "bool") { opts[key] = true; continue; }
       const next = argv[i + 1];
-      if (next === undefined || next.startsWith("--")) opts[key] = true;
-      else { opts[key] = next; i++; }
+      if (next === undefined || next.startsWith("--")) put(key, true);
+      else { put(key, next); i++; }
     } else opts._.push(a);
   }
   return opts;

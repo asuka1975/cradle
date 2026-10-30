@@ -23,7 +23,8 @@ import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfigOrFail, callLean, parseArgs, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf } from "./lib.mjs";
 
-const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool" });
+const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool", name: "list" });
+if (opts.name?.some(n => n === true || n === "")) fail("--name には golden の名前が要ります（--name N を繰り返せば複数）");
 const cfg = loadConfigOrFail();
 const build = opts.build ?? "auto";
 const goldenDir = goldenDirOf(cfg);
@@ -31,7 +32,8 @@ if (!existsSync(goldenDir)) fail(`golden ディレクトリがありません: $
 
 const manifest = opts.manifest ? JSON.parse(readFileSync(opts.manifest, "utf8")) : {};
 const names = [...new Set(readdirSync(goldenDir).filter(f => /-(init|flow)\.json$/.test(f)).map(f => f.replace(/-(init|flow)\.json$/, "")))].sort();
-const wanted = opts.name ? [].concat(opts.name) : names;
+// --name の順に、同じ名前は 1 度だけ
+const wanted = opts.name ? [...new Set(opts.name)] : names;
 const portList = ports(cfg);
 
 /** 旧経路の golden だけ: manifest の項目と trace から init / flow のリクエストを復元する。 */
