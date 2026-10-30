@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const specQuery = fileURLToPath(new URL("../.apm/skills/cradle/scripts/spec-query.mjs", import.meta.url));
+const contractCheck = fileURLToPath(new URL("../.apm/skills/api-contract/scripts/contract-check.mjs", import.meta.url));
 
 // 偽の Lean CLI: canned.json から cmd（external なら external:<action>）で引いた応答を返す
 const fakeCli = `#!${process.execPath}
@@ -158,18 +159,30 @@ test("meta はバイナリが無ければ lake build のあとに構成子と入
   const bin = join(run.root, "lean/.lake/build/bin/example");
   const cli = readFileSync(bin, "utf8");
   rmSync(bin);
+  writeFileSync(join(run.root, "lean/Example/Runtime/Observation.lean"), "");
   // lake build が CLI を置くまで、`lake env lean` は import できずに 1 で終わる
   const before = `const fs = require("fs");
 if (process.argv[2] === "build") { fs.writeFileSync(${JSON.stringify(bin)}, ${JSON.stringify(cli)}, { mode: 0o755 }); process.exit(0); }
 if (!fs.existsSync(${JSON.stringify(bin)})) { process.stdout.write("error: unknown module prefix 'Example'\\n"); process.exit(1); }`;
   run.lake(scriptedLake({
     "Example.Runtime.Command": "inductive Example.Runtime.Command : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Command.postNote : Example.PostNote → Example.Runtime.Command\n",
+    "Example.Runtime.Observation": "inductive Example.Runtime.Observation : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Observation.paid : Example.Paid → Example.Runtime.Observation\n",
     "Example.PostNote": "structure Example.PostNote : Type\nnumber of parameters: 0\nfields:\n  Example.PostNote.title : String\n",
+    "Example.Paid": "structure Example.Paid : Type\nnumber of parameters: 0\nfields:\n  Example.Paid.amount : Nat\n",
   }, { before }));
-  const r = runNode(specQuery, ["meta"], { cwd: run.root, env: cleanEnv({ PATH: join(run.root, "no-tools") }) });
+  const env = cleanEnv({ PATH: join(run.root, "no-tools") });
+  const r = runNode(specQuery, ["meta"], { cwd: run.root, env });
   assert.equal(r.status, 0, r.stderr);
   const m = JSON.parse(r.stdout);
-  assert.deepEqual({ commands: m.commands, schemas: m.schemas, evalErrors: m.evalErrors }, { commands: ["postNote"], schemas: { postNote: { type: "Example.PostNote", fields: [{ name: "title", type: "String", optional: false, kind: "text" }] } }, evalErrors: undefined });
+  assert.deepEqual({ commands: m.commands, observations: m.observations, errors: m.errors, schemas: m.schemas, observationSchemas: m.observationSchemas, evalErrors: m.evalErrors },
+    { commands: ["postNote"], observations: ["paid"], errors: ["only"], schemas: { postNote: { type: "Example.PostNote", fields: [{ name: "title", type: "String", optional: false, kind: "text" }] } },
+      observationSchemas: { paid: { type: "Example.Paid", fields: [{ name: "amount", type: "Nat", optional: false, kind: "number" }] } }, evalErrors: undefined });
+  // 新しい checkout の 1 回目の contract-check（--meta 無し）も、build 前の観測の #print の失敗を「評価しきれていない」の 2 にしない
+  rmSync(bin);
+  mkdirSync(join(run.root, "documents/codebase"), { recursive: true });
+  writeFileSync(join(run.root, "documents/codebase/openapi.yaml"), "openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths:\n  /notes:\n    get:\n      operationId: notes\n    post:\n      operationId: postNote\n      x-cradle-kind: command\n      x-cradle-model: Example.Runtime.Command.postNote\n");
+  const cc = runNode(contractCheck, [], { cwd: run.root, env });
+  assert.equal(cc.status, 0, cc.stdout + cc.stderr);
 });
 
 test("lake を起動できなければ schemas は空の写像と構成子の #print の理由で 1（入力の無いモデルと読ませない）", (t) => {
