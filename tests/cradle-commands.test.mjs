@@ -62,9 +62,10 @@ test("contract-skeleton は抽象メソッドごとに TODO の override を並�
   assert.equal(run("NoteRepositoryContractTest.kt", "--package", "com.example.notes.wiring").stdout, skeleton("com.example.notes.wiring"));
   assert.equal(run("NoteRepositoryContractTest.kt", "--package=com.example.notes.wiring").stdout, skeleton("com.example.notes.wiring"));
   assert.equal(run("--package", "com.example.notes.wiring", "NoteRepositoryContractTest.kt").stdout, skeleton("com.example.notes.wiring"));
-  for (const valueless of [["--package"], ["--package", "--force"]]) {
+  // 空の値（--package= や空の変数を渡した --package "$P"）も値の無い形と同じ
+  for (const valueless of [["--package"], ["--package", "--force"], ["--package="], ["--package", ""], ["--package= "]]) {
     const r = run("NoteRepositoryContractTest.kt", ...valueless);
-    assert.deepEqual([r.status, r.stdout, r.stderr], [0, skeleton("com.example.notes.domain.repository"), ""], valueless.join(" "));
+    assert.deepEqual([r.status, r.stdout, r.stderr], [0, skeleton("com.example.notes.domain.repository"), ""], JSON.stringify(valueless));
   }
 });
 
