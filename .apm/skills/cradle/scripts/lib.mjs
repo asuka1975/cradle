@@ -127,6 +127,13 @@ export function callLean(cfg, request, { build = "auto" } = {}) {
   });
 }
 
+/** spec-query・golden-check の --build の値: 既定は auto（バイナリが無ければ lake build）、ほかに always と never。値の無い --build と綴りの違う値は使い方の誤りで止める（auto と読み替えない）。 */
+export function buildMode(value) {
+  if (value === undefined) return "auto";
+  if (!["auto", "always", "never"].includes(value)) fail(`--build は auto | always | never のどれか（${value === true ? "値が無い" : value}）`);
+  return value;
+}
+
 export function ensureLeanBinary(cfg, build = "auto") {
   if (build === "never") {
     if (!existsSync(cfg.lean.bin)) throw new Error(`Lean CLI がありません: ${cfg.lean.bin}（cd ${cfg.lean.dir} && lake build）`);
