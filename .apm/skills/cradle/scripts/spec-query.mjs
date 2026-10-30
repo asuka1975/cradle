@@ -24,7 +24,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfigOrFail, buildMode, callLean, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames, headerUsage } from "./lib.mjs";
-import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
+import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom, splitTypeApp } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
 const [cmd, ...rest] = opts._;
@@ -67,9 +67,9 @@ function commands() { return once("commands", () => constructorsOf(`${cfg.lean.r
 function observations() { return once("observations", () => existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }); }
 function errors() { return once("errors", () => constructorsOf(`${cfg.lean.root}.DomainError`)); }
 
-/** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。 */
+/** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。error は評価が終わらなかった理由（leanEval の error）。 */
 function printMany(names) {
-  if (!names.length) return {};
+  if (!names.length) return { blocks: {} };
   const r = leanEval(cfg, `import ${cfg.lean.root}\n` + names.map(n => `#print ${n}`).join("\n") + "\n");
   const out = {};
   let cur = null;
@@ -78,7 +78,7 @@ function printMany(names) {
     if (m && names.includes(m[1])) { cur = m[1]; out[cur] = []; }
     if (cur) out[cur].push(raw);
   }
-  return out;
+  return { blocks: out, error: r.error };
 }
 
 /** Runtime/Json.lean の手書き `instance : FromJson <T>` と直前の docstring（人が打つ表記の注記）。`deriving instance` は手書きではない。
@@ -90,17 +90,30 @@ function wireHints() {
   return hints;
 }
 
-/** コマンドごとの入力の形: 構成子 → ペイロード構造体のフィールド（組み立ては schema.mjs。Lean を呼ぶのはここ）。 */
-function commandSchemas() {
-  const ctors = commands().constructors;
-  return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
+/** 構成子の列 → 入力の形（組み立ては schema.mjs。Lean を呼ぶのはここ）。#print が評価しきれなければ、出力に無かった宣言（ペイロードか 1 段展開する値オブジェクト）を
+    使う構成子に error を載せ、理由を error に返す — 載せなければ「構造体でない」「値オブジェクトでない」と同じ形に見える。 */
+function schemasOf(ctors) {
+  let error;
+  const missing = new Set();
+  const print = (names) => {
+    const r = printMany(names);
+    if (r.error !== undefined) { error ??= r.error; for (const n of names) if (!r.blocks[n]) missing.add(n); }
+    return r.blocks;
+  };
+  const specs = schemasFrom(ctors, print(payloadHeads(ctors)), wireHints(), cfg.lean.root, print);
+  for (const s of Object.values(specs)) {
+    if (s.error === undefined && [s.type, ...(s.fields ?? []).map(f => splitTypeApp(f.type).head)].some(n => missing.has(n))) s.error = `#print を評価できない: ${error}`;
+  }
+  return { specs, error };
 }
+
+/** コマンドごとの入力の形: 構成子 → ペイロード構造体のフィールド。 */
+function commandSchemas() { return schemasOf(commands().constructors); }
 
 /** 内部入力ごとの形（コマンドの入力欄とは別に出す — 利用者のフォームに観測を混ぜない）。 */
 function observationSchemas() {
   const ctors = observations().constructors;
-  if (!ctors.length) return {};
-  return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
+  return ctors.length ? schemasOf(ctors) : { specs: {} };
 }
 
 async function outlets() {
@@ -178,7 +191,14 @@ try {
     case "commands": printJson(commands()); break;
     case "errors": printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
-    case "schemas": printJson(commandSchemas()); break;
+    case "schemas": {
+      const { specs, error } = commandSchemas();
+      printJson(specs);
+      // 構成子かペイロードの #print が評価しきれなければ、空の・欠けた写像を「入力が無い」と読ませないよう理由を出して 0 で終えない
+      const reason = commands().error ?? error;
+      if (reason !== undefined) { process.stderr.write(`cradle: #print を評価できない: ${reason}\n`); process.exitCode = 1; }
+      break;
+    }
     case "meta": {
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
@@ -186,10 +206,13 @@ try {
         scenarios: scenarioNames(cfg), environments: environmentNames(cfg), external: await externalProtocol(),
         commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
-        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() };
-      // #print が通らなかった合併型の理由は末尾の evalErrors に置き、空の一覧を「モデルに無い」と読ませない。全部通れば鍵ごと出さない。
+        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets() };
+      // 入力の形の #print は、バイナリが無ければ externalProtocol が走らせる lake build のあとに引く（それまで import するモジュールが無い）
+      const schemas = commandSchemas(), obsSchemas = observationSchemas();
+      Object.assign(meta, { schemas: schemas.specs, observationSchemas: obsSchemas.specs });
+      // #print が通らなかった合併型と入力の形の理由は末尾の evalErrors に置き、空の一覧を「モデルに無い」と読ませない。全部通れば鍵ごと出さない。
       // 終了コードは 0 のまま — モックアップは meta が 0 で終わらなければ全体を捨て、シナリオと画面の口まで失う
-      const evalErrors = Object.fromEntries(Object.entries({ commands: commands(), observations: observations(), errors: errors() }).filter(([, r]) => r.error !== undefined).map(([k, r]) => [k, r.error]));
+      const evalErrors = Object.fromEntries(Object.entries({ commands: commands(), observations: observations(), errors: errors(), schemas, observationSchemas: obsSchemas }).filter(([, r]) => r.error !== undefined).map(([k, r]) => [k, r.error]));
       printJson(Object.keys(evalErrors).length ? { ...meta, evalErrors } : meta);
       break;
     }

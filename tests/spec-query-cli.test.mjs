@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, writeFileSync, chmodSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
@@ -58,9 +58,19 @@ function fixture(t, canned) {
     assert.equal(r.status, 0, r.stdout + r.stderr);
     return JSON.parse(r.stdout);
   };
-  const lake = () => { writeFileSync(join(noTools, "lake"), fakeLake); chmodSync(join(noTools, "lake"), 0o755); };
+  const lake = (script = fakeLake) => { writeFileSync(join(noTools, "lake"), script); chmodSync(join(noTools, "lake"), 0o755); };
   return Object.assign(run, { raw, root, lake });
 }
+
+// 偽の lake: decls に書いた宣言の #print の出力を返し（書いていない名前は fakeLake と同じ構成子 1 つの inductive）、kill の宣言を #print する回は
+// SIGKILL で止まる（時間切れ・signal の代わり）。構成子の #print とペイロードの #print は別の `lake env lean` なので、構成子だけが通る。before は #print より先に走る行
+const scriptedLake = (decls, { kill = [], before = "" } = {}) => `#!${process.execPath}
+${before}
+const names = [...require("fs").readFileSync(process.argv[4], "utf8").matchAll(/^#print (\\S+)$/gm)].map(m => m[1]);
+if (names.some(n => ${JSON.stringify(kill)}.includes(n))) process.kill(process.pid, "SIGKILL");
+const decls = ${JSON.stringify(decls)};
+for (const n of names) process.stdout.write(decls[n] ?? \`inductive \${n} : Type\\nnumber of parameters: 0\\nconstructors:\\n\${n}.only : \${n}\\n\`);
+`;
 
 const init = { ok: { state: { notes: [] }, views: { notes: [] } } };
 
@@ -100,6 +110,74 @@ test("lake を起動できなければ #print の失敗を空の一覧で済ま�
   const ok = run("meta");
   assert.deepEqual({ commands: ok.commands, observations: ok.observations, errors: ok.errors, last: Object.keys(ok).at(-1) }, { commands: ["only"], observations: ["only"], errors: ["only"], last: "observationSchemas" });
   assert.equal(run.raw("print", "Example.Runtime.Command").status, 0);
+});
+
+test("ペイロードの #print が評価しきれなければ入力の形を「構造体でない」で済ませない — 構成子の error、meta の evalErrors.schemas、schemas は 1", (t) => {
+  const run = fixture(t, { init });
+  const decls = {
+    "Example.Runtime.Command": "inductive Example.Runtime.Command : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Command.postNote : Example.PostNote → Example.Runtime.Command\nExample.Runtime.Command.ping : Example.Runtime.Command\n",
+    "Example.Runtime.Observation": "inductive Example.Runtime.Observation : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Observation.paid : Example.Paid → Example.Runtime.Observation\n",
+    "Example.PostNote": "structure Example.PostNote : Type\nnumber of parameters: 0\nfields:\n  Example.PostNote.slot : Example.Slot\nconstructor:\n  Example.PostNote.mk : Example.Slot → Example.PostNote\n",
+    "Example.Paid": "structure Example.Paid : Type\nnumber of parameters: 0\nfields:\n  Example.Paid.amount : Nat\nconstructor:\n  Example.Paid.mk : Nat → Example.Paid\n",
+    "Example.Slot": "structure Example.Slot : Type\nnumber of parameters: 0\nfields:\n  Example.Slot.at : Example.Date\nconstructor:\n  Example.Slot.mk : Example.Date → Example.Slot\n",
+  };
+  // 全部通れば error も evalErrors も無く 0
+  run.lake(scriptedLake(decls));
+  const okSchemas = run.raw("schemas");
+  assert.equal(okSchemas.status, 0, okSchemas.stderr);
+  assert.deepEqual(JSON.parse(okSchemas.stdout), { postNote: { type: "Example.PostNote", fields: [{ name: "slot", type: "Example.Slot", optional: false, kind: "object", fields: [{ name: "at", type: "Example.Date", optional: false, kind: "date" }] }] }, ping: { fields: [] } });
+  assert.equal(run("meta").evalErrors, undefined);
+  // ペイロードが構造体でないのは評価の失敗ではない（fields: null で error は無い）
+  run.lake(scriptedLake({ ...decls, "Example.PostNote": "inductive Example.PostNote : Type\nnumber of parameters: 0\nconstructors:\nExample.PostNote.a : Nat → Example.PostNote\n" }));
+  assert.deepEqual(run("schemas").postNote, { type: "Example.PostNote", fields: null });
+  // ペイロードの #print が止まった: その構成子に理由、引数の無い構成子はそのまま、schemas は写像を出して 1
+  run.lake(scriptedLake(decls, { kill: ["Example.PostNote"] }));
+  const killed = run.raw("schemas");
+  assert.equal(killed.status, 1);
+  assert.deepEqual(JSON.parse(killed.stdout), { postNote: { type: "Example.PostNote", fields: null, error: "#print を評価できない: killed by SIGKILL" }, ping: { fields: [] } });
+  assert.equal(killed.stderr, "cradle: #print を評価できない: killed by SIGKILL\n");
+  const m = run("meta");
+  assert.deepEqual({ evalErrors: m.evalErrors, last: Object.keys(m).at(-1), commands: m.commands }, { evalErrors: { schemas: "killed by SIGKILL" }, last: "evalErrors", commands: ["postNote", "ping"] });
+  assert.equal(m.schemas.postNote.error, "#print を評価できない: killed by SIGKILL");
+  // 1 段展開する値オブジェクトの #print が止まった: 欄は json に落ち、その構成子に理由
+  run.lake(scriptedLake(decls, { kill: ["Example.Slot"] }));
+  const partial = run.raw("schemas");
+  assert.equal(partial.status, 1);
+  assert.deepEqual(JSON.parse(partial.stdout).postNote, { type: "Example.PostNote", fields: [{ name: "slot", type: "Example.Slot", optional: false, kind: "json" }], error: "#print を評価できない: killed by SIGKILL" });
+  assert.deepEqual(run("meta").evalErrors, { schemas: "killed by SIGKILL" });
+  // 内部入力のペイロードは observationSchemas の鍵で
+  writeFileSync(join(run.root, "lean/Example/Runtime/Observation.lean"), "");
+  run.lake(scriptedLake(decls, { kill: ["Example.Paid"] }));
+  const obs = run("meta");
+  assert.deepEqual(obs.evalErrors, { observationSchemas: "killed by SIGKILL" });
+  assert.deepEqual(obs.observationSchemas, { paid: { type: "Example.Paid", fields: null, error: "#print を評価できない: killed by SIGKILL" } });
+});
+
+test("meta はバイナリが無ければ lake build のあとに構成子と入力の形を #print する（build 前の import の失敗を evalErrors にしない）", (t) => {
+  const run = fixture(t, { init });
+  const bin = join(run.root, "lean/.lake/build/bin/example");
+  const cli = readFileSync(bin, "utf8");
+  rmSync(bin);
+  // lake build が CLI を置くまで、`lake env lean` は import できずに 1 で終わる
+  const before = `const fs = require("fs");
+if (process.argv[2] === "build") { fs.writeFileSync(${JSON.stringify(bin)}, ${JSON.stringify(cli)}, { mode: 0o755 }); process.exit(0); }
+if (!fs.existsSync(${JSON.stringify(bin)})) { process.stdout.write("error: unknown module prefix 'Example'\\n"); process.exit(1); }`;
+  run.lake(scriptedLake({
+    "Example.Runtime.Command": "inductive Example.Runtime.Command : Type\nnumber of parameters: 0\nconstructors:\nExample.Runtime.Command.postNote : Example.PostNote → Example.Runtime.Command\n",
+    "Example.PostNote": "structure Example.PostNote : Type\nnumber of parameters: 0\nfields:\n  Example.PostNote.title : String\n",
+  }, { before }));
+  const r = runNode(specQuery, ["meta"], { cwd: run.root, env: cleanEnv({ PATH: join(run.root, "no-tools") }) });
+  assert.equal(r.status, 0, r.stderr);
+  const m = JSON.parse(r.stdout);
+  assert.deepEqual({ commands: m.commands, schemas: m.schemas, evalErrors: m.evalErrors }, { commands: ["postNote"], schemas: { postNote: { type: "Example.PostNote", fields: [{ name: "title", type: "String", optional: false, kind: "text" }] } }, evalErrors: undefined });
+});
+
+test("lake を起動できなければ schemas は空の写像と構成子の #print の理由で 1（入力の無いモデルと読ませない）", (t) => {
+  const run = fixture(t, { init });
+  const r = run.raw("schemas");
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, "{}\n");
+  assert.match(r.stderr, /^cradle: #print を評価できない: .*lake/);
 });
 
 test("使い方は先頭のコメントだけを出し、プロジェクトの外でも引ける（コマンド無しは 0、知らないコマンドは 1）。知っているコマンドは設定を読む", (t) => {
