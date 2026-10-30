@@ -175,13 +175,16 @@ class Kotlinize(private val ir: Ir) {
 
 	fun isFixtureBridged(lean: String): Boolean = lean in fixtureBridged
 
+	/** fixture 語彙(<X>Fixture)で表す型: entity-like と橋渡し型。 */
+	fun isFixtureVocab(td: IrTypeDef): Boolean = isEntityLike(td) || isFixtureBridged(td.lean)
+
 	/** fixture 語彙での型表現: Entity / 集約ルート・橋渡し型(entity-like を運ぶ
 	    sealed / VO 構造)の参照を fixture 型に置き換える
 	    (State は fixture の入れ物 — Entity interface を運ばない)。 */
 	fun typeRefFixture(t: IrType): String = when (t) {
 		is IrType.Ref -> {
 			val td = ir.typeDef(t.lean)
-			if (isEntityLike(td) || isFixtureBridged(t.lean)) fixtureName(td) else typeRef(t)
+			if (isFixtureVocab(td)) fixtureName(td) else typeRef(t)
 		}
 		is IrType.ListOf -> "List<${typeRefFixture(t.of)}>"
 		is IrType.OptionOf -> "${typeRefFixture(t.of)}?"
@@ -534,7 +537,7 @@ class Kotlinize(private val ir: Ir) {
 					require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
 					"${ident(f.name)} = ${literal(f.type, o.getValue(f.name))}"
 				}
-				val ctor = if (isEntityLike(td) || isFixtureBridged(td.lean)) fixtureName(td) else td.kotlin
+				val ctor = if (isFixtureVocab(td)) fixtureName(td) else td.kotlin
 				"$ctor($args)"
 			}
 		}

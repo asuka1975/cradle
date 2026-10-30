@@ -16,9 +16,7 @@ internal fun EmitTests.arbsBody(): String {
 				// 本番語彙のまま生成される型(View / エラー等)が entity-like へ到達する
 				// 場合、その Arb は語彙が混ざって構築できない(View→ドメイン語彙の壁)—
 				// 生成しない。fixture 語彙の Arb は entity-like / 橋渡し型側が持つ
-				if (!k.isEntityLike(td) && !k.isFixtureBridged(td.lean) &&
-					k.reachesEntityLike(IrType.Ref(td.lean))
-				) {
+				if (!k.isFixtureVocab(td) && k.reachesEntityLike(IrType.Ref(td.lean))) {
 					log("  note: ${td.kotlin}: 本番語彙が entity-like へ到達するため Arb は生成しない(View→ドメイン語彙の壁)")
 				} else {
 					body.append(dataArb(td)).append("\n\n")
@@ -101,18 +99,16 @@ internal fun EmitTests.dataArb(td: IrTypeDef): String {
 	return when (val shape = td.shape) {
 		is IrShape.Structure -> {
 			// entity-like / 橋渡し型の Arb は fixture 語彙を生成する(閉包)
-			val fixture = k.isEntityLike(td) || k.isFixtureBridged(td.lean)
-			val ctor = if (fixture) "${td.kotlin}Fixture" else kn
-			val retT = if (fixture) "${td.kotlin}Fixture" else kn
+			val typeName = if (k.isFixtureVocab(td)) k.fixtureName(td) else kn
 			val expr = structureArb(td, td.lean, shape.fields) { ps ->
-				constructCall(ctor, shape.fields, ps)
+				constructCall(typeName, shape.fields, ps)
 			}
-			"internal fun $fn(): Arb<$retT> =\n\t$expr"
+			"internal fun $fn(): Arb<$typeName> =\n\t$expr"
 		}
 		is IrShape.Enum -> "internal fun $fn(): Arb<$kn> = Arb.enum<$kn>()"
 		is IrShape.Sealed -> {
 			// 橋渡し sealed(entity-like を運ぶ)は平行 fixture 側の構成子で生成する
-			val base = if (k.isFixtureBridged(td.lean)) "${td.kotlin}Fixture" else kn
+			val base = if (k.isFixtureBridged(td.lean)) k.fixtureName(td) else kn
 			val branches = shape.ctors.mapIndexed { i, c ->
 				val expr =
 					if (c.fields.isEmpty()) "Arb.constant($base.${k.ctorClassName(c.name)})"
@@ -133,8 +129,7 @@ internal fun EmitTests.sampledArb(td: IrTypeDef, fn: String): String {
 	require(td.samples.isNotEmpty()) {
 		"${td.lean}: 制約(${td.invariants.joinToString(", ") { it.name }})を満たすサンプルを Lean が組めないため Arb を作れません"
 	}
-	val fixture = k.isEntityLike(td) || k.isFixtureBridged(td.lean)
-	val retT = if (fixture) "${td.kotlin}Fixture" else k.name(td.lean)
+	val retT = if (k.isFixtureVocab(td)) k.fixtureName(td) else k.name(td.lean)
 	val doc = "/** `${td.lean}` の制約(${td.invariants.joinToString("・") { it.name }})を Lean が decide して通したサンプル。 */\n"
 	return "${doc}internal fun $fn(): Arb<$retT> =\n\tArb.element(${td.samples.joinToString(", ") { k.refLiteral(td, it) }})"
 }

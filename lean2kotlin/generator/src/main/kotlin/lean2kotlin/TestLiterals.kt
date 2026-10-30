@@ -9,7 +9,7 @@ import kotlinx.serialization.json.*
     橋渡し型(entity-like を運ぶ sealed / VO 構造)も toFixture で正規化する。 */
 internal fun EmitTests.fixtureNorm(t: IrType): String = when (t) {
 	is IrType.Ref ->
-		if (k.isEntityLike(ir.typeDef(t.lean)) || k.isFixtureBridged(t.lean)) ".toFixture()" else ""
+		if (k.isFixtureVocab(ir.typeDef(t.lean))) ".toFixture()" else ""
 	is IrType.ListOf ->
 		if (fixtureNorm(t.of).isNotEmpty()) ".map { it${fixtureNorm(t.of)} }" else ""
 	is IrType.OptionOf ->
@@ -95,8 +95,7 @@ internal fun EmitTests.defaultLiteral(t: IrType): String? = when (t) {
 		when {
 			shape is IrShape.Enum -> "${k.name(t.lean)}.${shape.ctors.first().replaceFirstChar { it.uppercase() }}"
 			shape is IrShape.Structure -> {
-				val ctor = if (k.isEntityLike(td) || k.isFixtureBridged(t.lean)) k.fixtureName(td)
-					else k.name(t.lean)
+				val ctor = if (k.isFixtureVocab(td)) k.fixtureName(td) else k.name(t.lean)
 				// 0 フィールドは data object(呼び出し形にしない)
 				if (shape.fields.isEmpty()) ctor
 				else {

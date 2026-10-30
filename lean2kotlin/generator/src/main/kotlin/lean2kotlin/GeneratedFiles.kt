@@ -31,7 +31,7 @@ internal class GeneratedFiles(
 		for (lean in c.fixtures) {
 			// fixture はテストのルートパッケージ(GeneratedFixtures)在住
 			if (subpkg != null) {
-				imports.add(basePackage + "." + ir.typeDef(lean).kotlin + "Fixture")
+				imports.add(basePackage + "." + k.fixtureName(ir.typeDef(lean)))
 			}
 		}
 		if (subpkg != null && body.contains(".toFixture(")) {

@@ -17,40 +17,22 @@ internal fun EmitTests.fixturesBody(): String {
 	val bridged = ir.types.filter { k.isFixtureBridged(it.lean) }
 	for (td in entities) {
 		val shape = td.shape as? IrShape.Structure ?: continue
-		if (shape.fields.isEmpty()) {
-			// data class は引数 0 を許さない — 0 フィールドの観測は data object
-			sb.append("data object ${td.kotlin}Fixture\n\n")
-			continue
-		}
-		val params = shape.fields.joinToString(", ") { f ->
-			val base = (f.type as? IrType.WithDefault)?.of ?: f.type
-			val dflt = (f.type as? IrType.WithDefault)?.let { " = ${k.defaultExpr(it)}" } ?: ""
-			"val ${ident(f.name)}: ${k.typeRefFixture(base)}$dflt"
-		}
-		sb.append("data class ${td.kotlin}Fixture($params)\n\n")
+		appendStructureFixture(sb, td, shape.fields, withDefaults = true)
 	}
 	for (td in bridged) {
 		when (val shape = td.shape) {
-			is IrShape.Structure -> {
-				if (shape.fields.isEmpty()) {
-					sb.append("data object ${td.kotlin}Fixture\n\n")
-				} else {
-					val params = shape.fields.joinToString(", ") { f ->
-						"val ${ident(f.name)}: ${k.typeRefFixture(f.type)}"
-					}
-					sb.append("data class ${td.kotlin}Fixture($params)\n\n")
-				}
-			}
+			is IrShape.Structure -> appendStructureFixture(sb, td, shape.fields, withDefaults = false)
 			is IrShape.Sealed -> {
-				sb.append("sealed interface ${td.kotlin}Fixture {\n")
+				val fx = k.fixtureName(td)
+				sb.append("sealed interface $fx {\n")
 				for (c in shape.ctors) {
 					if (c.fields.isEmpty()) {
-						sb.append("\tdata object ${k.ctorClassName(c.name)} : ${td.kotlin}Fixture\n")
+						sb.append("\tdata object ${k.ctorClassName(c.name)} : $fx\n")
 					} else {
 						val params = c.fields.joinToString(", ") { f ->
 							"val ${ident(f.name)}: ${k.typeRefFixture(f.type)}"
 						}
-						sb.append("\tdata class ${k.ctorClassName(c.name)}($params) : ${td.kotlin}Fixture\n")
+						sb.append("\tdata class ${k.ctorClassName(c.name)}($params) : $fx\n")
 					}
 				}
 				sb.append("}\n\n")
@@ -60,38 +42,23 @@ internal fun EmitTests.fixturesBody(): String {
 	}
 	for (td in entities) {
 		val shape = td.shape as? IrShape.Structure ?: continue
-		if (shape.fields.isEmpty()) {
-			sb.append("fun ${k.name(td.lean)}.toFixture(): ${td.kotlin}Fixture = ${td.kotlin}Fixture\n\n")
-			continue
-		}
-		val args = shape.fields.joinToString(", ") { f ->
-			"${ident(f.name)} = ${ident(f.name)}${fixtureNorm(f.type)}"
-		}
-		sb.append("fun ${k.name(td.lean)}.toFixture(): ${td.kotlin}Fixture = ${td.kotlin}Fixture($args)\n\n")
+		appendStructureToFixture(sb, td, shape.fields)
 	}
 	for (td in bridged) {
 		when (val shape = td.shape) {
-			is IrShape.Structure -> {
-				if (shape.fields.isEmpty()) {
-					sb.append("fun ${k.name(td.lean)}.toFixture(): ${td.kotlin}Fixture = ${td.kotlin}Fixture\n\n")
-				} else {
-					val args = shape.fields.joinToString(", ") { f ->
-						"${ident(f.name)} = ${ident(f.name)}${fixtureNorm(f.type)}"
-					}
-					sb.append("fun ${k.name(td.lean)}.toFixture(): ${td.kotlin}Fixture = ${td.kotlin}Fixture($args)\n\n")
-				}
-			}
+			is IrShape.Structure -> appendStructureToFixture(sb, td, shape.fields)
 			is IrShape.Sealed -> {
-				sb.append("fun ${k.name(td.lean)}.toFixture(): ${td.kotlin}Fixture = when (this) {\n")
+				val fx = k.fixtureName(td)
+				sb.append("fun ${k.name(td.lean)}.toFixture(): $fx = when (this) {\n")
 				for (c in shape.ctors) {
 					val cn = k.ctorClassName(c.name)
 					if (c.fields.isEmpty()) {
-						sb.append("\tis ${td.kotlin}.$cn -> ${td.kotlin}Fixture.$cn\n")
+						sb.append("\tis ${td.kotlin}.$cn -> $fx.$cn\n")
 					} else {
 						val args = c.fields.joinToString(", ") { f ->
 							"${ident(f.name)} = ${ident(f.name)}${fixtureNorm(f.type)}"
 						}
-						sb.append("\tis ${td.kotlin}.$cn -> ${td.kotlin}Fixture.$cn($args)\n")
+						sb.append("\tis ${td.kotlin}.$cn -> $fx.$cn($args)\n")
 					}
 				}
 				sb.append("}\n\n")
@@ -100,4 +67,33 @@ internal fun EmitTests.fixturesBody(): String {
 		}
 	}
 	return sb.toString().trimEnd()
+}
+
+/** 構造の fixture。withDefaults なら既定値のあるフィールドのパラメータに既定値を付ける。 */
+private fun EmitTests.appendStructureFixture(sb: StringBuilder, td: IrTypeDef, fields: List<IrField>, withDefaults: Boolean) {
+	val fx = k.fixtureName(td)
+	if (fields.isEmpty()) {
+		// data class は引数 0 を許さない — 0 フィールドの観測は data object
+		sb.append("data object $fx\n\n")
+		return
+	}
+	val params = fields.joinToString(", ") { f ->
+		val dflt = (f.type as? IrType.WithDefault)?.takeIf { withDefaults }?.let { " = ${k.defaultExpr(it)}" } ?: ""
+		"val ${ident(f.name)}: ${k.typeRefFixture(f.type)}$dflt"
+	}
+	sb.append("data class $fx($params)\n\n")
+}
+
+/** 構造の観測正規化: 各フィールドを fixtureNorm で fixture 語彙に写す。 */
+private fun EmitTests.appendStructureToFixture(sb: StringBuilder, td: IrTypeDef, fields: List<IrField>) {
+	val fx = k.fixtureName(td)
+	val head = "fun ${k.name(td.lean)}.toFixture(): $fx = $fx"
+	if (fields.isEmpty()) {
+		sb.append("$head\n\n")
+		return
+	}
+	val args = fields.joinToString(", ") { f ->
+		"${ident(f.name)} = ${ident(f.name)}${fixtureNorm(f.type)}"
+	}
+	sb.append("$head($args)\n\n")
 }
