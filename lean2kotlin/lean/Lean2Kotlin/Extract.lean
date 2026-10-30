@@ -1323,6 +1323,45 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       guard (isPortModule m)
       pure (m.getPrefix, toString m.components.getLast!)
 
+    -- 署名の写し:型 binder は Runtime 規約、インスタンスは合成、明示引数がメソッド引数。
+    -- 引数と残りの型(whnf 前)を返す — 戻りの写像は呼び出し側。
+    -- dropPortBundles はポート束の引数を落とす(UseCase interface の本番面)
+    let sigParams (ty0 : Expr) (dropPortBundles : Bool) :
+        Elab.TermElabM (Array FieldIR × Expr) := do
+      let mut ty := ty0
+      let mut params : Array FieldIR := #[]
+      let mut i := 0
+      repeat
+        let ty' ← whnf ty
+        match ty' with
+        | .forallE nm dom body bi =>
+          if bi == .instImplicit then
+            let inst ← synthInstance dom
+            ty := body.instantiate1 inst
+          else if dom.isSort then
+            ty := body.instantiate1 (← binderConst rootNs nm)
+          else if ← Meta.isProp dom then
+            -- 制約の証明(泉の新鮮性など)は実装の義務 — 署名に写らない
+            ty := body.instantiate1 (mkConst ``Unit)
+          else
+            -- ポート束(関数フィールドの structure)は配線 —
+            -- 本番面に写らない(precise 入力と同じ扱い)
+            let isPortBundle ← do
+              if dropPortBundles then
+                let domW ← whnf dom
+                match domW.getAppFn with
+                | .const dn _ => hasFunctionField dn
+                | _ => pure false
+              else pure false
+            unless isPortBundle do
+              let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
+              params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
+              i := i + 1
+            -- 引数値には依存しない前提(依存すれば typeToIR が落ちる)
+            ty := body.instantiate1 (mkConst ``Unit)
+        | _ => break
+      pure (params, ty)
+
     -- 3. UseCase / QueryService の interface 面(1 UseCase 1 ディレクトリ)。
     -- モジュールの葉(UseCase / QueryService)で対象を選び、固定形(only)だけを写す。
     -- 状態遷移契約 execute : Command → State → Result の本番面は
@@ -1346,37 +1385,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           (anyLeaf && m != modPrefix || m.components.getLast! == leaf) do continue
         unless only.isEmpty || only.contains (n.updatePrefix Name.anonymous) do continue
         unless (← isInterfaceCandidate env n) do continue
-        -- 署名の写し: 型 binder は Runtime 規約、インスタンスは合成、明示引数がメソッド引数
         let sigResult ← try
-          let mut ty := ci.type
-          let mut params : Array FieldIR := #[]
-          let mut i := 0
-          repeat
-            let ty' ← whnf ty
-            match ty' with
-            | .forallE nm dom body bi =>
-              if bi == .instImplicit then
-                let inst ← synthInstance dom
-                ty := body.instantiate1 inst
-              else if dom.isSort then
-                ty := body.instantiate1 (← binderConst rootNs nm)
-              else if ← Meta.isProp dom then
-                -- 制約の証明(泉の新鮮性など)は実装の義務 — 本番面に写らない
-                ty := body.instantiate1 (mkConst ``Unit)
-              else
-                -- ポート束(関数フィールドの structure)は配線 —
-                -- 本番面に写らない(precise 入力と同じ扱い)
-                let domW ← whnf dom
-                let isPortBundle ← match domW.getAppFn with
-                  | .const dn _ => hasFunctionField dn
-                  | _ => pure false
-                unless isPortBundle do
-                  let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
-                  params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
-                  i := i + 1
-                -- 引数値には依存しない前提(依存すれば typeToIR が落ちる)
-                ty := body.instantiate1 (mkConst ``Unit)
-            | _ => break
+          let (params, ty) ← sigParams ci.type true
           let retTy ← whnf ty
           -- 状態遷移契約の戻りの写像:
           --   State                       → Unit(全域 — unlike。効果は状態の観測)
@@ -1526,27 +1536,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let some (tyN, _) := roles.toList.find? (fun (t, ro) =>
           t.components.getLast! == pLast && behaviorSubjectRoles.contains ro) | continue
       let sigResult ← try
-        let mut ty := ci.type
-        let mut params : Array FieldIR := #[]
-        let mut i := 0
-        repeat
-          let ty' ← whnf ty
-          match ty' with
-          | .forallE nm dom body bi =>
-            if bi == .instImplicit then
-              let inst ← synthInstance dom
-              ty := body.instantiate1 inst
-            else if dom.isSort then
-              ty := body.instantiate1 (← binderConst rootNs nm)
-            else if ← Meta.isProp dom then
-              -- 制約の証明は実装の義務 — 署名に写らない
-              ty := body.instantiate1 (mkConst ``Unit)
-            else
-              let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
-              params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
-              i := i + 1
-              ty := body.instantiate1 (mkConst ``Unit)
-          | _ => break
+        let (params, ty) ← sigParams ci.type false
         pure (some (params, ← typeToIR rootNs reg (← whnf ty)))
       catch e =>
         logInfo m!"lean2kotlin: ふるまい {n} の署名を写像できず除外: {← e.toMessageData.toString}"
@@ -1591,27 +1581,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       unless isJudgment || isProjection do continue
       unless (← isInterfaceCandidate env n) do continue
       let sigResult ← try
-        let mut ty := ci.type
-        let mut params : Array FieldIR := #[]
-        let mut i := 0
-        repeat
-          let ty' ← whnf ty
-          match ty' with
-          | .forallE nm dom body bi =>
-            if bi == .instImplicit then
-              let inst ← synthInstance dom
-              ty := body.instantiate1 inst
-            else if dom.isSort then
-              ty := body.instantiate1 (← binderConst rootNs nm)
-            else if ← Meta.isProp dom then
-              -- 制約の証明は実装の義務 — 署名に写らない
-              ty := body.instantiate1 (mkConst ``Unit)
-            else
-              let pname := if nm.hasMacroScopes then s!"arg{i}" else toString nm
-              params := params.push { name := pname, type := ← typeToIR rootNs reg dom }
-              i := i + 1
-              ty := body.instantiate1 (mkConst ``Unit)
-          | _ => break
+        let (params, ty) ← sigParams ci.type false
         pure (some (params, ← typeToIR rootNs reg (← whnf ty)))
       catch _ => pure none
       let some (params, ret) := sigResult | continue
