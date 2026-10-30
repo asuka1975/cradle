@@ -53,6 +53,20 @@ jobs:
         run: |
           cmp lean2kotlin/scaffold-check/build/lean2kotlin/lean2kotlin-ir.json lean2kotlin/generator/src/test/resources/sprout/sprout-ir.json
           cmp lean2kotlin/scaffold-check/port/build/lean2kotlin/lean2kotlin-ir.json lean2kotlin/generator/src/test/resources/lobby/lobby-ir.json
+      # テスト資源 mini（scaffold-check の外の最小ドメイン）の IR と CLI の init 応答を今の抽出器で採り直して突き合わせる
+      # — mini/lean の下に .lake を作らないよう $RUNNER_TEMP の写しで採る（手順は generator/src/test/resources/README.md の mini/）
+      - name: IR and golden match the mini fixture
+        run: |
+          M="$GITHUB_WORKSPACE/lean2kotlin/generator/src/test/resources/mini"
+          W="$RUNNER_TEMP/mini"
+          mkdir -p "$W/ws" && cp -r "$M/lean" "$W/mini-lean" && cp "$M/lean/lean-toolchain" "$W/ws/lean-toolchain"
+          printf 'name = "mini-extraction"\n\n[[require]]\nname = "mini-lean"\npath = "%s"\n\n[[require]]\nname = "lean2kotlin"\npath = "%s"\n' "$W/mini-lean" "$GITHUB_WORKSPACE/lean2kotlin/lean" > "$W/ws/lakefile.toml"
+          printf 'import Mini\nimport Lean2Kotlin.Extract\n\nset_option maxHeartbeats 4000000 in\n#kotlin_ir "Mini" "%s"\n' "$W/ir.json" > "$W/ws/Driver.lean"
+          cd "$W/ws" && lake build Mini Lean2Kotlin && lake env lean Driver.lean
+          cmp "$W/ir.json" "$M/ir.json"
+          cd "$W/mini-lean" && lake build mini
+          jq -c .init "$M/golden/basic.request.json" | lake exe mini > "$W/basic-init.json"
+          cmp "$W/basic-init.json" "$M/golden/basic-init.json"
       - name: lean-check on the port fixture
         run: cd lean2kotlin/scaffold-check/port && node "$GITHUB_WORKSPACE/.apm/skills/cradle/scripts/lean-check.mjs"
       # port の CLI（lobby）と外部能力の golden の再生 — cmd external の回帰
