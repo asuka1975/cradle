@@ -580,9 +580,9 @@ function scriptStep(s) {
 
 /** golden の流れが台本に対応しているか: 手の列（kind と構成子名・command なら actor・outcome）が同じ順で台本にあれば対応。
     台本の手に payload が書いてあれば golden の入力の中身とも一致を要る（無ければ手の列だけで合う）。
-    台本 1 本が対応する流れは 1 本 — 手の列が同じ流れが複数あっても、台本の本数を超えては数えない。 */
-export function e2eCoverage(cfg, place = cfg.e2e.scenarios) {
-  const golden = goldenFlows(cfg);
+    台本 1 本が対応する流れは 1 本 — 手の列が同じ流れが複数あっても、台本の本数を超えては数えない。
+    golden は goldenFlows の流れ。status は読めない golden と辿れない台本の置き場を別の事実にするので、先に読んだ流れを渡す。 */
+export function e2eCoverage(cfg, place = cfg.e2e.scenarios, golden = goldenFlows(cfg)) {
   const scripts = scenarioScripts(cfg, place);
   const same = (a, b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
   const stepMatches = (g, s) => g.kind === s.kind && g[g.kind] === s[s.kind] && g.outcome === s.outcome

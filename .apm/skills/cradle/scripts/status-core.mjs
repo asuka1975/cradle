@@ -2,7 +2,7 @@
 // フェーズは ctx（設定・読み方・フェーズをまたいで使う数）を受けて { name, state, facts, next } を返す。
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
+import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, goldenFlows, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
 
 const ids = "(?:HS|UX|MQ)-\\d+";
 const phase = (name, state, facts, next) => ({ name, state, facts, next });
@@ -176,9 +176,11 @@ function infraImpl({ cfg, R, deploy: { local } }) {
 function e2e({ cfg, R }) {
   if (!existsSync(R(cfg.e2e.dir))) return phase("E2E（Lean × REST の一致）", "未着手", [], "インフラ実装（local スタック）の後に e2e-parity スキルで締める");
   // 台本は golden の流れに対応していて初めて数える（手書きでも、手の列が golden と同じなら対応）
-  let c;
+  let golden, c;
   // 読めない golden で status 全体を止めない — 後のフェーズも出し、壊れたファイルの確かめを次の一手にする（golden-check はそれを行として報告する）
-  try { c = e2eCoverage(cfg); } catch (e) { return phase("E2E（Lean × REST の一致）", "着手済", [`golden を読めない: ${e.message}`], "cradle golden-check で壊れた golden を確かめる"); }
+  try { golden = goldenFlows(cfg); } catch (e) { return phase("E2E（Lean × REST の一致）", "着手済", [`golden を読めない: ${e.message}`], "cradle golden-check で壊れた golden を確かめる"); }
+  // 台本の置き場を辿れない（壊れたリンク・読めないディレクトリ）のは golden の事故ではないので、golden-check でなく置き場を指す
+  try { c = e2eCoverage(cfg, cfg.e2e.scenarios, golden); } catch (e) { return phase("E2E（Lean × REST の一致）", "着手済", [`台本の置き場を読めない（${cfg.e2e.scenarios}）: ${e.message}`], `${cfg.e2e.scenarios} の壊れたリンクや読めないディレクトリを直す`); }
   return phase("E2E（Lean × REST の一致）", "着手済", [`golden の流れ ${c.golden.length} 本 / 台本が対応 ${c.covered.length} 本（${c.place}）`, `台本 ${c.scripts} 本`],
     c.golden.length === 0 ? "モックアップで流れを確かめ golden を採る"
       : c.covered.length < c.golden.length ? "flows-from-golden --check で対応の無い流れを起こす（台本は golden から）" : "pnpm test で差分ゼロを確かめる");

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
@@ -121,6 +121,24 @@ test("status は対応が揃えば pnpm test を次の一手にする", (t) => {
   const e2e = JSON.parse(run(status, "--json").stdout).phases.find(p => p.name.startsWith("E2E"));
   assert.deepEqual(e2e.facts, ["golden の流れ 2 本 / 台本が対応 2 本（e2e/scenarios）", "台本 2 本"]);
   assert.match(e2e.next, /pnpm test/);
+});
+
+test("台本の置き場を辿れない（壊れたリンク）なら、status は golden を読めないと言わず置き場の名前を出し、置き場を直すことを次の一手にして本番投入まで出す", (t) => {
+  for (const place of ["e2e/scenarios", "e2e/src/model/flows"]) {
+    const { root, run, put } = fixture(t, place === "e2e/scenarios" ? {} : { e2e: { scenarios: place } });
+    put(`${place}/basic.json`, basicScript);
+    symlinkSync("nowhere.json", join(root, place, "dangling.json"));
+    const r = run(status, "--json");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "");
+    const phases = JSON.parse(r.stdout).phases;
+    const e2e = phases.find(p => p.name.startsWith("E2E"));
+    assert.equal(e2e.facts.length, 1, e2e.facts.join(" / "));
+    assert.ok(e2e.facts[0].startsWith(`台本の置き場を読めない（${place}）: `), e2e.facts[0]);
+    assert.match(e2e.facts[0], /dangling\.json/);
+    assert.equal(e2e.next, `${place} の壊れたリンクや読めないディレクトリを直す`);
+    assert.equal(phases.at(-1).name, "本番投入");
+  }
 });
 
 // 外部能力の経路（cmd external）で採った golden: trace の要素は result・環境・外部能力の往復を持ち、内部入力（observation）の手に当事者は無い
