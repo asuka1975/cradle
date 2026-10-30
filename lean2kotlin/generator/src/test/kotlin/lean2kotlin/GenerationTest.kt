@@ -22,14 +22,17 @@ class GenerationTest {
 
 	private val snapshot: Path = Path.of("../scaffold-check/src/generated")
 
-	private fun generate(out: Path): List<String> {
+	/** 生成のログを出た順に、字下げも残して返す。 */
+	private fun log(out: Path): List<String> {
 		val golden = Golden.load(testResources.resolve("sprout/golden"))
-		val notes = mutableListOf<String>()
+		val lines = mutableListOf<String>()
 		Lean2KotlinGeneration.generate(
 			sproutIr(), golden, "dev.cradle.scaffold",
-			out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { notes += it.trim() }
-		return notes.filter { it.startsWith("note: ") }
+			out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
+		return lines
 	}
+
+	private fun generate(out: Path): List<String> = log(out).map { it.trim() }.filter { it.startsWith("note: ") }
 
 	@Test
 	fun `制約を持つ型の Arb はサンプルが無ければ理由付きで止まる`(@TempDir out: Path) {
@@ -75,5 +78,30 @@ class GenerationTest {
 		val notes = generate(out)
 		assertEquals(expected, notes.toSet())
 		assertEquals(expected.size, notes.size, "同じ note が重複している: $notes")
+	}
+
+	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)。
+	// 生成完了の行だけは TempDir のパスを運ぶので <out> に置き換える
+	@Test
+	fun `ログの全行は出る順と字下げまで既知の列と一致する`(@TempDir out: Path) {
+		val expected = listOf(
+			"note: 泉ポート(泉ごとの IdGenerator ポート): NoteIdGenerator(供給: NoteId)",
+			"  note: NoteRepositoryState: State のふるまいは Kotlin に写さない(Lean 側の意味論装置)",
+			"  note: Retrieve テスト: ReadModel 1 種 — golden+射影定理で 11 ケース",
+			"  note: 契約定理テスト: CloseNoteUseCase — 定理 4 本から 14 ケース(遷移形 — Repository 直参照)",
+			"  note: NotesUseCase.execute: 引数を合成できないため basic-init をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため external-init をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため basic-flow #0 をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため basic-flow #1 をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため external-flow #0 をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため external-flow #1 をスキップ",
+			"  note: NotesUseCase.execute: 引数を合成できないため external-flow #2 をスキップ",
+			"  note: 契約テスト: NotesUseCase — golden+定理で 12 ケース(参照系)",
+			"  note: 契約定理テスト: PostNoteUseCase — 定理 3 本から 10 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: Note(Entity)— 定理 3 本から 9 ケース",
+			"生成完了: main 19 ファイル -> <out>/kotlin-main / test 10 ファイル -> <out>/kotlin-test",
+		)
+		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
+		assertEquals(expected, lines)
 	}
 }

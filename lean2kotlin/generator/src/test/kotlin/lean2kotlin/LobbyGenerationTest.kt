@@ -14,13 +14,16 @@ class LobbyGenerationTest {
 
 	private val snapshot: Path = Path.of("../scaffold-check/port/src/generated")
 
-	private fun generate(out: Path): List<String> {
-		val notes = mutableListOf<String>()
+	/** 生成のログを出た順に、字下げも残して返す。 */
+	private fun log(out: Path): List<String> {
+		val lines = mutableListOf<String>()
 		Lean2KotlinGeneration.generate(
 			lobbyIr(), GoldenLoad(emptyList(), listOf("golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません")),
-			"dev.cradle.lobby", out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { notes += it.trim() }
-		return notes.filter { it.startsWith("note: ") }
+			"dev.cradle.lobby", out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
+		return lines
 	}
+
+	private fun generate(out: Path): List<String> = log(out).map { it.trim() }.filter { it.startsWith("note: ") }
 
 	@Test
 	fun `生成されるファイルの一覧と本文は scaffold-check port の src generated と一致する`(@TempDir out: Path) {
@@ -80,5 +83,33 @@ class LobbyGenerationTest {
 		// 適合テストは arrange を先に評価してから Adapter を取る — 構築時に stub の状態を取り込む Adapter でも arrange が先に効く
 		val adapterTest = out.resolve("kotlin-adapter-test/application/port/organizationdirectory/OrganizationDirectoryAdapterContractTest.kt").toFile().readText()
 		assertTrue("\t\tval request = arrangeFindMemberFound()\n\t\tval outcome = adapter().findMember(request)\n\t\tassertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Found, \"\$outcome\")" in adapterTest, adapterTest)
+	}
+
+	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)。
+	// 生成完了の行だけは TempDir のパスを運ぶので <out> に置き換える
+	@Test
+	fun `ログの全行は出る順と字下げまで既知の列と一致する`(@TempDir out: Path) {
+		val expected = listOf(
+			"note: 泉ポート(泉ごとの IdGenerator ポート): PaymentAttemptIdGenerator(供給: PaymentAttemptId), VisitIdGenerator(供給: VisitId)",
+			"  note: PaymentAttemptRepositoryState: State のふるまいは Kotlin に写さない(Lean 側の意味論装置)",
+			"  note: VisitRepositoryState: State のふるまいは Kotlin に写さない(Lean 側の意味論装置)",
+			"  note: 契約定理テスト: BookVisitUseCase — 定理 6 本から 24 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: ConfirmPaymentUseCase — 定理 5 本から 11 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: DispatchPaymentUseCase — 定理 7 本から 17 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: InquirePaymentUseCase — 定理 5 本から 11 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: LeaveUseCase — 定理 3 本から 12 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: StartPaymentUseCase — 定理 4 本から 13 ケース(遷移形 — Repository 直参照)",
+			"  note: 契約定理テスト: PaymentAttempt(Entity)— 定理 12 本から 48 ケース",
+			"  note: 契約定理テスト: Visit(Entity)— 定理 4 本から 16 ケース",
+			"  note: 契約定理テスト: VisitorName(Entity)— 定理 1 本から 4 ケース",
+			"  note: 契約定理テスト: DispatchPaymentRules — 定理 5 本から 20 ケース(純値形)",
+			"  note: 障害契約テスト: BookVisitUseCase — 1 宣言から 4 ケース(障害注入フックつき)",
+			"  note: 障害契約テスト: DispatchPaymentUseCase — 3 宣言から 12 ケース(障害注入フックつき)",
+			"  note: 障害契約テスト: StartPaymentUseCase — 1 宣言から 2 ケース(障害注入フックつき)",
+			"note: golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません",
+			"生成完了: main 47 ファイル -> <out>/kotlin-main / test 21 ファイル -> <out>/kotlin-test / adapterTest 2 ファイル -> <out>/kotlin-adapter-test",
+		)
+		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
+		assertEquals(expected, lines)
 	}
 }
