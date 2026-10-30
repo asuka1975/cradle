@@ -22,15 +22,8 @@ class GenerationTest {
 
 	private val snapshot: Path = Path.of("../scaffold-check/src/generated")
 
-	/** 生成のログを出た順に、字下げも残して返す。 */
-	private fun log(out: Path): List<String> {
-		val golden = Golden.load(testResources.resolve("sprout/golden"))
-		val lines = mutableListOf<String>()
-		Lean2KotlinGeneration.generate(
-			sproutIr(), golden, "dev.cradle.scaffold",
-			out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
-		return lines
-	}
+	private fun log(out: Path): List<String> =
+		generationLog(sproutIr(), Golden.load(testResources.resolve("sprout/golden")), "dev.cradle.scaffold", out)
 
 	private fun generate(out: Path): List<String> = log(out).map { it.trim() }.filter { it.startsWith("note: ") }
 
@@ -80,8 +73,7 @@ class GenerationTest {
 		assertEquals(expected.size, notes.size, "同じ note が重複している: $notes")
 	}
 
-	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)。
-	// 生成完了の行だけは TempDir のパスを運ぶので <out> に置き換える
+	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)
 	@Test
 	fun `ログの全行は出る順と字下げまで既知の列と一致する`(@TempDir out: Path) {
 		val expected = listOf(
@@ -101,7 +93,6 @@ class GenerationTest {
 			"  note: 契約定理テスト: Note(Entity)— 定理 3 本から 9 ケース",
 			"生成完了: main 19 ファイル -> <out>/kotlin-main / test 10 ファイル -> <out>/kotlin-test",
 		)
-		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
-		assertEquals(expected, lines)
+		assertEquals(expected, normalizedLog(log(out), out))
 	}
 }

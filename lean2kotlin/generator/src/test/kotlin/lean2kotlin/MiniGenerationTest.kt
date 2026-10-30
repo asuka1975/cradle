@@ -13,14 +13,8 @@ class MiniGenerationTest {
 
 	private val snapshot: Path = testResources.resolve("mini/generated")
 
-	/** 生成のログを出た順に、字下げも残して返す。 */
-	private fun log(out: Path): List<String> {
-		val lines = mutableListOf<String>()
-		Lean2KotlinGeneration.generate(
-			miniIr(), Golden.load(testResources.resolve("mini/golden")),
-			"dev.cradle.mini", out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
-		return lines
-	}
+	private fun log(out: Path): List<String> =
+		generationLog(miniIr(), Golden.load(testResources.resolve("mini/golden")), "dev.cradle.mini", out)
 
 	@Test
 	fun `生成されるファイルの一覧と本文は mini の generated と一致する`(@TempDir out: Path) {
@@ -28,8 +22,7 @@ class MiniGenerationTest {
 		assertSnapshotMatches(snapshot, out)
 	}
 
-	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)。
-	// 生成完了の行だけは TempDir のパスを運ぶので <out> に置き換える
+	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)
 	@Test
 	fun `ログの全行は出る順と字下げまで既知の列と一致する`(@TempDir out: Path) {
 		val expected = listOf(
@@ -51,7 +44,6 @@ class MiniGenerationTest {
 			"  note: 障害契約テスト: LendBookUseCase — 1 宣言から 2 ケース(障害注入フックつき)",
 			"生成完了: main 26 ファイル -> <out>/kotlin-main / test 17 ファイル -> <out>/kotlin-test",
 		)
-		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
-		assertEquals(expected, lines)
+		assertEquals(expected, normalizedLog(log(out), out))
 	}
 }

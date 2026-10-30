@@ -14,14 +14,7 @@ class LobbyGenerationTest {
 
 	private val snapshot: Path = Path.of("../scaffold-check/port/src/generated")
 
-	/** 生成のログを出た順に、字下げも残して返す。 */
-	private fun log(out: Path): List<String> {
-		val lines = mutableListOf<String>()
-		Lean2KotlinGeneration.generate(
-			lobbyIr(), Golden.absent(null),
-			"dev.cradle.lobby", out.resolve("kotlin-main"), out.resolve("kotlin-test"), out.resolve("kotlin-adapter-test"), "\t") { lines += it }
-		return lines
-	}
+	private fun log(out: Path): List<String> = generationLog(lobbyIr(), Golden.absent(null), "dev.cradle.lobby", out)
 
 	private fun generate(out: Path): List<String> = log(out).map { it.trim() }.filter { it.startsWith("note: ") }
 
@@ -85,8 +78,7 @@ class LobbyGenerationTest {
 		assertTrue("\t\tval request = arrangeFindMemberFound()\n\t\tval outcome = adapter().findMember(request)\n\t\tassertTrue(outcome is OrganizationDirectoryFindMemberOutcome.Found, \"\$outcome\")" in adapterTest, adapterTest)
 	}
 
-	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)。
-	// 生成完了の行だけは TempDir のパスを運ぶので <out> に置き換える
+	// 集合では見えない出る順・字下げ・note 以外の行まで固定する(生成の呼び順を組み替えると落ちる)
 	@Test
 	fun `ログの全行は出る順と字下げまで既知の列と一致する`(@TempDir out: Path) {
 		val expected = listOf(
@@ -109,7 +101,6 @@ class LobbyGenerationTest {
 			"note: golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません",
 			"生成完了: main 47 ファイル -> <out>/kotlin-main / test 21 ファイル -> <out>/kotlin-test / adapterTest 2 ファイル -> <out>/kotlin-adapter-test",
 		)
-		val lines = log(out).map { if (it.startsWith("生成完了: ")) it.replace(out.toString(), "<out>") else it }
-		assertEquals(expected, lines)
+		assertEquals(expected, normalizedLog(log(out), out))
 	}
 }
