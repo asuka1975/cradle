@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tempDir, writeTree } from "./helpers.mjs";
-import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows } from "../.apm/skills/cradle/scripts/lib.mjs";
+import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -58,4 +59,29 @@ test("countStatusRows は行頭の ID と 3 列目以降のちょうど一致す
   assert.equal(countStatusRows(text, "(?:HS|UX|MQ)-\\d+", "open"), 2);
   assert.equal(countStatusRows(null, "HS-\\d+", "open"), 0);
   assert.equal(countStatusRows("", "HS-\\d+", "open"), 0);
+});
+
+test("goldenDirOf はプロジェクトルートから lean.golden を引く", () => {
+  assert.equal(goldenDirOf({ root: "/p", lean: { golden: "lean/golden" } }), join("/p", "lean", "golden"));
+});
+
+test("goldenFlowFiles は -flow.json だけを、接尾辞を外す前のファイル名の順に返す", (t) => {
+  const dir = tempDir(t, "cradle-golden-files-");
+  writeTree(dir, { "pay-flow.json": "{}", "pay-alt-flow.json": "{}", "pay-init.json": "{}", "pay.request.json": "{}", "a-flow.json.bak": "" });
+  assert.deepEqual(goldenFlowFiles(dir), ["pay-alt-flow.json", "pay-flow.json"]);
+});
+
+test("stepOutcome は文字列の result を優先し、無ければ domainError / error から判定する", () => {
+  assert.equal(stepOutcome({ result: "fault", domainError: "x" }), "fault");
+  assert.equal(stepOutcome({ result: 1, domainError: "x" }), "refused");
+  assert.equal(stepOutcome({ error: "bad" }), "protocol-error");
+  assert.equal(stepOutcome({}), "applied");
+});
+
+test("nominatedFault は trace の文字列、無ければ入力の文字列を返し、どちらも文字列でなければ undefined", () => {
+  assert.equal(nominatedFault({ fault: "a" }, { fault: "b" }), "a");
+  assert.equal(nominatedFault({ fault: 1 }, { fault: "b" }), "b");
+  assert.equal(nominatedFault({}, { fault: null }), undefined);
+  assert.equal(nominatedFault({}, undefined), undefined);
+  assert.equal(nominatedFault({}, "s"), undefined);
 });

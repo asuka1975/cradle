@@ -394,9 +394,9 @@ export function traceInputOf(t) {
     fault は入力が指名した障害契約の名前（trace の写し。結果が fault なら faultContract に止まった契約と portCalls が別に載る）。
     流れは external（外部能力の経路で採ったか）と environment（goldenEnvironment の { name, script }。旧経路では null）を持つ。 */
 export function goldenFlows(cfg) {
-  const dir = join(cfg.root, cfg.lean.golden);
+  const dir = goldenDirOf(cfg);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter(f => f.endsWith("-flow.json")).sort().map(f => {
+  return goldenFlowFiles(dir).map(f => {
     const id = f.replace(/-flow\.json$/, "");
     const trace = JSON.parse(readFileSync(join(dir, f), "utf8")).ok?.trace ?? [];
     // 壊れた sidecar は golden-check が報告する。ここでは流れ自体は数え、sidecar の情報だけ無いものとして扱う
@@ -408,9 +408,9 @@ export function goldenFlows(cfg) {
 
 function goldenStep(t, input) {
   const { kind, name, payload } = traceInputOf(t);
-  const step = { kind, [kind]: name, actor: kind === "command" ? t.actor ?? null : null, payload, outcome: typeof t.result === "string" ? t.result : outcomeOf(t) };
+  const step = { kind, [kind]: name, actor: kind === "command" ? t.actor ?? null : null, payload, outcome: stepOutcome(t) };
   // step の応答は入力の写しを持たないので、trace に無ければ sidecar の入力から
-  const fault = typeof t.fault === "string" ? t.fault : typeof input?.fault === "string" ? input.fault : undefined;
+  const fault = nominatedFault(t, input);
   if (fault !== undefined) step.fault = fault;
   return step;
 }
@@ -522,3 +522,15 @@ export function countEvents(text) { return (text.match(/^\|\s*\d+(?:\.\d+)?[a-z]
 export function countStatusRows(text, idRe, statusRe) {
   return text ? (text.match(new RegExp(`^\\|\\s*${idRe}\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length : 0;
 }
+
+/** golden の置き場（cradle.json の lean.golden）。 */
+export function goldenDirOf(cfg) { return join(cfg.root, cfg.lean.golden); }
+
+/** golden の流れのファイル（`<name>-flow.json`）をファイル名の順に。名前（接尾辞を外したもの）の順とは違う（pay-alt-flow.json は pay-flow.json の前）— e2eCoverage の当て順と出力の順はこの並び。 */
+export function goldenFlowFiles(dir) { return readdirSync(dir).filter(f => f.endsWith("-flow.json")).sort(); }
+
+/** trace の要素の結果: 外部能力の経路の応答なら要素の result（applied / refused / fault）、旧経路なら outcomeOf の判定。 */
+export function stepOutcome(t) { return typeof t.result === "string" ? t.result : outcomeOf(t); }
+
+/** 入力が指名した障害契約の名前: trace の写し、無ければ sidecar の入力（input）のもの。どちらも文字列でなければ undefined。 */
+export function nominatedFault(t, input) { return typeof t.fault === "string" ? t.fault : typeof input?.fault === "string" ? input.fault : undefined; }

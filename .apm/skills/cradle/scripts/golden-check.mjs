@@ -21,12 +21,12 @@
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, callLean, parseArgs, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION } from "./lib.mjs";
+import { loadConfig, callLean, parseArgs, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool" });
 const cfg = loadConfig();
 const build = opts.build ?? "auto";
-const goldenDir = join(cfg.root, cfg.lean.golden);
+const goldenDir = goldenDirOf(cfg);
 if (!existsSync(goldenDir)) fail(`golden ディレクトリがありません: ${goldenDir}`);
 
 const manifest = opts.manifest ? JSON.parse(readFileSync(opts.manifest, "utf8")) : {};

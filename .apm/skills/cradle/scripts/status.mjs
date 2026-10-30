@@ -3,7 +3,7 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -48,8 +48,8 @@ else {
   const leanFiles = walk(cfg.lean.modelDir, { ext: [".lean"] });
   const sorry = leanFiles.reduce((n, f) => n + (readFileSync(f, "utf8").replace(/--.*$/gm, "").match(/\bsorry\b/g) ?? []).length, 0);
   const useCases = existsSync(join(cfg.lean.modelDir, "Application", "UseCase")) ? readdirSync(join(cfg.lean.modelDir, "Application", "UseCase")).length : 0;
-  const goldenDir = R(cfg.lean.golden);
-  const goldens = existsSync(goldenDir) ? readdirSync(goldenDir).filter(f => f.endsWith("-flow.json")).length : 0;
+  const goldenDir = goldenDirOf(cfg);
+  const goldens = existsSync(goldenDir) ? goldenFlowFiles(goldenDir).length : 0;
   const bin = existsSync(cfg.lean.bin);
   const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
   // 画面の口: Runtime/Views.lean の structure Views のフィールド数。UI が汎用のまま = index.html が骨格と同一

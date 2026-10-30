@@ -11,13 +11,13 @@
 // --check は golden の各流れの手の列（kind と構成子名・command なら actor・outcome。台本に payload があればそれも）が、
 // 置き場の台本（from-golden.json と同じ steps の形）に同じ順であるかを見る。
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
-import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { loadConfig, parseArgs, fail, e2eCoverage, outcomeOf, readSidecar, isExternalGolden, goldenEnvironment, traceInputOf } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
 const cfg = loadConfig();
-const goldenDir = join(cfg.root, cfg.lean.golden);
+const goldenDir = goldenDirOf(cfg);
 if (!existsSync(goldenDir)) fail(`golden がありません: ${goldenDir}`);
 
 const stepLine = (s) => s.kind === "observation" ? `observation ${s.observation} → ${s.outcome}` : `${s.command} by ${JSON.stringify(s.actor)} → ${s.outcome}`;
@@ -38,7 +38,7 @@ if (opts.check) {
 }
 
 const flows = [];
-for (const f of readdirSync(goldenDir).filter(f => f.endsWith("-flow.json")).sort()) {
+for (const f of goldenFlowFiles(goldenDir)) {
   const name = f.replace(/-flow\.json$/, "");
   const trace = JSON.parse(readFileSync(join(goldenDir, f), "utf8")).ok?.trace ?? [];
   let req = null, external = false;
@@ -47,11 +47,11 @@ for (const f of readdirSync(goldenDir).filter(f => f.endsWith("-flow.json")).sor
   const personas = [...new Set(trace.filter(t => traceInputOf(t).kind === "command" && t.actor !== undefined).map(t => JSON.stringify(t.actor)))].map(s => JSON.parse(s));
   const steps = trace.map((t, i) => {
     const { kind, name: input, payload } = traceInputOf(t);
-    const base = { n: i + 1, kind, [kind]: input, ...(kind === "command" ? { actor: t.actor } : {}), payload, outcome: typeof t.result === "string" ? t.result : outcomeOf(t) };
+    const base = { n: i + 1, kind, [kind]: input, ...(kind === "command" ? { actor: t.actor } : {}), payload, outcome: stepOutcome(t) };
     if (external) base.interactions = t.interactions ?? [];
     // 指名した障害契約の名前は trace の写し（無ければ sidecar の入力から）
-    const nominated = typeof t.fault === "string" ? t.fault : req?.flow?.inputs?.[i]?.fault;
-    if (typeof nominated === "string") base.fault = nominated;
+    const nominated = nominatedFault(t, req?.flow?.inputs?.[i]);
+    if (nominated !== undefined) base.fault = nominated;
     if (t.domainError !== undefined) return { ...base, refusal: t.domainError };
     if (t.error !== undefined) return { ...base, error: t.error };
     const observe = {};
