@@ -8,7 +8,7 @@ import kotlinx.serialization.json.*
  * 更新系の契約テスト(状態遷移契約・障害契約)が共有する実装フックの配線 — 観測用 Repository・実体化フック・
  * Port のモック・泉の採番ポート・固定の主体と時計。配線の導出は emitFile の外で行い(参照を記録する
  * Kotlinize を呼ばない)、本文を書く関数は emitFile の内側で呼ぶ。主体と時計は methods の引数から集める
- * (同名の引数は最初の 1 つ)。
+ * (主体は同名の引数の最初の 1 つ、時計は Clock のフィールドごとに 1 つ)。
  */
 internal class StatefulHarness(
 	private val tests: EmitTests, s: IrService, es: EffectSet, methods: List<IrMethod>,
@@ -26,8 +26,9 @@ internal class StatefulHarness(
 	}
 	// 時計ポート: Clock は署名から落ちる — 契約テストは**固定 today** を
 	// 実装フックへ渡す(Sequential<X>IdGenerator と同格の決定的配線)。
-	// (フック引数名, Clock のフィールド)の平坦化 — 値は各ケースの args が運ぶ
-	data class ClockField(val paramName: String, val field: IrField)
+	// Clock のフィールドごとに 1 つ — validate と execute が別の名前(_clock / clock)で受けても同じ時計なので
+	// 1 回だけ配線し、受ける引数名は全部持つ。値は各ケースの args が運ぶ
+	data class ClockField(val paramNames: List<String>, val field: IrField)
 	val clockFields = methods
 		.flatMap { it.params }
 		.mapNotNull { p ->
@@ -35,10 +36,9 @@ internal class StatefulHarness(
 			if (td.role != "clockPort") return@mapNotNull null
 			p.name to td
 		}
-		.distinctBy { it.first }
-		.flatMap { (pn, td) ->
-			(td.shape as IrShape.Structure).fields.map { ClockField(pn, it) }
-		}
+		.flatMap { (pn, td) -> (td.shape as IrShape.Structure).fields.map { Triple(td.lean, it, pn) } }
+		.groupBy { (lean, f, _) -> lean to f.name }
+		.values.map { g -> ClockField(g.map { it.third }.distinct(), g.first().second) }
 	// 主体ポート: actor も署名から落ちる — 契約テストは**固定の主体**を
 	// 実装フックへ渡す(today と同格の決定的配線。値は各ケースの args が運ぶ)
 	val actorParams = methods
@@ -112,9 +112,10 @@ internal class StatefulHarness(
 				?: tests.defaultLiteral(ap.type)
 				?: error("$label: 主体 ${ap.name} の値を構成できません"))
 		}
-		// 固定時計の配線: 値は当該ケースの clock 引数(Lean 内評価と同じ日)
+		// 固定時計の配線: 値は当該ケースの clock 引数(Lean 内評価と同じ日)。ケースの args は 1 メソッドの引数なので、
+		// 受ける引数名のうち当該メソッドのものだけが値を運ぶ
 		val clockArgs = clockFields.joinToString("") { cf ->
-			val j = (args[cf.paramName] as? JsonObject)?.get(cf.field.name)
+			val j = cf.paramNames.firstNotNullOfOrNull { (args[it] as? JsonObject)?.get(cf.field.name) }
 			", " + (j?.let { k.literal(cf.field.type, it) }
 				?: tests.defaultLiteral(cf.field.type)
 				?: error("$label: 時計 ${cf.field.name} の値を構成できません"))
