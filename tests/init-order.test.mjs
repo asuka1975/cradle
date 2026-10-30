@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tempDir, cleanEnv, runNode } from "./helpers.mjs";
 
@@ -57,11 +56,9 @@ test("init は骨格を決まった順に敷いて + で並べ、--only lean/moc
   assert.equal(mockup.stdout, `Cradle init — Demo (${root})\n  + lean/mockup/public/index.html\n  + lean/mockup/server.mjs\n${next}`);
 });
 
-test("init の --backend はパッケージ名の検査を他の骨格を敷いた後で行うので、名前が誤っていても backend 以外は書いてから 1 で終わる", (t) => {
+test("init の --backend はパッケージ名を骨格を敷く前に確かめ、名前が誤っていれば何も書かずに 1 で終わる", (t) => {
   const root = tempDir(t, "cradle-init-backend-");
   const r = runNode(init, ["--project", "Demo", "--dir", root, "--backend", "Bad.Pkg"], { cwd: root, env: cleanEnv() });
   assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--backend は Java のパッケージ名（例: com.example.notes）\n"]);
-  assert.equal(existsSync(join(root, "cradle.json")), true);
-  assert.equal(existsSync(join(root, "lean/Demo.lean")), true);
-  assert.equal(existsSync(join(root, "backend")), false);
+  assert.deepEqual(readdirSync(root), []);
 });
