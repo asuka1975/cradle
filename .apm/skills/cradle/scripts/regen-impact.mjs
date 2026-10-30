@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript } from "./lib.mjs";
+import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
 const cfg = loadConfigOrFail();
@@ -29,40 +30,14 @@ const nameStatus = git(cfg.root, ["diff", "--name-status", "HEAD", "--", ...gens
 const untracked = git(cfg.root, ["ls-files", "--others", "--exclude-standard", "--", ...gens]).split("\n").filter(Boolean).map(path => ({ status: "A", path }));
 const changed = [...nameStatus, ...untracked];
 
-const TYPE_DECL = /^(?:public\s+|internal\s+|private\s+)?(?:abstract\s+|open\s+|sealed\s+|data\s+|value\s+|enum\s+|annotation\s+)*(interface|class|object|typealias)\s+`?([A-Za-z_][\w]*)`?/;
-const MEMBER_DECL = /^\s+(?:override\s+|abstract\s+|open\s+|suspend\s+|operator\s+|infix\s+|inline\s+|public\s+|internal\s+|protected\s+)*(fun|val|var)\s+(?:<[^>]*>\s*)?(?:[A-Za-z_][\w.]*\.)?`?([A-Za-z_][\w]*)`?/;
-const TOP_FUN = /^(?:public\s+|internal\s+|private\s+)?(?:inline\s+|suspend\s+)*(fun|val|var)\s+(?:<[^>]*>\s*)?(?:[A-Za-z_][\w.]*\.)?`?([A-Za-z_][\w]*)`?/;
-/** 宣言の一覧: {key, name, owner, kind, sig}。sig（署名行）が一致すれば同じ宣言とみなす。 */
-function declsOf(text) {
-  const out = new Map();
-  let owner = null;
-  for (const raw of text.split("\n")) {
-    const line = raw.replace(/\s+$/, "");
-    if (!line.trim() || /^\s*(\/\/|\*|\/\*)/.test(line)) continue;
-    let m = line.match(TYPE_DECL);
-    if (m) { owner = m[2]; out.set(`type:${m[2]}`, { name: m[2], owner: null, kind: m[1], sig: line.trim() }); continue; }
-    m = line.match(TOP_FUN);
-    if (m) { out.set(`top:${m[2]}`, { name: m[2], owner: null, kind: m[1], sig: line.trim() }); continue; }
-    m = line.match(MEMBER_DECL);
-    if (m && owner) out.set(`member:${owner}.${m[2]}:${line.trim()}`, { name: m[2], owner, kind: m[1], sig: line.trim() });
-  }
-  return out;
-}
 function textAt(path, which) {
   if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:${path}`]); } catch { return ""; } }
   return readText(join(cfg.root, path));
 }
-/** 変わった宣言 = 署名行が片方にしか無いもの（名前が同じでも署名が変われば「変更」）。 */
+// 同じシンボルが複数のファイルで変わり、その変わり方がファイルごとに違えば「変更」
 const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }
 for (const c of changed) {
-  const before = declsOf(textAt(c.path, "HEAD"));
-  const after = declsOf(textAt(c.path, "WT"));
-  const sigOf = (m) => new Set([...m.values()].map(d => `${d.owner ?? ""}|${d.name}|${d.sig}`));
-  const sb = sigOf(before), sa = sigOf(after);
-  const touched = [];
-  for (const d of before.values()) if (!sa.has(`${d.owner ?? ""}|${d.name}|${d.sig}`)) touched.push({ ...d, change: [...after.values()].some(x => x.name === d.name && x.owner === d.owner) ? "changed" : "removed" });
-  for (const d of after.values()) if (!sb.has(`${d.owner ?? ""}|${d.name}|${d.sig}`) && ![...before.values()].some(x => x.name === d.name && x.owner === d.owner)) touched.push({ ...d, change: "added" });
-  for (const d of touched) {
+  for (const d of diffDecls(textAt(c.path, "HEAD"), textAt(c.path, "WT"))) {
     const key = `${d.owner ?? ""}.${d.name}`;
     const e = symbols.get(key) ?? { name: d.name, owner: d.owner, kind: d.kind, files: new Set(), change: d.change };
     e.files.add(c.path); if (e.change !== d.change) e.change = "changed";
@@ -70,19 +45,11 @@ for (const c of changed) {
   }
 }
 
-// 参照元: 型はその名前で、メンバーは「所有する型を参照し、かつその名前を呼ぶ／実装する」ファイルで探す
+// 参照元を探す手書き: src/main と src/test のうち生成ディレクトリの外
 const handFiles = [...walk(join(cfg.root, cfg.backend.dir, "src", "main"), { ext: [".kt"] }), ...walk(join(cfg.root, cfg.backend.dir, "src", "test"), { ext: [".kt"] })]
   .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
 const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
-const impact = [];
-for (const e of symbols.values()) {
-  const nameRe = new RegExp(`\\b${e.name}\\b`);
-  const refs = e.owner
-    ? handTexts.filter(h => new RegExp(`\\b${e.owner}\\b`).test(h.text) && new RegExp(`(\\.|\\bfun\\s+|\\bval\\s+|\\bvar\\s+)${e.name}\\b`).test(h.text)).map(h => h.file)
-    : handTexts.filter(h => nameRe.test(h.text)).map(h => h.file);
-  impact.push({ symbol: e.owner ? `${e.owner}.${e.name}` : e.name, kinds: [e.change], generatedFiles: [...e.files], referencedBy: refs });
-}
-impact.sort((a, b) => b.referencedBy.length - a.referencedBy.length || a.symbol.localeCompare(b.symbol));
+const impact = impactOf(symbols.values(), handTexts);
 
 // 契約テスト: 生成された抽象テストと具象の配線
 const abstractTests = changed.filter(c => /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
