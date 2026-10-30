@@ -19,6 +19,8 @@ description: Use when you need the current position in the Lean spec-driven pipe
 | `ddd-clean-check [--build] [--baseline <file>]` | 探索の残骸（questions.md・naming.md・probe-・lean の差分。`ddd.mjs end` は `.session` を baseline に渡し、開始時点と比べる）が無いこと | ddd スキルの終わり |
 | `doctor` | ハーネスの置き場と hooks の配線、Codex の hooks の信頼、AGENTS.md の大きさ（Codex の上限）、道具の有無と版（node / lake / elan / java / pnpm / apm / claude / codex …）、lean2kotlin の解決可否（`LEAN2KOTLIN_HOME`） | 導入時、道具が見つからないと言われたとき、backend の着手前 |
 | `doctor --local` | local スタックのコンテナ（`cradle.json` の `infra.containers`）の鮮度（Created と HEAD のコミット時刻） | local を作り直す前、E2E の前 |
+| `refs <ID>` | その ID（HS / UX / MQ / INFRA-D / イベント#）を引いている場所を全部出す（documents / lean / 契約 / 設計 / README） | HS / UX / MQ を撤回・訂正したとき（ddd スキルの撤回の伝播） |
+| `contract-skeleton <file> [--package <pkg>]` | 生成された抽象契約テストの具象サブクラスの骨格を出す（`--package` は package 行だけを差し替える） | 契約テストを本番実装に配線するとき（backend-implement スキル） |
 
 ## 使い方の決めごと
 

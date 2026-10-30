@@ -61,10 +61,12 @@ backend フェーズの生成器 lean2kotlin はこのリポジトリの `lean2k
 | `cradle ddd-clean-check` | 探索の残骸 |
 | `cradle doctor` | ハーネスの配線、道具の有無と版、lean2kotlin の解決可否 |
 | `cradle doctor --local` | local スタックのコンテナの鮮度（Created と HEAD） |
+| `cradle refs <ID>` | その ID（HS / UX / MQ / INFRA-D / イベント#）を引いている場所。撤回・訂正の派生を洗い直す |
+| `cradle contract-skeleton <file>` | 生成された抽象契約テストの具象サブクラスの骨格（`--package` で package 行を差し替える） |
 | `contract-check`（api-contract スキル） | Lean のコマンド・画面と openapi の操作が 1 対 1 か |
 | `flows-from-golden`（e2e-parity スキル） | golden から E2E の台本。`--check` で台本が golden の流れに対応しているか |
 
-すべて `node <skills>/cradle/scripts/cradle.mjs <command>`（`<skills>` は Claude Code `.claude/skills` / Codex `.agents/skills`）。
+`cradle <command>` は `node <skills>/cradle/scripts/cradle.mjs <command>`。contract-check と flows-from-golden は cradle を通らず、`node <skills>/api-contract/scripts/contract-check.mjs` / `node <skills>/e2e-parity/scripts/flows-from-golden.mjs`（`<skills>` は Claude Code `.claude/skills` / Codex `.agents/skills`）。
 
 ## ドキュメント
 
