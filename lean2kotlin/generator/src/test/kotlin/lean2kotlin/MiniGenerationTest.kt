@@ -19,6 +19,11 @@ class MiniGenerationTest {
 	@Test
 	fun `生成されるファイルの一覧と本文は mini の generated と一致する`(@TempDir out: Path) {
 		log(out)
+		// 採り直し(src/test/resources/README.md の mini/): 消えたファイルを残さないよう generated ごと生成物で置き換える
+		if (System.getProperty("lean2kotlin.updateMiniSnapshot") == "true") {
+			snapshot.toFile().deleteRecursively()
+			out.toFile().copyRecursively(snapshot.toFile())
+		}
 		assertSnapshotMatches(snapshot, out)
 	}
 

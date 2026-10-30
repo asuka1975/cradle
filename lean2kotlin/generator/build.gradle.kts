@@ -37,4 +37,6 @@ tasks.test {
 	// GenerationTest / LobbyGenerationTest が突き合わせる生成物のスナップショット — 変われば再実行する
 	inputs.dir("../scaffold-check/src/generated").withPathSensitivity(PathSensitivity.RELATIVE)
 	inputs.dir("../scaffold-check/port/src/generated").withPathSensitivity(PathSensitivity.RELATIVE)
+	// MiniGenerationTest の採り直し: ./gradlew の -D はテストの JVM に届かないので写す
+	systemProperty("lean2kotlin.updateMiniSnapshot", providers.systemProperty("lean2kotlin.updateMiniSnapshot").getOrElse("false"))
 }
