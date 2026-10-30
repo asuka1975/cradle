@@ -29,7 +29,7 @@ internal fun EmitTests.portMockBody(p: IrPort): String {
 	sb.append("\t/** 期待するやり取り(操作ごとに 1 種)。 */\n")
 	sb.append("\tsealed interface Expectation\n")
 	for (op in p.operations) {
-		sb.append("\tdata class ${capitalizeFirst(op.method)}(val request: ${k.name(op.request)}, val outcome: ${k.name(op.outcome)}) : Expectation\n")
+		sb.append("\tdata class ${expectationName(op)}(val request: ${k.name(op.request)}, val outcome: ${k.name(op.outcome)}) : Expectation\n")
 	}
 	sb.append("\n\tprivate val queue = ArrayDeque(expected)\n")
 	sb.append("\tprivate val expectedCount = expected.size\n")
@@ -39,7 +39,7 @@ internal fun EmitTests.portMockBody(p: IrPort): String {
 	sb.append("\t\tthrow PortHarnessFailure(\"${p.name}: \$message\")\n")
 	sb.append("\t}\n")
 	for (op in p.operations) {
-		val exp = capitalizeFirst(op.method)
+		val exp = expectationName(op)
 		sb.append("\n\toverride fun ${ident(op.method)}(request: ${k.name(op.request)}): ${k.name(op.outcome)} {\n")
 		sb.append("\t\tval next = queue.removeFirstOrNull() ?: fail(\"${op.method}: 積んでいない呼び出し(\$request)\")\n")
 		sb.append("\t\tif (next !is $exp) fail(\"${op.method}: 期待していた操作は \$next\")\n")
@@ -70,13 +70,16 @@ internal fun EmitTests.portMockExpr(p: IrPort, ports: List<IrCasePort>): String 
 	val exps = ports.filter { it.port == p.name && it.request != null }.map { cp ->
 		val op = p.operations.find { it.method == cp.operation }
 			?: error("Port ${p.name} に操作 ${cp.operation} がありません")
-		"${k.portMockName(p)}.${capitalizeFirst(op.method)}(request = ${inputLiteral(IrType.Ref(op.request), cp.request!!)}, " +
+		"${k.portMockName(p)}.${expectationName(op)}(request = ${inputLiteral(IrType.Ref(op.request), cp.request!!)}, " +
 			"outcome = ${inputLiteral(IrType.Ref(op.outcome), cp.outcome ?: error("Port ${p.name}.${op.method}: 観測が無い"))})"
 	}
 	return "${k.portMockName(p)}(${if (exps.isEmpty()) "emptyList()" else "listOf(${exps.joinToString(", ")})"})"
 }
 
 internal fun EmitTests.portVar(p: IrPort): String = ident(decapitalizeFirst(p.name))
+
+/** モックの期待の型名。プライム付きの操作名でも宣言・型検査・ケースの構築を ident で揃える。 */
+internal fun expectationName(op: IrPortOp): String = ident(capitalizeFirst(op.method))
 
 /**
  * Port の Adapter の適合テスト(adapterTest): 観測(Outcome)の各構成子を Adapter が一度は産めることを

@@ -14,7 +14,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * 型・Port・障害契約・Port の操作の名前から組むテスト側の識別子(実体化フック・Port のモックの変数・
+ * 型・Port・障害契約・Port の操作の名前から組むテスト側の識別子(実体化フック・Port のモックの変数と期待の型・
  * 障害注入フック・Adapter の arrange フック)は ident を通す — 先頭を小文字にすると Kotlin のキーワードになる名前や
  * プライム付きの Lean の名前でも、本番側(Repository の引数)と同じくバッククォートで囲んで宣言と呼び出しを揃える。
  * 素材は Sprout と Lobby の名前を、参照を揃えたまま差し替えたもの。
@@ -64,12 +64,18 @@ class KeywordNameTest {
 	}
 
 	@Test
-	fun `プライム付きの Port の操作の arrange フックはバッククォートで囲む`(@TempDir out: Path) {
+	fun `プライム付きの Port の操作の arrange フックとモックの期待の型はバッククォートで囲む`(@TempDir out: Path) {
 		val lobby = lobbyIr()
 		val tests = EmitTests(lobby, Kotlinize(lobby), Output(out, "t", "\t"), Output(out.resolve("adapter"), "t", "\t"), emptyList()) {}
 		val port = lobby.ports.single { it.name == "OrganizationDirectory" }
 		val text = tests.portAdapterTestBody(port.copy(operations = port.operations.map { it.copy(method = it.method + "'") }))
 		assertTrue("\tprotected abstract fun `arrangeFindMember'Found`(): OrganizationDirectoryFindMemberRequest\n" in text, text)
 		assertTrue("\t\tval request = `arrangeFindMember'Found`()\n" in text, text)
+		// モックの期待の型: 宣言・型検査・遷移契約と障害契約のケースの構築
+		val all = emitRenamed("lobby/lobby-ir.json", mapOf("findMember" to "findMember'"), out.resolve("renamed"))
+		assertTrue("\tdata class `FindMember'`(" in all, all)
+		assertTrue("if (next !is `FindMember'`)" in all, all)
+		assertTrue("OrganizationDirectoryMock.`FindMember'`(request = " in all, all)
+		assertFalse(Regex("(?<!`)FindMember'\\(|is FindMember'").containsMatchIn(all), all)
 	}
 }
