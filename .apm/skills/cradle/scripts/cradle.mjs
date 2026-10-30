@@ -79,14 +79,14 @@ if (cmd === "doctor") {
   }
   {
     // モックアップのサーバーと CLI（Main.lean）は骨格の持ち物。Cradle を更新したら --only <path> --force で敷き直す（index.html は作り込みの正本なので触らない）
-    const { loadConfig: lc } = await import("./lib.mjs");
+    const { loadConfig: lc, renameScaffold } = await import("./lib.mjs");
     let cfg = null; try { cfg = lc(root); } catch {}
     const assets = join(import.meta.dirname, "..", "..", "cradle-init", "assets", "lean");
     const owned = cfg ? [["mockup", `${cfg.lean.mockup}/server.mjs`, join(assets, "mockup", "server.mjs")], ["lean-main", `${cfg.lean.dir}/Main.lean`, join(assets, "Main.lean")]] : [];
     for (const [label, relPath, shipped] of owned) {
       const cur = join(root, relPath);
       if (!existsSync(cur) || !existsSync(shipped)) continue;
-      const same = readFileSync(cur, "utf8") === readFileSync(shipped, "utf8").replace(/Sprout/g, cfg.project).replace(/sprout/g, cfg.project.toLowerCase());
+      const same = readFileSync(cur, "utf8") === renameScaffold(readFileSync(shipped, "utf8"), { project: cfg.project });
       console.log(`${same ? "ok     " : "STALE  "} ${label.padEnd(10)} ${relPath}${same ? "" : ` が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project ${cfg.project} --only ${relPath} --force）`}`);
     }
   }

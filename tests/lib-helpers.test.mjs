@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -94,4 +94,11 @@ test("cradleScript は lib と同じ置き場（cradle/scripts）の道具を指
     assert.equal(cradleScript(name), join(scripts, name));
     assert.ok(existsSync(cradleScript(name)), name);
   }
+});
+
+test("renameScaffold は Sprout・sprout・__PROJECT__・__PROJECT_LOWER__ をプロジェクト名に、__DOMAIN__ を一言（$ はそのまま）に置き換える", () => {
+  const text = "Sprout.Main sprout __PROJECT__ __PROJECT_LOWER__\nプロダクト: __DOMAIN__\n";
+  assert.equal(renameScaffold(text, { project: "MonoWa", domain: "  楽団の $1 と $& の管理 " }), "MonoWa.Main monowa MonoWa monowa\nプロダクト: 楽団の $1 と $& の管理\n");
+  assert.equal(renameScaffold(text, { project: "MonoWa" }), `MonoWa.Main monowa MonoWa monowa\nプロダクト: ${PRODUCT_PLACEHOLDER}\n`);
+  assert.equal(PRODUCT_PLACEHOLDER, "（一言で）");
 });

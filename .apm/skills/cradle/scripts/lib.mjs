@@ -537,3 +537,11 @@ export function nominatedFault(t, input) { return typeof t.fault === "string" ? 
 
 /** 道具のスクリプト（cradle/scripts/<name>）の絶対パス。他のスキルの道具も lib の置き場から引く — スキルの並び（../../cradle）を推し量らない。 */
 export function cradleScript(name) { return fileURLToPath(new URL(name, import.meta.url)); }
+
+/** 骨格の写しの改名: Sprout / sprout と __PROJECT__ / __PROJECT_LOWER__ をプロジェクト名（とその小文字）に、__DOMAIN__ をプロダクトの一言（null なら置き場）に。
+    init が敷くときと doctor が骨格の最新版と比べるときで同じ改名を使う。一言は関数で渡す（$ を置換パターンとして読まない）。 */
+export function renameScaffold(text, { project, domain = null }) {
+  const lower = project.toLowerCase();
+  return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower)
+    .replace(/__DOMAIN__/g, () => domain === null ? PRODUCT_PLACEHOLDER : String(domain).trim());
+}

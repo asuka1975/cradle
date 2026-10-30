@@ -10,6 +10,7 @@
 // 既にあるファイルは上書きしない（--force で上書き）。
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
+import { renameScaffold } from "../../cradle/scripts/lib.mjs";
 
 const args = process.argv.slice(2);
 // 次の語が別のフラグなら値ではない（`--domain --force` の domain は「値なし」）
@@ -23,7 +24,6 @@ const force = args.includes("--force");
 const only = opt("only", null);
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
-const lower = project.toLowerCase();
 const assets = join(import.meta.dirname, "..", "assets");
 
 const written = [], skipped = [], failed = [];
@@ -39,10 +39,7 @@ function put(rel, content, { exec = false } = {}) {
     written.push(rel);
   } catch (e) { failed.push(`${rel}（${e.code ?? e.message}）`); }
 }
-function rename(text) {
-  return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower)
-    .replace(/__DOMAIN__/g, () => domain === null ? "（一言で）" : String(domain).trim());
-}
+const rename = (text) => renameScaffold(text, { project, domain });
 function walk(dir) {
   const out = [];
   for (const name of readdirSync(dir)) { const p = join(dir, name); out.push(...(statSync(p).isDirectory() ? walk(p) : [p])); }
