@@ -12,7 +12,8 @@ if (args.includes("--local")) {
   const cfg = loadConfigOrFail();
   const names = cfg.infra.containers ?? [];
   if (!names.length) { console.log("cradle.json の infra.containers が空（例: [\"myapp-local-backend\", \"myapp-local-frontend\"]）"); process.exit(0); }
-  const head = spawnSync("git", ["log", "-1", "--format=%cI"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" }).stdout.trim();
+  // git が無ければ stdout も無い（head は空のまま比べない）
+  const head = (spawnSync("git", ["log", "-1", "--format=%cI"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" }).stdout ?? "").trim();
   for (const n of names) {
     const r = spawnSync("docker", ["inspect", "--format", "{{.Created}}", n], { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
     const created = (r.stdout || "").trim();

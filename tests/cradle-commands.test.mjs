@@ -167,3 +167,10 @@ test("doctor は init した直後の骨格のモックアップと Main.lean �
   const local = runNode(cradle, ["doctor", "--local"], { cwd: root, env: cleanEnv() });
   assert.deepEqual([local.status, local.stdout], [0, "cradle.json の infra.containers が空（例: [\"myapp-local-backend\", \"myapp-local-frontend\"]）\n"]);
 });
+
+test("doctor --local は git も docker も無ければ head を空にしてコンテナを missing と言い、落ちない", (t) => {
+  const root = tempProject(t, "cradle-doctor-local-", { project: "Example", infra: { containers: ["demo-local-backend"] } });
+  const noTools = tempDir(t, "cradle-no-tools-");
+  const r = runNode(cradle, ["doctor", "--local"], { cwd: root, env: cleanEnv({ PATH: noTools }) });
+  assert.deepEqual([r.status, r.stdout, r.stderr], [0, `missing ${"demo-local-backend".padEnd(28)} created=- head=\n`, ""]);
+});
