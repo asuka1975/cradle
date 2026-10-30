@@ -198,32 +198,12 @@ class EmitMain(
 		reach
 	}
 
+	private val files = GeneratedFiles(ir, k, out.basePackage)
+
 	private fun emitFile(
 		subpkg: String?, name: String, usesDomainResult: Boolean = false,
 		toTest: Boolean = false, build: () -> String,
-	) {
-		val (body, c) = k.collecting(build)
-		val imports = mutableListOf<String>()
-		if ((usesDomainResult || DOMAIN_RESULT_REF.containsMatchIn(body)) && subpkg != null) imports.add("${out.basePackage}.DomainResult")
-		for (lean in c.refs) {
-			val td = ir.typeDef(lean)
-			val target = k.packagePathOf(td)
-			if (target != subpkg) {
-				imports.add(out.basePackage + (target?.let { ".$it" } ?: "") + "." + td.kotlin)
-			}
-		}
-		for (lean in c.fixtures) {
-			// fixture はテストのルートパッケージ(GeneratedFixtures)在住
-			if (subpkg != null) {
-				imports.add(out.basePackage + "." + ir.typeDef(lean).kotlin + "Fixture")
-			}
-		}
-		if (subpkg != null && body.contains(".toFixture(")) {
-			imports.add("${out.basePackage}.toFixture")
-		}
-		if (subpkg != null && RATIONAL_REF.containsMatchIn(body)) imports.add("${out.basePackage}.Rational")
-		(if (toTest) testOut else out).file(subpkg, name, imports, body)
-	}
+	) = files.emit(if (toTest) testOut else out, subpkg, name, usesDomainResult = usesDomainResult, build = build)
 
 	private val domainResultBody = """
 /**

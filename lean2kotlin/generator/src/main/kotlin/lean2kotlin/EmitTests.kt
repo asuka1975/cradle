@@ -131,6 +131,8 @@ class EmitTests(
 		}
 	}
 
+	private val files = GeneratedFiles(ir, k, out.basePackage)
+
 	/** 参照を収集し、役割別パッケージへのインポートを計算して書き出す(target は既定でテスト側)。 */
 	internal fun emitFile(
 		subpkg: String?, name: String,
@@ -138,32 +140,6 @@ class EmitTests(
 		usesDomainResult: Boolean = false,
 		target: Output = out,
 		build: () -> String,
-	) {
-		val (body, c) = k.collecting(build)
-		val imports = mutableListOf<String>()
-		imports.addAll(framework)
-		if ((usesDomainResult || DOMAIN_RESULT_REF.containsMatchIn(body)) && subpkg != null) imports.add("${out.basePackage}.DomainResult")
-		for (lean in c.refs) {
-			val td = ir.typeDef(lean)
-			val target = k.packagePathOf(td)
-			if (target != subpkg) {
-				imports.add(out.basePackage + (target?.let { ".$it" } ?: "") + "." + td.kotlin)
-			}
-		}
-		for (lean in c.fixtures) {
-			// fixture はテストのルートパッケージ(GeneratedFixtures)在住
-			if (subpkg != null) {
-				imports.add(out.basePackage + "." + ir.typeDef(lean).kotlin + "Fixture")
-			}
-		}
-		if (subpkg != null && body.contains(".toFixture(")) {
-			imports.add("${out.basePackage}.toFixture")
-		}
-		if (subpkg != null && RATIONAL_REF.containsMatchIn(body)) imports.add("${out.basePackage}.Rational")
-		if (subpkg != null) {
-			for (kn in c.arbs) imports.add("${out.basePackage}.${k.arbFunName(kn)}")
-		}
-		target.file(subpkg, name, imports, body)
-	}
+	) = files.emit(target, subpkg, name, framework, usesDomainResult, build)
 
 }
