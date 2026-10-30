@@ -44,3 +44,29 @@ test("lean-check はコメントの中の sorry と axiom / partial / unsafe を
   assert.equal(s.status, 0, s.stderr);
   assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 3"), s.stdout);
 });
+
+// 文字列の中の /-（GitLab の /-/ の道）でブロックを開くと、ファイルの残りの sorry と axiom が消える
+const urlModel = [
+  "namespace Example",
+  'def issueTracker : String := "https://gitlab.example.com/team/app/-/issues"',
+  "/-- 後で証明する。 -/",
+  "theorem t : True := sorry",
+  "axiom bad : False",
+  "end Example",
+  "",
+].join("\n");
+
+test("lean-check と status は文字列リテラルの中の /- でコメントを開かず、あとの sorry と axiom を数える", (t) => {
+  assert.equal(leanSorryLines(urlModel), 1);
+  const root = tempProject(t, "cradle-sorry-string-");
+  writeTree(root, { "lean/Example/Domain/A.lean": urlModel });
+  const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(r.status, 1, r.stdout);
+  const j = JSON.parse(r.stdout);
+  assert.deepEqual(j.findings.filter(f => ["sorry", "axiom"].includes(f.rule)).map(f => `${f.rule} ${f.file}:${f.line}`),
+    ["sorry lean/Example/Domain/A.lean:4", "axiom lean/Example/Domain/A.lean:5"]);
+  assert.equal(j.sorry, 1);
+  const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(s.status, 0, s.stderr);
+  assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 1"), s.stdout);
+});

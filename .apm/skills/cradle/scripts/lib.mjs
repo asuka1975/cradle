@@ -271,7 +271,9 @@ export function fail(msg, code = 1) {
 /** Lean のコメントを消した写し。改行は残し（行番号と行の index を動かさない）、消した文字は空白で埋めない（`/- … -/import` の行も `^import` で拾う）。
     左から読む: コードの `--` は行末まで、`/-`（docstring の `/--` も）からはブロックで、ブロックの中の `/-` と `-/` で深さを数える。
     正規表現を 2 回かける読み方では、`/--` の `--` を行コメントとして消すと docstring の続きの行がコードに残り、行コメントの中の `/-` からブロックを開くと次の `-/` までのコードが消える。
-    文字列リテラルは区別しない（`"--"` も消す）。 */
+    コードの文字列リテラル（`\"` `\\` のエスケープを越えて次の `"` まで。閉じなければ最後まで）と文字リテラルはそのまま写す。Lean の字句と同じく中の `--` `/-` でコメントを開かない（`".../-/issues"` からファイルの残りを消さない）。
+    文字リテラルは `'<1 文字>'` と `'\<1 文字>'` の形だけ（`x'` `h'` の `'` は名前の一部）。ブロックの中の `"` は Lean と同じく数えない。
+    `s!"…{…}…"` の `{}` の中の文字列は追わない（引用符の対がずれても、その文字列が `--` `/-` を持たなければ写す文字は同じ）。 */
 export function stripLeanComments(text) {
   let out = "", depth = 0;
   for (let i = 0; i < text.length; i++) {
@@ -279,6 +281,15 @@ export function stripLeanComments(text) {
     if (depth === 0) {
       if (c === "-" && n === "-") { const e = text.indexOf("\n", i); if (e < 0) break; i = e - 1; continue; }
       if (c === "/" && n === "-") { depth = 1; i++; continue; }
+      if (c === '"') {
+        let e = i + 1;
+        while (e < text.length && text[e] !== '"') e += text[e] === "\\" ? 2 : 1;
+        out += text.slice(i, e + 1); i = e; continue;
+      }
+      if (c === "'") {
+        const len = n === "\\" ? 4 : 3;
+        if (text[i + len - 1] === "'") { out += text.slice(i, i + len); i += len - 1; continue; }
+      }
       out += c;
     } else if (c === "/" && n === "-") { depth++; i++; }
     else if (c === "-" && n === "/") { depth--; i++; }

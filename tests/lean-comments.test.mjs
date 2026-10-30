@@ -18,6 +18,25 @@ test("stripLeanComments は複数行の docstring・入れ子のブロック・�
   assert.equal(stripLeanComments("/- 閉じない\nブロック"), "\n");
 });
 
+test("stripLeanComments はコードの文字列リテラルと文字リテラルをそのまま写し、その中の -- と /- でコメントを開かない", () => {
+  // GitLab の /-/ を持つ文字列のあとの docstring だけを消し、sorry と axiom はコードに残す
+  const url = 'def u : String := "https://gitlab.example.com/team/app/-/issues"\n';
+  assert.equal(stripLeanComments(url + "/-- 後で証明する。 -/\ntheorem t : True := sorry\naxiom bad : False\n"), url + "\ntheorem t : True := sorry\naxiom bad : False\n");
+  assert.equal(stripLeanComments('def s := "a -- b /- c" ++ t -- 消す\n'), 'def s := "a -- b /- c" ++ t \n');
+  // \" と \\ では文字列を閉じない
+  assert.equal(stripLeanComments('def e := "q\\"/-\\\\" /- 消す -/x\n'), 'def e := "q\\"/-\\\\" x\n');
+  // 名前の ' は文字リテラルを開かない（直後の " から文字列）
+  const primed = "theorem h' : x' = y' := sorry\ndef v' : String := f x'\"/-\" ++ \"it's /- fine\"\naxiom bad : False\n";
+  assert.equal(stripLeanComments(primed), primed);
+  // '"' と '\"' と '\'' は文字リテラルで、中の " から文字列を開かない
+  assert.equal(stripLeanComments("def q := ['\"', '\\\"', '\\'']\n/- 消す -/axiom bad : False\n"), "def q := ['\"', '\\\"', '\\'']\naxiom bad : False\n");
+  // コメントの中の " は数えない
+  assert.equal(stripLeanComments('-- "閉じない\ndef x := 1 /- " -/\naxiom bad : False\n'), '\ndef x := 1 \naxiom bad : False\n');
+  // 文字列の中の改行もそのまま（行番号が動かない）。閉じない文字列は最後まで写す
+  assert.equal(stripLeanComments('def m := "1 行目\n-- 2 行目"\naxiom bad : False -- 消す\n'), 'def m := "1 行目\n-- 2 行目"\naxiom bad : False \n');
+  assert.equal(stripLeanComments('def n := "閉じない -- /-\naxiom bad : False\n'), 'def n := "閉じない -- /-\naxiom bad : False\n');
+});
+
 test("leanVocabulary は行コメントの中の /- でブロックを開かない", (t) => {
   const root = tempDir(t, "cradle-lean-vocab-");
   writeTree(root, { "Example/Runtime/Command.lean": "inductive Command where\n  -- see https://gitlab.com/x/-/issues/1\n  | post\n  /-- 閉じる。 -/\n  | close\nderiving Repr\n" });
