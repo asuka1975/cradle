@@ -93,7 +93,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
 | フィクスチャ / 期待値を構成できません | `Repr` / `DecidableEq` の deriving、契約定理の前提が Decidable か、量化変数が生成可能な型か |
 | 参照系の execute 面でない定理の契約 | `@[contract]` を外す（execute 面の系） |
-| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`Port … interface 化された語彙` / `Port … 関数型を運ぶ` は要求・観測を閉じたデータ型にする（外部を呼ぶ関数は UseCase に渡さない）、`内部入力 … 名義` は Observation から名義を外す、`泉の状態 … Id 型 … がありません` は `Runtime/Ids.lean` に `structure <X>Id` を置く、`signature …` は固定形の署名の型を契約面の語彙にする |
+| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`contract … 主対象の候補 … の署名を写像できない` はその def の署名の型を契約面の語彙にする（Lean）、`Port … interface 化された語彙` / `Port … 関数型を運ぶ` は要求・観測を閉じたデータ型にする（外部を呼ぶ関数は UseCase に渡さない）、`内部入力 … 名義` は Observation から名義を外す、`泉の状態 … Id 型 … がありません` は `Runtime/Ids.lean` に `structure <X>Id` を置く、`signature …` は固定形の署名の型を契約面の語彙にする |
 | UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
 | golden が無視された | flow に対の `<name>-init.json` があるか、名前が `<name>-init.json` / `<name>-flow.json` か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
 | `Key <field> is missing in the map` | 読み取りの golden 回帰テストで、Row のフィールドが状態の要素に無い。同梱の生成器は合成できない Row を入れ子まで note で飛ばす（この例外は古い生成器の文言） |
@@ -106,6 +106,8 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | golden … 無視 | 命名か形が規約と違う | golden を採り直す |
 | View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
+| ふるまい … 主対象を決められない | def の名前空間が型でなく、その短い名前の型が複数ある（VO と UseCase の入力語彙が同名など） | def を型そのものの namespace に置く（Lean） |
+| UseCase … input を書かない | UseCase の置き場に固定名の型が無く、同じ役割の型が複数ある | 置き場に固定名の `Command` / `Observation` 型を置く（Lean） |
 | 契約定理を翻訳できません / 有効なケースを演繹できませんでした | 前提が Decidable でない・fixture から期待値を計算できない・仮定が常に偽 | 定理の形を見直す（Lean）。この note は診断にも残り、生成は失敗する |
 | … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は Repository 契約テストの個体の列が満たすとは限らない |
 | … の制約を満たすサンプルを組めません | VO などの Prop フィールドが、小さな値の候補（lean-conventions §9）のどれでも満たせない | 制約の形を見直す（Lean）。その型の Arb が要る生成は失敗する |
