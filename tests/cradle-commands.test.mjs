@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, gitConfigEnv } from "./helpers.mjs";
 
 const cradle = fileURLToPath(new URL("../.apm/skills/cradle/scripts/cradle.mjs", import.meta.url));
 const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs", import.meta.url));
@@ -135,6 +135,15 @@ test("refs はサブディレクトリから呼んでもプロジェクトルー
   for (const cwd of [join(root, "lean"), join(root, "documents", "ddd")]) {
     const sub = run(cwd, "イベント#1");
     assert.deepEqual([sub.status, sub.stdout, sub.stderr], [0, atRoot, ""], cwd);
+  }
+});
+
+test("refs は利用者の git 設定（color.grep・color.ui の always、grep.column）でも色も桁も付けず、同じ一致だけを同じ行で出す", (t) => {
+  const { root, run } = refsFixture(t);
+  const env = cleanEnv(gitConfigEnv({ "color.grep": "always", "color.ui": "always", "grep.column": "true" }));
+  for (const id of ["イベント#1", "イベント#1.1"]) {
+    const r = runNode(cradle, ["refs", id], { cwd: root, env });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [0, run(root, id).stdout, ""], id);
   }
 });
 

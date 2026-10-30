@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, unlinkSync, readFileSync 
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
+import { tempProject, cleanEnv, runNode, gitConfigEnv } from "./helpers.mjs";
 
 const ddd = fileURLToPath(new URL("../.apm/skills/ddd/scripts/ddd.mjs", import.meta.url));
 const check = fileURLToPath(new URL("../.apm/skills/cradle/scripts/ddd-clean-check.mjs", import.meta.url));
@@ -105,9 +105,7 @@ test("ベースライン無しの ddd-clean-check は lake build が書いた le
 
 test("ベースライン無しの ddd-clean-check は利用者の git 設定（status.branch・color.ui=always・status.showUntrackedFiles=no）に左右されず、HEAD との差分の行だけを出す", (t) => {
   const { root, lean } = fixture(t);
-  const config = { "status.branch": "true", "color.ui": "always", "status.showUntrackedFiles": "no" };
-  const env = cleanEnv(Object.assign({ GIT_CONFIG_COUNT: String(Object.keys(config).length) },
-    ...Object.entries(config).map(([k, v], i) => ({ [`GIT_CONFIG_KEY_${i}`]: k, [`GIT_CONFIG_VALUE_${i}`]: v }))));
+  const env = cleanEnv(gitConfigEnv({ "status.branch": "true", "color.ui": "always", "status.showUntrackedFiles": "no" }));
   const run = (...args) => runNode(check, args, { cwd: root, env });
   const ok = run();
   assert.equal(ok.status, 0, ok.stdout);

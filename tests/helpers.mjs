@@ -30,6 +30,12 @@ export function cleanEnv(extra = {}) {
   return { ...env, ...extra };
 }
 
+/** { "鍵": "値" } の git 設定を GIT_CONFIG_COUNT / GIT_CONFIG_KEY_n / GIT_CONFIG_VALUE_n で渡す env（cleanEnv の extra に渡す。利用者の設定に左右されないことを確かめる） */
+export function gitConfigEnv(config) {
+  return Object.assign({ GIT_CONFIG_COUNT: String(Object.keys(config).length) },
+    ...Object.entries(config).map(([k, v], i) => ({ [`GIT_CONFIG_KEY_${i}`]: k, [`GIT_CONFIG_VALUE_${i}`]: v })));
+}
+
 export function runNode(script, args, { cwd, env, input, timeout = 20_000 } = {}) {
   return spawnSync(process.execPath, [script, ...args], { cwd, env, encoding: "utf8", timeout, input });
 }

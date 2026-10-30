@@ -6,8 +6,9 @@ import { findProjectRoot } from "./lib.mjs";
 const args = process.argv.slice(2);
 const id = args[0];
 if (!id) { console.error("usage: cradle refs <HS-001|MQ-003|UX-002|INFRA-D-004|イベント#5>"); process.exit(1); }
-// git grep は cwd の下しか見ないので、サブディレクトリから呼んでもプロジェクトルートから探す（パスはルートからの相対）
-const r = spawnSync("git", ["grep", "-n", "-I", "-F", "--", id], { stdio: ["ignore", "pipe", "pipe"], cwd: findProjectRoot(), encoding: "utf8" });
+// git grep は cwd の下しか見ないので、サブディレクトリから呼んでもプロジェクトルートから探す（パスはルートからの相対）。
+// 色（color.grep・color.ui の always）は区切りの「:」と ID の後ろにエスケープを挟み、grep.column は桁の欄を足すので、利用者の設定を -c で切る
+const r = spawnSync("git", ["-c", "color.grep=false", "-c", "grep.column=false", "grep", "-n", "-I", "-F", "--", id], { stdio: ["ignore", "pipe", "pipe"], cwd: findProjectRoot(), encoding: "utf8" });
 // git grep の 1 は一致なし（0 箇所）。git が無い・git の外などの失敗を 0 箇所と言うと、撤回の派生を洗い漏らす
 if (r.error || (r.status ?? 2) > 1) { console.error(`cradle refs: git grep が失敗しました: ${r.error?.message ?? r.stderr.trim()}`); process.exit(1); }
 // ID は文字どおりに探し（-F）、後ろに ID の続き（数字・英小文字・「.数字」）が来る一致は数えない: イベント#5 は #50・#5.1・#5a を拾わず、文末の「.」は拾う。
