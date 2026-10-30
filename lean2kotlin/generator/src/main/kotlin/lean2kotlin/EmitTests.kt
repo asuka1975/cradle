@@ -34,17 +34,16 @@ class EmitTests(
 	fun contractKey(c: IrContract): String = "${c.target}/${c.useCase}/${c.theorem}"
 	fun faultKey(fc: IrFaultContract): String = "fault/${fc.useCase}/${fc.def}"
 
-	/** ケースの実引数を params の順に `名前 = リテラル` で並べる。ケースに無い引数は
+	/** ケースの実引数を params の順に `名前 = 入力位置のリテラル(inputLiteral)` で並べる。ケースに無い引数は
 	    最初の 1 つを note して null(そのケースは出さない)。 */
 	internal fun caseCallArgs(
 		params: List<IrField>, args: Map<String, JsonElement>, label: String,
-		render: (IrType, JsonElement) -> String = { t, j -> inputLiteral(t, j) },
 	): List<String>? = params.map { p ->
 		val j = args[p.name] ?: run {
 			log("  note: $label: 引数 ${p.name} がケースにありません")
 			return null
 		}
-		"${ident(p.name)} = ${render(p.type, j)}"
+		"${ident(p.name)} = ${inputLiteral(p.type, j)}"
 	}
 
 	/** 実体化フック(fixture → 実装)の宣言。noun は KDoc の「実装の…を返す」に入る語(英字の語は前後の空白ごと渡す)。 */

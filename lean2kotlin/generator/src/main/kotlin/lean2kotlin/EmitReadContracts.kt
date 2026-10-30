@@ -235,7 +235,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 							log("  note: ${c.theorem}: 主体 ${fp.name} がケースにありません")
 							return@forEachIndexed
 						}
-						k.literal(fp.type, j)
+						inputLiteral(fp.type, j)
 					} else if (fp.fromRmField != null) {
 						val j = rmObj[fp.name] ?: run {
 							log("  note: ${c.theorem}: ReadModel に ${fp.name} がありません")
@@ -250,7 +250,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 						}
 					}
 				}
-				val callArgs = caseCallArgs(kept, case.args, c.theorem, k::literal) ?: return@forEachIndexed
+				val callArgs = caseCallArgs(kept, case.args, c.theorem) ?: return@forEachIndexed
 				val expected = when {
 					case.error != null && errT != null ->
 						"DomainResult.Err(${k.literal(errT, case.error)})"
