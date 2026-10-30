@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
@@ -112,22 +112,33 @@ test("refs はプロジェクトルートから git grep の行（path:line:cont
     "  lean/Example/Domain/Book.lean:1:/-- 本。出典: イベント#1 -/",
     "  lean/Example/Domain/Retire.lean:1:/-- 除籍。出典: イベント#10 -/",
   ].join("\n") + "\n" + refsTail);
-  assert.equal(run(root, "MQ-404").stdout, "MQ-404: 0 箇所\n" + refsTail);
+  // git grep の 1（一致なし）は失敗ではない
+  const none = run(root, "MQ-404");
+  assert.deepEqual([none.status, none.stdout, none.stderr], [0, "MQ-404: 0 箇所\n" + refsTail, ""]);
   const usage = run(root);
   assert.deepEqual([usage.status, usage.stdout, usage.stderr], [1, "", "usage: cradle refs <HS-001|MQ-003|UX-002|INFRA-D-004|イベント#5>\n"]);
 });
 
-test("refs はサブディレクトリから呼んでもプロジェクトルートから探し、パスをルートからの相対で出す。git の外では 0 箇所と言う", (t) => {
+test("refs はサブディレクトリから呼んでもプロジェクトルートから探し、パスをルートからの相対で出す", (t) => {
   const { root, run } = refsFixture(t);
   const atRoot = run(root, "イベント#1").stdout;
   for (const cwd of [join(root, "lean"), join(root, "documents", "ddd")]) {
     const sub = run(cwd, "イベント#1");
     assert.deepEqual([sub.status, sub.stdout, sub.stderr], [0, atRoot, ""], cwd);
   }
+});
+
+test("refs は git の外や git が無いとき 0 箇所と言わず、git grep の失敗を stderr に 1 行出して 1 で終わる", (t) => {
   const outside = tempProject(t, "cradle-refs-nogit-");
   writeTree(outside, { "README.md": "イベント#1\n" });
-  const r = run(outside, "イベント#1");
-  assert.deepEqual([r.status, r.stdout, r.stderr], [0, "イベント#1: 0 箇所\n" + refsTail, ""]);
+  // 一時ディレクトリの祖先に git の作業ツリーがあっても、そこまで上がらせない
+  const env = cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(outside) });
+  const noRepo = runNode(cradle, ["refs", "イベント#1"], { cwd: outside, env });
+  assert.equal(noRepo.status, 1);
+  assert.equal(noRepo.stdout, "");
+  assert.match(noRepo.stderr, /^cradle refs: git grep が失敗しました: \S.*\n$/);
+  const noGit = runNode(cradle, ["refs", "イベント#1"], { cwd: outside, env: { ...env, PATH: tempDir(t, "cradle-no-tools-") } });
+  assert.deepEqual([noGit.status, noGit.stdout, noGit.stderr], [1, "", "cradle refs: git grep が失敗しました: spawnSync git ENOENT\n"]);
 });
 
 // init した直後の doctor の全行。owned は骨格の持ち物（モックアップのサーバーと CLI の Main.lean）の行。

@@ -8,6 +8,8 @@ const id = args[0];
 if (!id) { console.error("usage: cradle refs <HS-001|MQ-003|UX-002|INFRA-D-004|イベント#5>"); process.exit(1); }
 // git grep は cwd の下しか見ないので、サブディレクトリから呼んでもプロジェクトルートから探す（パスはルートからの相対）
 const r = spawnSync("git", ["grep", "-n", "-I", "--", id], { stdio: ["ignore", "pipe", "pipe"], cwd: findProjectRoot(), encoding: "utf8" });
+// git grep の 1 は一致なし（0 箇所）。git が無い・git の外などの失敗を 0 箇所と言うと、撤回の派生を洗い漏らす
+if (r.error || (r.status ?? 2) > 1) { console.error(`cradle refs: git grep が失敗しました: ${r.error?.message ?? r.stderr.trim()}`); process.exit(1); }
 const lines = (r.stdout || "").split("\n").filter(Boolean);
 console.log(`${id}: ${lines.length} 箇所`);
 for (const l of lines) console.log("  " + l);
