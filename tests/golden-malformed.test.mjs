@@ -1,4 +1,4 @@
-// 読めない golden（壊れた -flow.json / -init.json）: status は E2E のフェーズにそれを出して後のフェーズも出し、
+// 読めない golden（壊れた -flow.json / -init.json と、JSON としては読めても形の違う -flow.json）: status は E2E のフェーズにそれを出して後のフェーズも出し、
 // flows-from-golden は既定の出力でも --check（門）でもファイル名つきの 1 行で 1 で終わる。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -79,4 +79,58 @@ test("壊れた golden が無ければ flows-from-golden --check は対応の取
   const r = run(flowsFromGolden, "--check");
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /golden の流れ 1 本のうち台本が対応しているのは 1 本/);
+});
+
+// JSON としては読めても golden の流れの応答の形ではない -flow.json: 名前の無い TypeError や偽の手にせず、ファイル名と崩れた所を言う（文の頭）
+const wrongShapes = [
+  ["null", "a-flow.json が golden の応答"],
+  ["5", "a-flow.json が golden の応答"],
+  ["[1]", "a-flow.json が golden の応答"],
+  [JSON.stringify({ ok: { trace: 5 } }), "a-flow.json の ok.trace が配列ではない"],
+  [JSON.stringify({ ok: { trace: [null] } }), "a-flow.json の ok.trace の 1 手目がオブジェクトではない"],
+  [JSON.stringify({ ok: { trace: [{ actor: alice, command: { postNote: { title: "a" } } }, 5] } }), "a-flow.json の ok.trace の 2 手目がオブジェクトではない"],
+  [JSON.stringify({ ok: { trace: [[1]] } }), "a-flow.json の ok.trace の 1 手目がオブジェクトではない"],
+];
+
+// 1 行で止まる: `cradle: <head>…`。stack trace を出さない
+function assertShapeLine(r, head, label) {
+  assert.equal(r.status, 1, label + "\n" + r.stdout + r.stderr);
+  assert.ok(r.stderr.startsWith(`cradle: ${head}`), label + "\n" + r.stderr);
+  assert.match(r.stderr, /^[^\n]+\n$/, label);
+}
+
+test("goldenFlows は形の違う -flow.json（オブジェクトでない・ok.trace が配列でない・手がオブジェクトでない）をファイル名つきで投げる", (t) => {
+  for (const [text, head] of wrongShapes) {
+    const { root } = fixture(t, { "a-flow.json": text });
+    assert.throws(() => goldenFlows(loadConfig(root, {})), (e) => e.message.startsWith(head), text);
+  }
+});
+
+test("goldenFlows は error の応答と trace の無い ok の応答を 0 手の流れとして受ける", (t) => {
+  for (const text of [JSON.stringify({ error: "x" }), JSON.stringify({ ok: {} })]) {
+    const { root } = fixture(t, { "a-flow.json": text });
+    assert.deepEqual(goldenFlows(loadConfig(root, {})).map(f => [f.id, f.steps.length]), [["a", 0], ["ok", 1]], text);
+  }
+});
+
+test("status は形の違う -flow.json をファイル名つきの E2E の事実にし、golden-check を次の一手にして本番投入まで出す", (t) => {
+  for (const [text, head] of wrongShapes) {
+    const { run } = fixture(t, { "a-flow.json": text });
+    const r = run(status, "--json");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "");
+    const phases = JSON.parse(r.stdout).phases;
+    const e2e = phases.find(p => p.name.startsWith("E2E"));
+    assert.equal(e2e.facts.length, 1, text);
+    assert.ok(e2e.facts[0].startsWith(`golden を読めない: ${head}`), `${text}\n${e2e.facts[0]}`);
+    assert.equal(e2e.next, "cradle golden-check で壊れた golden を確かめる");
+    assert.equal(phases.at(-1).name, "本番投入");
+  }
+});
+
+test("flows-from-golden は形の違う -flow.json を既定の出力でも --check でもファイル名つきの 1 行で止める", (t) => {
+  for (const [text, head] of wrongShapes) {
+    const { run } = fixture(t, { "a-flow.json": text });
+    for (const args of [[], ["--json"], ["--check"], ["--check", "--json"]]) assertShapeLine(run(flowsFromGolden, ...args), head, `${text} ${args.join(" ")}`);
+  }
 });

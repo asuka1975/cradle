@@ -455,6 +455,21 @@ export function readGoldenJson(goldenDir, file) {
   try { return readJson(join(goldenDir, file)); } catch (e) { throw new Error(`${file} を JSON として読めない: ${e.message}`); }
 }
 
+/** golden の流れの応答（`<name>-flow.json`）の trace（手の応答の列）。error の応答や trace の無い ok は 0 手。
+    JSON としては読めても形が違えば（オブジェクトでない・ok.trace が配列でない・手がオブジェクトでない）ファイル名を添えて投げる
+    — 名前の無い TypeError で止まらず、数の手を構成子の無い applied の手として数えないように。 */
+export function readGoldenTrace(goldenDir, file) {
+  const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  const j = readGoldenJson(goldenDir, file);
+  if (!isObject(j)) throw new Error(`${file} が golden の応答（{"ok":…} か {"error":…}）の形ではない`);
+  const trace = j.ok?.trace;
+  if (trace === undefined) return [];
+  if (!Array.isArray(trace)) throw new Error(`${file} の ok.trace が配列ではない`);
+  const bad = trace.findIndex(t => !isObject(t));
+  if (bad >= 0) throw new Error(`${file} の ok.trace の ${bad + 1} 手目がオブジェクトではない`);
+  return trace;
+}
+
 /** 外部能力の経路（cmd external）で採った golden か。sidecar があればその init（無ければ flow）の cmd で決まる（version は見ない）。
     sidecar が無ければ応答の形で見分ける — init の応答に env があるか、flow の trace の要素に env か result があるか（旧経路の応答にはどれも無い）。 */
 export function isExternalGolden(goldenDir, name) {
@@ -505,8 +520,8 @@ export function goldenFlows(cfg) {
   if (!existsSync(dir)) return [];
   return goldenFlowFiles(dir).map(f => {
     const id = f.replace(/-flow\.json$/, "");
-    // 読めない応答は投げる（readGoldenJson がファイル名を添える）— 流れを黙って落とすと flows-from-golden --check の門が通ってしまう
-    const trace = readGoldenJson(dir, f).ok?.trace ?? [];
+    // 読めない応答・形の違う応答は投げる（readGoldenTrace がファイル名を添える）— 流れを黙って落とすと flows-from-golden --check の門が通ってしまう
+    const trace = readGoldenTrace(dir, f);
     // 壊れた sidecar は golden-check が報告する。ここでは流れ自体は数え、sidecar の情報だけ無いものとして扱う
     let sidecar = null, external = false;
     try { sidecar = readSidecar(dir, id); external = isExternalGolden(dir, id); } catch {}

@@ -13,7 +13,7 @@
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenJson, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenTrace, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
 const cfg = loadConfigOrFail();
@@ -22,7 +22,7 @@ if (!existsSync(goldenDir)) fail(`golden がありません: ${goldenDir}`);
 
 const stepLine = (s) => s.kind === "observation" ? `observation ${s.observation} → ${s.outcome}` : `${s.command} by ${JSON.stringify(s.actor)} → ${s.outcome}`;
 const environmentLabel = (e) => e ? `${e.name ?? "-"} (script ${e.script.length} 件)` : "-";
-// 読めない golden はファイル名つきの 1 行で 1 で終わる（--check は門なので、壊れた流れを飛ばして通さない）
+// 読めない golden・形の違う golden はファイル名つきの 1 行で 1 で終わる（--check は門なので、壊れた流れを飛ばして通さない）
 const orFail = (f) => { try { return f(); } catch (e) { fail(e.message); } };
 
 if (opts.check) {
@@ -42,7 +42,7 @@ if (opts.check) {
 const flows = [];
 for (const f of goldenFlowFiles(goldenDir)) {
   const name = f.replace(/-flow\.json$/, "");
-  const trace = orFail(() => readGoldenJson(goldenDir, f)).ok?.trace ?? [];
+  const trace = orFail(() => readGoldenTrace(goldenDir, f));
   let req = null, external = false;
   try { req = readSidecar(goldenDir, name); external = isExternalGolden(goldenDir, name); } catch (e) { fail(e.message); }
   // 人物は利用者の操作の当事者だけ — 内部入力に当事者は無い
