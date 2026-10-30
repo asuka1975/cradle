@@ -16,6 +16,8 @@ internal fun EmitTests.emitRepositoryContractTest(td: IrTypeDef) {
  */
 abstract class ${rootK}RepositoryContractTest {
 	protected abstract fun repository(): ${rootK}Repository
+	/** fixture の実体化(観測が一致する実装の Entity を返す)。 */
+	protected abstract fun entity(fixture: ${k.fixtureName(td)}): ${k.name(td.lean)}
 
 	@Test
 	fun `保存前の get は null`() {
@@ -27,10 +29,10 @@ abstract class ${rootK}RepositoryContractTest {
 		runBlocking {
 			checkAll(PropTestConfig(seed = 42), $arbRoot, $arbRoot) { a, b ->
 				val repo = repository()
-				repo.save(a)
-				assertEquals(a, repo.get())
-				repo.save(b)
-				assertEquals(b, repo.get())
+				repo.save(entity(a))
+				assertEquals(a, repo.get()?.toFixture())
+				repo.save(entity(b))
+				assertEquals(b, repo.get()?.toFixture())
 			}
 		}
 	}
