@@ -25,7 +25,7 @@
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
-import { loadConfigOrFail, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, aiNoteProblems } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, aiNoteProblems } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
 const cfg = loadConfigOrFail();
@@ -40,7 +40,13 @@ const isHarnessProse = (relPath) => HARNESS_DIRS.some(d => relPath.startsWith(d 
 const isHarnessCode = (relPath) => isHarnessProse(relPath) && extname(relPath) !== ".md";
 
 function candidateFiles() {
-  if (opts._.length) return opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p)).filter(existsSync);
+  if (opts._.length) {
+    const files = opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p));
+    // 綴りの誤ったパスを落として「0 findings」で通さない。2 は検査できなかった印（1 は error が見つかった）
+    const missing = opts._.filter((p, i) => !existsSync(files[i]));
+    if (missing.length) fail(`ファイルがありません（プロジェクトルートからの相対）: ${missing.join(", ")}`, 2);
+    return files;
+  }
   if (opts.all) {
     const code = codeDirs.flatMap(d => walk(d, { ext: CODE_EXT }));
     // .apm/instructions は消費側の固有の事実の正本（写しの rules / AGENTS.md ではなくここを見る）
