@@ -135,8 +135,8 @@ test("refs はサブディレクトリから呼んでもプロジェクトルー
 test("refs は git の外や git が無いとき 0 箇所と言わず、git grep の失敗を stderr に 1 行出して 1 で終わる", (t) => {
   const outside = tempProject(t, "cradle-refs-nogit-");
   writeTree(outside, { "README.md": "イベント#1\n" });
-  // 一時ディレクトリの祖先に git の作業ツリーがあっても、そこまで上がらせない
-  const env = cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(outside) });
+  // 一時ディレクトリの祖先に git の作業ツリーがあっても、そこまで上がらせない。利用者の git 設定（grep.fallbackToNoIndex）で git の外を --no-index で探させない
+  const env = cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(outside), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
   const noRepo = runNode(cradle, ["refs", "イベント#1"], { cwd: outside, env });
   assert.equal(noRepo.status, 1);
   assert.equal(noRepo.stdout, "");
