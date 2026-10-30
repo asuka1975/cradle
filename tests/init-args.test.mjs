@@ -58,3 +58,30 @@ test("init は値を付けた --force / --dry-run（--force=false など）と�
   }
   assert.deepEqual(readdirSync(cwd), []);
 });
+
+test("init は空の --only= / --dir= / --backend=（空の変数を渡した形も）を値の無い形と同じに何も書かずに 1 で止め、--only= --force で骨格を丸ごと上書きしない", (t) => {
+  const env = cleanEnv();
+  const root = tempDir(t, "cradle-init-blank-");
+  const full = runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env });
+  assert.equal(full.status, 0, full.stderr);
+  const hotspots = join(root, "documents/ddd/hotspots.md");
+  writeFileSync(hotspots, "# 書き込んだ HS\n");
+  for (const blank of [["--only="], ["--only", ""], ["--only", " "]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", root, ...blank, "--force"], { cwd: root, env });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--only <prefix> が要ります（例: lean/mockup）\n"], JSON.stringify(blank));
+    assert.equal(readFileSync(hotspots, "utf8"), "# 書き込んだ HS\n", JSON.stringify(blank));
+  }
+  // 空の --dir は CRADLE_PROJECT_DIR にも cwd にも落ちない
+  const cwd = tempDir(t, "cradle-init-blank-cwd-");
+  const envDir = tempDir(t, "cradle-init-blank-env-");
+  for (const blank of [["--dir="], ["--dir", ""]]) {
+    const r = runNode(init, ["--project", "Demo", ...blank], { cwd, env: { ...env, CRADLE_PROJECT_DIR: envDir } });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--dir <path> が要ります（骨格を敷くディレクトリ）\n"], JSON.stringify(blank));
+  }
+  for (const blank of [["--backend="], ["--backend", ""]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", cwd, ...blank], { cwd, env });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--backend <package> が要ります（例: com.example.notes）\n"], JSON.stringify(blank));
+  }
+  assert.deepEqual(readdirSync(cwd), []);
+  assert.deepEqual(readdirSync(envDir), []);
+});

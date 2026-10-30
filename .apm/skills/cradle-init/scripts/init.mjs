@@ -25,9 +25,11 @@ const only = opts.only ?? null;
 // 引数の誤りは何か書く前に止める（敷いた後で止めると、書いた分の一覧も出さずに 1 で終わる）
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
-if (target === true) { console.error("--dir <path> が要ります（骨格を敷くディレクトリ）"); process.exit(1); }
-if (only === true) { console.error("--only <prefix> が要ります（例: lean/mockup）"); process.exit(1); }
-if (backendPkg === true) { console.error("--backend <package> が要ります（例: com.example.notes）"); process.exit(1); }
+// 空の値（--only= や空の変数を渡した --only "$P"）も値の無い形と同じに止める。通すと --only は絞らずに全部を、--dir は cwd を指す
+const blank = (v) => v === true || (typeof v === "string" && !v.trim());
+if (blank(opts.dir)) { console.error("--dir <path> が要ります（骨格を敷くディレクトリ）"); process.exit(1); }
+if (blank(only)) { console.error("--only <prefix> が要ります（例: lean/mockup）"); process.exit(1); }
+if (blank(backendPkg)) { console.error("--backend <package> が要ります（例: com.example.notes）"); process.exit(1); }
 if (backendPkg && !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(backendPkg)) { console.error("--backend は Java のパッケージ名（例: com.example.notes）"); process.exit(1); }
 // parseArgs は --force=false も文字列として残すので、付けたことにすると手で書いた内容を上書きする。値を付けた形は受けない
 for (const k of ["force", "dry-run"]) if (typeof opts[k] === "string") { console.error(`--${k} は値を取りません（--${k}=${opts[k]}）`); process.exit(1); }
