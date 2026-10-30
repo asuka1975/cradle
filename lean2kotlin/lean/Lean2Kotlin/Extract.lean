@@ -520,11 +520,15 @@ partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
                 mkAppM ``Lean.Json.str #[mkStrLit short]
               else do
                 let mut pairs : List Expr := []
+                let mut k := 0
                 for f in fs do
                   let d ← f.fvarId!.getDecl
                   if ← Meta.isProp d.type then continue
                   let ser ← mkSerializer d.type
-                  pairs := pairs ++ [← mkPair (toString d.userName) (mkApp ser f)]
+                  -- 名前の無い引数は形の欄名と同じ arg<データの引数の序数>(ctorFields)
+                  let nm := if d.userName.hasMacroScopes then s!"arg{k}" else toString d.userName
+                  pairs := pairs ++ [← mkPair nm (mkApp ser f)]
+                  k := k + 1
                 let inner ← mkAppM ``Lean.Json.mkObj #[← mkListLit pairTy pairs]
                 mkAppM ``Lean.Json.mkObj #[← mkListLit pairTy
                   [← mkPair short inner]]
@@ -642,9 +646,13 @@ partial def valueToJson (e : Expr) : MetaM Json := do
             xs.mapM fun x => x.fvarId!.getUserName
           let argNames := names.extract ci.numParams names.size
           let mut obj : List (String × Json) := []
+          let mut k := 0
           for i in [0:fields.size] do
             if ← Meta.isProof fields[i]! then continue
-            obj := obj ++ [(toString argNames[i]!, ← valueToJson fields[i]!)]
+            -- 名前の無い引数は形の欄名と同じ arg<データの引数の序数>(ctorFields)— 生成器は欄名で値を引く
+            let nm := if argNames[i]!.hasMacroScopes then s!"arg{k}" else toString argNames[i]!
+            obj := obj ++ [(nm, ← valueToJson fields[i]!)]
+            k := k + 1
           return Json.mkObj [(short, Json.mkObj obj)]
 
 /-- 型が Id 型(と List / Option / Prod)だけから成るか(泉から導出する引数の判定)。 -/
