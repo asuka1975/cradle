@@ -6,10 +6,9 @@
 //   ddd.mjs end [--abandon]           questions.md・naming.md を消し、ddd-clean-check --build に .session（開始時点の lean/）を渡す。通れば .session も消す（answers を中継した後でだけ通る。問いを捨てるなら --abandon）
 //   ddd.mjs status                    プロダクトの一言・出来事数・open の HS/UX/MQ・用語数・命名の確認待ち
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -22,7 +21,6 @@ const marker = join(ddd, ".session");
 const timeline = join(ddd, "event-timeline.md");
 // .session には開始時点の lean/ の sha256、問いの版（sha256）、その版の回答を answers で中継したかを記録する。
 // end は lean/ を開始時点と比べ（HEAD と比べると未コミットの形式化が差分に出る）、explorer が回答を受け取らないまま片付けるのを止める。
-const sha = (t) => createHash("sha256").update(t).digest("hex");
 const readSession = () => { try { return JSON.parse(readFileSync(marker, "utf8")); } catch { return null; } };
 const writeSession = (s) => writeFileSync(marker, JSON.stringify(s) + "\n");
 // lean/ が骨格のサンプル（メモ）のままなら、プローブもモックアップも無い巡になる（サンプルは実ドメインではない）
@@ -95,7 +93,7 @@ switch (cmd) {
       lines.push("", "**回答:**", "", "<!-- 選択肢の記号か、自由に書いてください。「前提が違う」「問いが成り立たない」もそのまま。 -->", "");
     });
     writeFileSync(qfile, lines.join("\n"));
-    writeSession({ ...(readSession() ?? { theme: null }), questions: sha(lines.join("\n")), answered: null });
+    writeSession({ ...(readSession() ?? { theme: null }), questions: sha256(lines.join("\n")), answered: null });
     console.log(`${cfg.documents.ddd}/questions.md に ${j.questions.length} 問を書いた。${scaffold ? "骨格のサンプルのままなのでプローブ欄は無い。" : "プローブ名は仮置き（用意できない選択肢は — と理由に書き換える）。"}`);
     break;
   }
@@ -112,13 +110,13 @@ switch (cmd) {
     }
     console.log(out.join("\n\n"));
     const s = readSession();
-    if (s) writeSession({ ...s, answered: sha(text) });
+    if (s) writeSession({ ...s, answered: sha256(text) });
     break;
   }
   case "end": {
     const s = readSession();
     if (existsSync(qfile) && !opts.abandon) {
-      if (!s || s.answered !== sha(readFileSync(qfile, "utf8"))) fail("questions.md の回答がまだ中継されていません。ddd.mjs answers を実行して出力を explorer に返してから end する。問いを捨てて終えるなら --abandon（ユーザーがそう決めたときだけ）");
+      if (!s || s.answered !== sha256(readFileSync(qfile, "utf8"))) fail("questions.md の回答がまだ中継されていません。ddd.mjs answers を実行して出力を explorer に返してから end する。問いを捨てて終えるなら --abandon（ユーザーがそう決めたときだけ）");
     }
     // 開始時点の記録（.session）は検査が通るまで残す — 残骸を消して end をやり直すときも同じ基準で比べる。記録の無い印（start を経ていない）は先に消し、検査は HEAD と比べる
     const baseline = s?.lean ? ["--baseline", marker] : [];

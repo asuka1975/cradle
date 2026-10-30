@@ -8,7 +8,7 @@
 // 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm install が rules に写す。Codex は apm compile --single-agents で AGENTS.md に）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
 // .claude/ と .codex/ の設定例は、その置き場が既にあるもの（apm install 済みのターゲット）だけ敷く。どちらも無ければ両方。
 // 既にあるファイルは上書きしない（--force で上書き）。
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 
 const args = process.argv.slice(2);

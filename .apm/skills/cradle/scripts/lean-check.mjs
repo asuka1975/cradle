@@ -25,9 +25,8 @@
 //   --smoke   : CLI に init を流して ok が返ることを確かめる
 //   orphan    : <Root>.lean から import で辿れないモジュール（lake build が検査しないファイル）
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { readdirSync, statSync } from "node:fs";
 import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });

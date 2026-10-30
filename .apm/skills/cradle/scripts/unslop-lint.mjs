@@ -24,8 +24,8 @@
 //   restate          [warn]  直下の宣言名をそのまま繰り返すだけのコメント
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, extname, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, git, fail, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
+import { join, extname, dirname } from "node:path";
+import { loadConfig, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
 const cfg = loadConfig();

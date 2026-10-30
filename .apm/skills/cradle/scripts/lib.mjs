@@ -101,8 +101,7 @@ function guessProject(root) {
   return candidates[candidates.length - 1] ?? libs[libs.length - 1] ?? null;
 }
 
-/** Lean CLI を 1 リクエスト 1 プロセスで呼ぶ。stdin に JSON、stdout に JSON。 */
-/** Lean CLI を 1 回呼ぶ（Promise）。stdin は非同期に流す — Codex のサンドボックスでは spawnSync に input を渡すと EOF が届かず固まる。 */
+/** Lean CLI を 1 リクエスト 1 プロセスで呼ぶ（Promise）。stdin に JSON、stdout に JSON。stdin は非同期に流す — Codex のサンドボックスでは spawnSync に input を渡すと EOF が届かず固まる。 */
 export function callLean(cfg, request, { build = "auto" } = {}) {
   ensureLeanBinary(cfg, build);
   const input = typeof request === "string" ? request : JSON.stringify(request);
@@ -157,7 +156,8 @@ export function git(root, args, opts = {}) {
 
 export function readJson(file) { return JSON.parse(readFileSync(file, "utf8")); }
 
-export function walk(dir, { ext = null, skip = [".lake", "node_modules", "build", ".git", "dist"] } = {}) {
+const DEFAULT_WALK_SKIP = Object.freeze([".lake", "node_modules", "build", ".git", "dist"]);
+export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP } = {}) {
   const out = [];
   if (!existsSync(dir)) return out;
   const stack = [dir];
@@ -179,8 +179,8 @@ export function rel(root, p) { return relative(root, p).split(sep).join("/"); }
 /** lean/ の全ファイルの sha256（lean/ からの相対パス → ハッシュ）。lake-manifest.json は lake build が書く（初回のビルドで現れる）ので数えない。 */
 export function leanSnapshot(cfg) {
   const out = {};
-  for (const f of walk(cfg.lean.rootDir, { skip: [".lake", "node_modules", "build", ".git", "dist", "lake-manifest.json"] })) {
-    out[rel(cfg.lean.rootDir, f)] = createHash("sha256").update(readFileSync(f)).digest("hex");
+  for (const f of walk(cfg.lean.rootDir, { skip: [...DEFAULT_WALK_SKIP, "lake-manifest.json"] })) {
+    out[rel(cfg.lean.rootDir, f)] = sha256(readFileSync(f));
   }
   return out;
 }
@@ -505,3 +505,6 @@ export function glossaryEnglish(cfg) {
   }
   return map;
 }
+
+/** 中身（文字列か Buffer）の sha256 の 16 進。 */
+export function sha256(data) { return createHash("sha256").update(data).digest("hex"); }
