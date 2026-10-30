@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // lean-check — Lean 仕様の層の壁と証明方針を機械検査する（lake build とは別の、grep で決まる規約）。
 //
-//   lean-check [--build] [--json]
+//   lean-check [--build] [--smoke] [--json]
+//     --build は値を取らない（lake build も検査に入れる）。golden-check / spec-query の --build auto|always|never とは別の意味
 // 規則は lean-rules.mjs の checkLean。ここは引数と設定を読み、lake build と --smoke を走らせ、数えて出すだけ。
 //
 // 検査項目（cradle.json の lean.* で調整）:

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ddd-clean-check — 探索セッション（ddd スキル）が残したプローブ・問いかけファイル・命名の確認が消えていること
 // （--baseline なしならセッション印も）を機械で確かめる。
-//   ddd-clean-check [--build] [--baseline <file>]
+//   ddd-clean-check [--build] [--baseline <file>] [--json]
 //   --baseline は ddd.mjs start が書いた .session（lean に開始時点の sha256）。lean/ をその時点と比べ、無ければ HEAD と比べる
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";

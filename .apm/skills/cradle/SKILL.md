@@ -13,7 +13,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 | `status` | パイプラインの現在地（フェーズごとの事実と次の一手） | 作業の最初。プロダクトオーナーに現在地を説明するとき |
 | `spec-query …` | Lean を動かして仕様に答える（`spec-query` スキル） | 仕様に関する問いすべて |
 | `golden-check [--update]` | golden を再生して突き合わせる（外部能力の golden は init / flow に加えて step の連鎖（chain）も再生し、応答の port / operation がモデルの Port にあることも見る） | `lake build` が通ったあと、モデルを変えたとき |
-| `lean-check [--build]` | 層の壁・sorry・axiom・生成器への言及 | Lean を編集したあと、コミット前 |
+| `lean-check [--build] [--smoke]` | 層の壁・sorry・axiom・生成器への言及（`--build` は lake build も、`--smoke` は CLI に init を流して ok を確かめる） | Lean を編集したあと、コミット前 |
 | `regen-impact [--dry-run]` | 再生成 → 生成物の差分 → 参照する手書き実装と契約テスト → golden 回帰 | Lean を変えて backend に追随するとき |
 | `unslop [--diff\|--all]` | コメント規約・腐ったパス・逃げ言葉・握りつぶし | 止まる前（Stop hook が error を差し戻す） |
 | `ddd-clean-check [--build] [--baseline <file>]` | 探索の残骸（questions.md・naming.md・probe-・lean の差分。`ddd.mjs end` は `.session` を baseline に渡し、開始時点と比べる）が無いこと | ddd スキルの終わり |
