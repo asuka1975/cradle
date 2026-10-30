@@ -64,7 +64,8 @@ internal fun theoremTestName(method: String, theorem: String, i: Int): String =
 private val JVM_NAME_ILLEGAL = Regex("""[.;\[\]/<>:\\]""")
 
 /** バッククォートのテスト名に埋める外来の文字列(golden の出どころ = ファイル名の接頭辞)。JVM はバッククォートの中でも
-    `. ; [ ] / < > : \` を名前に許さないので _ にする。ほかの文字(#・空白・括弧・日本語)はそのまま残す。 */
+    `. ; [ ] / < > : \` を名前に許さないので _ にする。ほかの文字(#・空白・括弧・日本語)はそのまま残す。
+    単射でないので、写すと同じになる golden の組は Golden.load が error にして読まない。 */
 internal fun testNameSafe(s: String): String = s.replace(JVM_NAME_ILLEGAL, "_")
 
 /** ファイル単位の参照収集の結果(インポート計算用)。 */

@@ -25,7 +25,8 @@ import kotlin.io.path.readText
  *
  * 再生できない golden は error(生成の失敗)に集める: 外部能力の golden に版 1 の外部能力の脇書きが無い、
  * 脇書きの版が読めない、外部能力の golden の init / flow 応答がトップに `ok` を持たない(`error` / `harnessError`)、
- * fault のエントリが障害契約を指名していない、指名した障害契約が IR に無い・portCalls が違う。
+ * fault のエントリが障害契約を指名していない、指名した障害契約が IR に無い・portCalls が違う、
+ * 名前(prefix)をテスト名にすると別の golden と同じになる([testNameSafe])。
  */
 
 /** fault のエントリが指名した障害契約(trace の `faultContract`)。 */
@@ -130,6 +131,13 @@ object Golden {
 				if (notOk.isNotEmpty()) continue
 			}
 			readable += prefix
+		}
+
+		// テスト名にすると同じになる prefix の組は、生成するテストの名前が衝突するので組ごと読まない
+		for ((safe, group) in readable.groupBy(::testNameSafe)) {
+			if (group.size < 2) continue
+			errors += "golden ${group.sorted().joinToString("・")} はテスト名にすると同じ $safe になる（`. ; [ ] / < > : \\` は _ にする）— どれかを改名する"
+			readable -= group.toSet()
 		}
 
 		// スナップショットは init の列、次に flow の列(どちらもファイル名順)

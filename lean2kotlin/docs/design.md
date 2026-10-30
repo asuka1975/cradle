@@ -165,6 +165,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - 脇書きの `version` があって 1 でない（外部能力かに依らない）。
 - 外部能力の golden の init / flow 応答がトップに `ok` を持たない（`error` / `harnessError` — 採り直す）。
 - golden の fault のエントリが指名した障害契約（`faultContract` の `<UseCase>.<def>` と `portCalls`）が IR の障害契約に無い、または `portCalls` が Lean の署名と違う。
+- 名前が `. ; [ ] / < > : \` と `_` の違いだけの golden の組（テスト名ではどれも `_` になり衝突する。組ごと読まない — どれかを改名する）。
 - Port の要求・観測が関数型を運ぶ（構成子の引数・`Option` などの入れ子の中も含む。直接の関数フィールドは抽出の失敗 — 上）。
 - Port の要求・観測が interface 化された語彙（Entity・ふるまい持ちの VO）を運ぶ（要求はモックが値で比較する）。
 - 内部入力（Observation）の型が名義（`@[actorContext]`）を運ぶ（入れ子の中も含む。通知・worker からの入力に利用者の名義は無い）。
