@@ -1,6 +1,7 @@
 // 読めない golden（壊れた -flow.json / -init.json と、JSON としては読めても形の違う -flow.json）: status は E2E のフェーズにそれを出して後のフェーズも出し、
 // flows-from-golden は既定の出力でも --check（門）でもファイル名つきの 1 行で 1 で終わる。
-// golden-check は形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）をファイル名つきの error の行にして再生せず、
+// golden-check は形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と external の sidecar
+// （flow.inputs が配列でない・手がオブジェクトでない）をファイル名つきの error の行にして再生せず、
 // 残りの golden の行も出す（--manifest でも、golden-check を呼ぶ regen-impact でも stack trace にしない）。
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -198,6 +199,50 @@ test("golden-check は ok.env.script が null の -init.json を形の error に
   const { report } = JSON.parse(run(goldenCheck, "--json", "--build", "never").stdout);
   assert.deepEqual(report.map(r => [r.name, r.kind, r.status, r.reason?.startsWith("Lean CLI がありません")]),
     [["a", "init", "error", true], ["a", "flow", "error", true], ["ok", undefined, "skipped", false]], JSON.stringify(report));
+});
+
+// external の sidecar の flow.inputs が配列でない・手がオブジェクトでない: 障害契約の照合と連鎖で TypeError にせず、sidecar のファイル名つきの error の行にして再生しない
+const externalSidecarWith = (inputs) => JSON.stringify({ ...JSON.parse(externalSidecar), flow: { ...JSON.parse(externalSidecar).flow, inputs } });
+const inputShapes = [
+  [5, "a.request.json の flow.inputs が配列ではない"],
+  [{}, "a.request.json の flow.inputs が配列ではない"],
+  [{ 0: { command: { postNote: { title: "a" } } } }, "a.request.json の flow.inputs が配列ではない"],
+  ["ab", "a.request.json の flow.inputs が配列ではない"],
+  [[5], "a.request.json の flow.inputs の 1 手目がオブジェクトではない"],
+  [[{ command: { postNote: { title: "a" } } }, null], "a.request.json の flow.inputs の 2 手目がオブジェクトではない"],
+  [[[1]], "a.request.json の flow.inputs の 1 手目がオブジェクトではない"],
+];
+
+test("golden-check は external の sidecar の flow.inputs が配列でない・手がオブジェクトでない golden をファイル名つきの error の行にし、stack trace を出さずに残りの golden も出す", (t) => {
+  for (const [inputs, reason] of inputShapes) {
+    const label = JSON.stringify(inputs);
+    const { run } = fixture(t, { "a-init.json": init, "a-flow.json": flow, "a.request.json": externalSidecarWith(inputs) });
+    const json = run(goldenCheck, "--json", "--build", "never");
+    assert.equal(json.status, 1, label + "\n" + json.stderr);
+    assert.equal(json.stderr, "", label);
+    assert.deepEqual(JSON.parse(json.stdout), { failed: 1, report: [{ name: "a", status: "error", reason }, okSkipped] }, label);
+    const text = run(goldenCheck, "--build", "never");
+    assert.equal(text.status, 1, label + "\n" + text.stderr);
+    assert.equal(text.stderr, "", label);
+    assert.ok(text.stdout.startsWith(`error    a: ${reason}\nskipped  ok: ${okSkipped.reason}\n\n0 ok, 1 changed/error, 1 skipped\n`), label + "\n" + text.stdout);
+  }
+});
+
+// inputs が null（無いのと同じ 0 手）は形の error にせず再生へ進む（Lean CLI が無いので init / flow とも CLI の error）
+test("golden-check は external の sidecar の flow.inputs が null でも形の error にせず再生する", (t) => {
+  const { run } = fixture(t, { "a-init.json": init, "a-flow.json": flow, "a.request.json": externalSidecarWith(null) });
+  const { report } = JSON.parse(run(goldenCheck, "--json", "--build", "never").stdout);
+  assert.deepEqual(report.map(r => [r.name, r.kind, r.status, r.reason?.startsWith("Lean CLI がありません")]),
+    [["a", "init", "error", true], ["a", "flow", "error", true], ["ok", undefined, "skipped", false]], JSON.stringify(report));
+});
+
+test("regen-impact は external の sidecar の flow.inputs が配列でない golden を golden-check の error の行で golden 回帰に出し、stack trace を載せない", (t) => {
+  const { root, run } = fixture(t, { "a-init.json": init, "a-flow.json": flow, "a.request.json": externalSidecarWith({}) });
+  commitAll(root);
+  const r = run(regenImpact, "--no-regen");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.ok(r.stdout.endsWith(`\ngolden 回帰: 1 件が changed/error（意図した変更か確かめる）\n  error    a: a.request.json の flow.inputs が配列ではない\n  skipped  ok: ${okSkipped.reason}\n`), r.stdout);
 });
 
 test("golden-check --manifest は sidecar の無い golden の -flow.json が null でも手が null でも stack trace を出さず、error の行にする", (t) => {

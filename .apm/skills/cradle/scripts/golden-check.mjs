@@ -18,7 +18,8 @@
 // — flow は連続する step の定義そのものなので、ずれれば実行器の不整合。
 // 応答に現れる外部能力の往復（init の env の script・trace の interactions の port / operation）は Lean の Port の一覧
 // （Application/Port/<Port>/<操作>.lean、Domain/Port も同じ）に要り、無ければ error。
-// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない。
+// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と sidecar（flow.inputs が配列でない・手がオブジェクトでない）は
+// ファイル名つきの error にして再生しない。
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -82,9 +83,9 @@ function changedEntry(name, kind, diffs, i, input) {
 
 /** external の flow を init + step の連鎖で打ち直し、再生した flow の応答（trace の各要素の射影と最後の env）と突き合わせる。
     init は sidecar の flow のリクエストの欄（scenario・環境・actor・viewer・today）から組む。
+    inputs は呼び手が形を確かめた sidecar の入力列（配列で、手はオブジェクト）。
     CLI が落ちた・JSON でない応答を返したときも error の行で返す（投げると検査済みの golden の行も出ないまま止まる）。数えるのは呼び手。 */
-async function chainReplay(name, flowReq, flowRes) {
-  const inputs = flowReq.inputs ?? [];
+async function chainReplay(name, flowReq, inputs, flowRes) {
   const trace = flowRes.ok.trace ?? [];
   const changed = (diffs, i) => changedEntry(name, "chain", diffs, i, i === undefined ? null : traceInputOf(inputs[i]));
   const chainError = (reason) => ({ name, kind: "chain", status: "error", reason });
@@ -133,14 +134,19 @@ for (const name of wanted) {
   let sidecar, external;
   try { sidecar = readSidecar(goldenDir, name); external = isExternalGolden(goldenDir, name); }
   catch (e) { error(name, e.message); continue; }
-  let reqs;
+  let reqs, inputs;
   if (external) {
     if (!sidecar) { error(name, `外部能力を使う golden は ${name}.request.json（版・環境・入力列）が無いと再生できない — モックアップで採り直す`); continue; }
     reqs = sidecar;
+    // 入力列は障害契約の照合と連鎖が読む。形の違う sidecar（配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない — 投げると stack trace だけで、残りの golden の行も出ない
+    inputs = reqs.flow?.inputs ?? [];
+    if (!Array.isArray(inputs)) { error(name, `${name}.request.json の flow.inputs が配列ではない`); continue; }
+    const bad = inputs.findIndex(x => !isObject(x));
+    if (bad >= 0) { error(name, `${name}.request.json の flow.inputs の ${bad + 1} 手目がオブジェクトではない`); continue; }
     // 障害契約を指名した手は、保存した応答でもその契約で止まっている（そうでなければ sidecar と応答が別の採取のもの）
     if (isOk(stored.flow)) {
       const trace = stored.flow.ok.trace ?? [];
-      const mismatch = (reqs.flow?.inputs ?? []).map((input, i) => ({ step: i + 1, fault: input?.fault, result: trace[i]?.result })).find(x => typeof x.fault === "string" && x.result !== "fault");
+      const mismatch = inputs.map((input, i) => ({ step: i + 1, fault: input?.fault, result: trace[i]?.result })).find(x => typeof x.fault === "string" && x.result !== "fault");
       if (mismatch) { error(name, `手 #${mismatch.step} は障害契約 ${mismatch.fault} を指名しているのに、保存した flow の応答の result が fault ではない（${JSON.stringify(mismatch.result)}）— sidecar と応答が食い違っている。モックアップで採り直す`, "flow"); continue; }
     }
   } else {
@@ -168,7 +174,7 @@ for (const name of wanted) {
   }
   // 連鎖は再生した flow（保存した golden ではない）と比べる — init / flow の応答が ok で揃ったときだけ
   if (external && replayed.init && replayed.flow) {
-    const r = await chainReplay(name, reqs.flow, replayed.flow);
+    const r = await chainReplay(name, reqs.flow, inputs, replayed.flow);
     report.push(r);
     if (r.status !== "ok") failed++;
   }
