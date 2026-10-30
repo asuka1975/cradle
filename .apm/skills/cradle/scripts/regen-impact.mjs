@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // regen-impact — Lean を変えたあと、生成物を作り直して「何が変わり、誰に効くか」を機械で出す。
-//   regen-impact [--report] [--dry-run] [--no-regen] [--no-golden] [--manifest file] [--json]
+//   regen-impact [--report] [--dry-run] [--no-regen] [--force] [--no-golden] [--manifest file] [--json]
 //     --report   生成物の差分と参照元（手書き実装・契約テスト）の一覧を出す（既定）
 //     --dry-run  再生成の結果を見たあと生成ディレクトリを git で元に戻す（生成ディレクトリがクリーンなときだけ）
 //     --no-regen 再生成せず、作業ツリーにある生成物の差分だけを読む
+//     --force    生成ディレクトリに未コミットの差分があっても再生成して重ねる
 //     --no-golden golden 回帰を省く
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
