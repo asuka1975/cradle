@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * BookRepository の契約テスト(v1 規約: save は id による upsert)。
+ * BookRepository の契約テスト(v1 規約: add は末尾への追加・update は id で既存個体を書き換えて並びを保つ・findById は id で引いて未知なら null)。
  * 個体の列は `Mini.Application.BookRepositoryState` の制約を満たすように引く(arbBookRepository)。
  * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
  */

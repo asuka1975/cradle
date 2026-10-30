@@ -4,10 +4,11 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** 契約テストのクラス KDoc は、同じクラスが宣言するフックだけを名指す。 */
+/** 契約テストのクラス KDoc は、同じクラスが宣言するフックと、@Test が検査する操作だけを名指す。 */
 class ContractKdocTest {
 
 	private fun emitTests(ir: Ir, out: Path) =
@@ -28,5 +29,23 @@ class ContractKdocTest {
 			for (hook in hooks) assertTrue("\tprotected abstract fun $hook(): " in text, text)
 			assertFalse(" repository() は" in text, text)
 		}
+	}
+
+	@Test
+	fun `Repository 契約の KDoc の規約は interface に無い save を名指さず、検査する操作を書く`(@TempDir out: Path) {
+		emitTests(miniIr(), out)
+		val text = out.resolve("domain/repository/BookRepositoryContractTest.kt").readText()
+		assertTrue(" * BookRepository の契約テスト(v1 規約: add は末尾への追加・update は id で既存個体を書き換えて並びを保つ・" +
+			"findById は id で引いて未知なら null)。\n" in text, text)
+		assertFalse("save" in text, text)
+	}
+
+	@Test
+	fun `Repository 契約の規約は @Test と同じ条件で操作を書き、add の無い Repository は update を名指さない`() {
+		fun rule(find: Boolean, add: Boolean, update: Boolean) = repositoryContractRule(Kotlinize.RepoOps(find, add, update), "id")
+		assertEquals("add は末尾への追加・findById は id で引いて未知なら null", rule(find = true, add = true, update = false))
+		assertEquals("add は末尾への追加・update は id で既存個体を書き換えて並びを保つ", rule(find = false, add = true, update = true))
+		assertEquals("findById は未知の id なら null", rule(find = true, add = false, update = true))
+		assertEquals("findAll は保存順", rule(find = false, add = false, update = true))
 	}
 }
