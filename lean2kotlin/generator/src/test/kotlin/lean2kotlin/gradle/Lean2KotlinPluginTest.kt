@@ -59,6 +59,26 @@ class Lean2KotlinPluginTest {
 	}
 
 	@Test
+	fun `抽出の up-to-date 入力は両パッケージの lean・lakefile・manifest と対象の lean-toolchain`(@TempDir dir: File) {
+		fun touch(root: File, vararg names: String) {
+			for (n in names) root.resolve(n).apply { parentFile.mkdirs(); writeText("") }
+		}
+		val domain = dir.resolve("domain")
+		val extractor = dir.resolve("extractor")
+		touch(domain, "Sprout.lean", "Sprout/Domain.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json",
+			"README.md", ".lake/build/X.lean", "build/Y.lean")
+		touch(extractor, "Lean2Kotlin.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json", ".lake/build/X.lean")
+		val p = project(dir.resolve("p"))
+		p.ext().leanDomainDir.set(domain)
+		p.ext().leanExtractorDir.set(extractor)
+		// 抽出器の lean-toolchain は入れない — ワークスペースは対象の lean-toolchain で抽出器もビルドする
+		assertEquals(
+			setOf("domain/Sprout.lean", "domain/Sprout/Domain.lean", "domain/lakefile.toml", "domain/lean-toolchain",
+				"domain/lake-manifest.json", "extractor/Lean2Kotlin.lean", "extractor/lakefile.toml", "extractor/lake-manifest.json"),
+			p.extract().leanSources.files.map { it.relativeTo(dir).invariantSeparatorsPath }.toSet())
+	}
+
+	@Test
 	fun `leanRootNamespace があれば生成は抽出に依存する`(@TempDir dir: File) {
 		val p = project(dir)
 		p.ext().leanRootNamespace.set("Sprout")

@@ -97,7 +97,7 @@ abstract class ExtractLeanIrTask : DefaultTask() {
 	@get:Internal
 	abstract val leanDomainDir: DirectoryProperty
 
-	/** up-to-date 判定用: ドメインと抽出側の Lean ソース。 */
+	/** up-to-date 判定用: ドメインと抽出側の Lean ソースと lake の設定(lean-toolchain はドメインのもの)。 */
 	@get:InputFiles
 	@get:PathSensitive(PathSensitivity.RELATIVE)
 	abstract val leanSources: ConfigurableFileCollection
@@ -226,13 +226,14 @@ class Lean2KotlinPlugin : Plugin<Project> {
 			t.onlyIf { ext.leanRootNamespace.isPresent }
 			t.leanSources.from(ext.leanDomainDir.map { dir ->
 				project.fileTree(dir) { ft ->
-					ft.include("**/*.lean", "lakefile.toml")
+					ft.include("**/*.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json")
 					ft.exclude(".lake/**", "build/**")
 				}
 			})
+			// 抽出器の lean-toolchain は入れない — ワークスペースには対象の lean-toolchain を写し、抽出器もそれでビルドする
 			t.leanSources.from(ext.leanExtractorDir.map { dir ->
 				project.fileTree(dir) { ft ->
-					ft.include("**/*.lean", "lakefile.toml")
+					ft.include("**/*.lean", "lakefile.toml", "lake-manifest.json")
 					ft.exclude(".lake/**")
 				}
 			})
