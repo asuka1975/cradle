@@ -54,7 +54,7 @@ jobs:
           cmp lean2kotlin/scaffold-check/build/lean2kotlin/lean2kotlin-ir.json lean2kotlin/generator/src/test/resources/sprout/sprout-ir.json
           cmp lean2kotlin/scaffold-check/port/build/lean2kotlin/lean2kotlin-ir.json lean2kotlin/generator/src/test/resources/lobby/lobby-ir.json
       # テスト資源 mini（scaffold-check の外の最小ドメイン）の IR と CLI の init 応答を今の抽出器で採り直して突き合わせる
-      # — mini/lean の下に .lake を作らないよう $RUNNER_TEMP の写しで採る（手順は generator/src/test/resources/README.md の mini/）
+      # — mini/lean の下に .lake を作らないよう $RUNNER_TEMP の写しで採る（手順は lean2kotlin/generator/src/test/resources/README.md の mini/）
       - name: IR and golden match the mini fixture
         run: |
           M="$GITHUB_WORKSPACE/lean2kotlin/generator/src/test/resources/mini"
