@@ -8,7 +8,7 @@
 // 再生に要るリクエストは <name>.request.json（sidecar: {"version":1,"init":{…},"flow":{…}}）から読む。version が 1 でなければ error。
 // version の無い旧形式の sidecar は旧経路（cmd init / flow）の golden にだけ許す。
 // 旧経路の golden に sidecar が無ければ --manifest（{"<name>": {"scenario":…,"viewer":…,"today":…,"actor":…}}）で補い、
-// flow の commands は trace から復元する。
+// flow の commands は trace から復元する。読めない・JSON でない・トップか項目がオブジェクトでない manifest は 1 行で止める。
 // 外部能力の経路（cmd external）で採った golden は sidecar が必須 — 環境（script）と入力列（command | observation と指名した障害）は
 // 応答から復元できないので、無ければ error（モックアップで採り直す）。sidecar が無くても応答の形（init の env・trace の env / result）で
 // external と分かる golden は同じ扱いで、manifest からの復元も CLI の呼び出しもしない。
@@ -23,7 +23,7 @@
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, isExternalGolden, readGoldenTrace, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
+import { loadConfigOrFail, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, readManifest, isExternalGolden, readGoldenTrace, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool", name: "list" });
 if (opts.name?.some(n => n === true || n === "")) fail("--name には golden の名前が要ります（--name N を繰り返せば複数）");
@@ -34,7 +34,9 @@ const build = buildMode(opts.build);
 const goldenDir = goldenDirOf(cfg);
 if (!existsSync(goldenDir)) fail(`golden ディレクトリがありません: ${goldenDir}`);
 
-const manifest = opts.manifest ? JSON.parse(readFileSync(opts.manifest, "utf8")) : {};
+// 読めない・形の違う manifest は読んだところでパスと理由の 1 行で止める（ENOENT や TypeError のスタックトレースにしない）
+let manifest = {};
+if (opts.manifest) { try { manifest = readManifest(opts.manifest); } catch (e) { fail(e.message); } }
 const names = [...new Set(readdirSync(goldenDir).filter(f => /-(init|flow)\.json$/.test(f)).map(f => f.replace(/-(init|flow)\.json$/, "")))].sort();
 // --name の順に、同じ名前は 1 度だけ
 const wanted = opts.name ? [...new Set(opts.name)] : names;
@@ -43,8 +45,9 @@ const portList = ports(cfg);
 /** 旧経路の golden だけ: manifest の項目と保存した flow の応答（flow）の trace から init / flow のリクエストを復元する。
     flow は検査のループで読んだもの — ok の応答の trace はそこで形を確かめてあり、ok でない応答・無いファイルは 0 手。 */
 function manifestRequests(name, flow) {
+  // 自前の鍵だけ: constructor・toString という名前の golden を Object.prototype の値で manifest の項目に数えない
+  if (!Object.hasOwn(manifest, name)) return null;
   const m = manifest[name];
-  if (!m) return null;
   const base = { scenario: m.scenario ?? "basic" };
   if (m.viewer !== undefined) base.viewer = m.viewer;
   if (m.today !== undefined) base.today = m.today;

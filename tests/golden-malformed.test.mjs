@@ -335,6 +335,58 @@ test("golden-check --manifest は sidecar の無い golden の ok がオブジ�
   }
 });
 
+// 読めない・JSON でない・形の違う --manifest（無いパス・ディレクトリ・壊れた JSON・JSON でない文・トップか項目がオブジェクトでない）は、読んだところで
+// パスと理由の 1 行で止める — ENOENT / EISDIR / SyntaxError / TypeError のスタックトレースにせず、[1]・5 を manifest 無しとして、{"a":5} を既定の scenario として黙って読まない
+const manifestShape = `{"<name>": {"scenario":…,"viewer":…,"today":…,"actor":…}}`;
+const badManifests = [
+  [{}, "nope.json", "cradle: --manifest nope.json を JSON として読めません: ENOENT: "],
+  [{ "mdir/x.json": "{}" }, "mdir", "cradle: --manifest mdir を JSON として読めません: EISDIR: "],
+  [{ "m.json": "{bad" }, "m.json", "cradle: --manifest m.json を JSON として読めません: "],
+  // JSON でない複数行の文（YAML）: SyntaxError の文が中身の改行を写しても 1 行
+  [{ "m.json": "a:\n  scenario: basic\n" }, "m.json", "cradle: --manifest m.json を JSON として読めません: "],
+  ...["null", "[1]", "5", "\"a\""].map(text => [{ "m.json": text }, "m.json", `cradle: --manifest m.json が ${manifestShape} の形ではない\n`]),
+  ...[5, null, [1], "basic"].map(v => [{ "m.json": JSON.stringify({ a: v }) }, "m.json", `cradle: --manifest m.json の "a" がオブジェクトではない（${manifestShape} の形）\n`]),
+];
+
+function assertManifestLine(r, head, label) {
+  assert.equal(r.status, 1, label + "\n" + r.stdout + r.stderr);
+  assert.equal(r.stdout, "", label);
+  assert.ok(r.stderr.startsWith(head), label + "\n" + r.stderr);
+  assert.match(r.stderr, /^[^\n]+\n$/, label + "\n" + r.stderr);
+  assert.doesNotMatch(r.stderr, /\n\s+at /, label);
+}
+
+test("golden-check は読めない・JSON でない・形の違う --manifest をパスと理由の 1 行で止め、stack trace を出さない", (t) => {
+  for (const [files, path, head] of badManifests) {
+    const label = `${path} ${JSON.stringify(files)}`;
+    const { root, run } = fixture(t, {});
+    writeTree(root, files);
+    assertManifestLine(run(goldenCheck, "--json", "--build", "never", "--manifest", path), head, label);
+    assertManifestLine(run(goldenCheck, "--build", "never", "--manifest", path), head, label);
+  }
+});
+
+// manifest に無い名前は Object.prototype の鍵（constructor・toString）でも manifest の項目として読まない — sidecar の無い golden は skipped
+test("golden-check は sidecar の無い golden の名前が constructor・toString でも manifest の項目として再生せず skipped にする", (t) => {
+  const { root, run } = fixture(t, { "constructor-init.json": init, "constructor-flow.json": flow, "toString-init.json": init, "toString-flow.json": flow });
+  writeTree(root, { "m.json": "{}" });
+  for (const args of [[], ["--manifest", "m.json"]]) {
+    const r = run(goldenCheck, "--json", "--build", "never", ...args);
+    assert.equal(r.status, 0, args.join(" ") + "\n" + r.stdout + r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout).report.map(x => [x.name, x.status]), [["constructor", "skipped"], ["ok", "skipped"], ["toString", "skipped"]], args.join(" "));
+  }
+});
+
+test("regen-impact は読めない・JSON でない・形の違う --manifest を golden-check と同じ 1 行で止め、golden 回帰を「実行できず」の stack trace にしない", (t) => {
+  const { root, run } = fixture(t, {});
+  writeTree(root, { "bad.json": "{bad", "m.json": "null" });
+  commitAll(root);
+  for (const [path, head] of [["nope.json", "cradle: --manifest nope.json を JSON として読めません: ENOENT: "], ["bad.json", "cradle: --manifest bad.json を JSON として読めません: "], ["m.json", `cradle: --manifest m.json が ${manifestShape} の形ではない\n`]]) {
+    assertManifestLine(run(regenImpact, "--no-regen", "--manifest", path), head, path);
+    assertManifestLine(run(regenImpact, "--no-regen", "--json", "--manifest", path), head, path);
+  }
+});
+
 test("regen-impact は ok.trace が配列でない golden を golden-check の error の行で golden 回帰に出し、stack trace を載せない", (t) => {
   const { root, run } = fixture(t, { "a-flow.json": JSON.stringify({ ok: { trace: 5 } }), "a-init.json": init, "a.request.json": sidecar });
   commitAll(root);

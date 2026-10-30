@@ -7,15 +7,17 @@
 //     --force    生成ディレクトリに未コミットの差分があっても再生成して重ねる
 //     --no-golden golden 回帰を省く
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines, CHILD_OUTPUT_MAX } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines, readManifest, CHILD_OUTPUT_MAX } from "./lib.mjs";
 import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
 // 値の無い --manifest は再生成する前に止める（golden-check に `--manifest true` を渡して、再生成の後に golden 回帰だけを落とさない）
 if (blankArg(opts.manifest)) fail("--manifest には manifest のファイル（JSON）のパスが要ります");
 const cfg = loadConfigOrFail();
+// 無い・JSON でない・形の違う manifest も再生成する前に golden-check と同じ 1 行で止める。golden-check は cfg.root を cwd に走るので、相対のパスは cfg.root から引く
+if (opts.manifest) { try { readManifest(resolve(cfg.root, opts.manifest), opts.manifest); } catch (e) { fail(e.message); } }
 const gens = cfg.backend.generated;
 
 // git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない。

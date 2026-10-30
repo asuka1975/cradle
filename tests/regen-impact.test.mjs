@@ -220,6 +220,33 @@ test("値の無い --manifest（空の値も）は再生成する前に golden-c
   }
 });
 
+test("無い・JSON でない・形の違う --manifest も再生成する前に 1 行で止まり、生成ディレクトリに何も書かない", (t) => {
+  const { root, run, porcelain } = fixture(t);
+  writeTree(root, { "bad.json": "{bad", "null.json": "null", "entry.json": JSON.stringify({ a: 5 }) });
+  commitAll(root);
+  for (const [path, head] of [["nope.json", "を JSON として読めません: ENOENT: "], ["bad.json", "を JSON として読めません: "], ["null.json", "が {\"<name>\": "], ["entry.json", "の \"a\" がオブジェクトではない"]]) {
+    for (const args of [["--manifest", path], ["--json", "--manifest", path]]) {
+      const r = run(...args);
+      assert.equal(r.status, 1, args.join(" ") + "\n" + r.stdout + r.stderr);
+      assert.equal(r.stdout, "", args.join(" "));
+      assert.ok(r.stderr.startsWith(`cradle: --manifest ${path} ${head}`), args.join(" ") + "\n" + r.stderr);
+      assert.match(r.stderr, /^[^\n]+\n$/, args.join(" "));
+      assert.equal(porcelain(), "", args.join(" "));
+    }
+  }
+});
+
+// golden-check は cfg.root を cwd に走るので、相対の --manifest は cfg.root から引く（下のディレクトリから回しても無いとは言わない）
+test("相対の --manifest は下のディレクトリから回しても cradle.json のルートから確かめる", (t) => {
+  const { root } = fixture(t);
+  writeTree(root, { "m.json": "{}" });
+  commitAll(root);
+  const r = runNode(regenImpact, ["--no-regen", "--json", "--manifest", "m.json"], { cwd: join(root, "backend"), env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.doesNotMatch(JSON.parse(r.stdout).golden.error ?? "", /manifest/);
+});
+
 test("--dry-run は生成ディレクトリがクリーンなら再生成して同じものを出し、生成ディレクトリだけを HEAD に戻す", (t) => {
   const { root, run, porcelain } = fixture(t);
   // 生成ディレクトリの外の未追跡（書きかけの手書き）は後始末の対象ではない

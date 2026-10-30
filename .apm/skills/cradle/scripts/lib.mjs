@@ -473,6 +473,19 @@ export function readSidecar(goldenDir, name) {
 
 const sidecarIsExternal = (sidecar) => (sidecar.init ?? sidecar.flow)?.cmd === "external";
 
+/** golden-check の --manifest（`{"<name>": {"scenario":…,"viewer":…,"today":…,"actor":…}}`）を読む。shown は文に出すパス（利用者が渡した形）。
+    読めない（無い・ディレクトリ）・JSON でない・トップか項目がオブジェクトでなければ 1 行の理由で投げる — 呼び手は fail で止め、
+    regen-impact は再生成の前に同じものを確かめる。SyntaxError の文は中身の改行を写すことがあるので 1 行に畳む。 */
+export function readManifest(file, shown = file) {
+  const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+  const shape = `{"<name>": {"scenario":…,"viewer":…,"today":…,"actor":…}}`;
+  let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch (e) { throw new Error(`--manifest ${shown} を JSON として読めません: ${e.message.replace(/\s*\n\s*/g, " ")}`); }
+  if (!isObject(j)) throw new Error(`--manifest ${shown} が ${shape} の形ではない`);
+  const bad = Object.keys(j).find(k => !isObject(j[k]));
+  if (bad !== undefined) throw new Error(`--manifest ${shown} の ${JSON.stringify(bad)} がオブジェクトではない（${shape} の形）`);
+  return j;
+}
+
 /** golden の応答（`<name>-init.json` / `<name>-flow.json`）を読む。読めなければどのファイルかを添えて投げる — 壊れた 1 本で status や flows-from-golden が名前の無い SyntaxError で止まらないように。 */
 export function readGoldenJson(goldenDir, file) {
   try { return readJson(join(goldenDir, file)); } catch (e) { throw new Error(`${file} を JSON として読めない: ${e.message}`); }
