@@ -166,11 +166,7 @@ class EmitMain(
 	 */
 	private val mainReachable: Set<String> by lazy {
 		val testRoles = setOf("readModelRow", "repositoryState", "readModel", "clockPort")
-		fun shapeRefs(td: IrTypeDef): List<String> = when (val s = td.shape) {
-			is IrShape.Structure -> s.fields.flatMap { it.type.leafRefs() }
-			is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.flatMap { it.type.leafRefs() } }
-			else -> emptyList()
-		}
+		fun shapeRefs(td: IrTypeDef): List<String> = td.fieldTypes().flatMap { it.leafRefs() }
 		val seeds = mutableListOf<String>()
 		for (td in ir.types) if (td.role !in testRoles) seeds += shapeRefs(td)
 		for (s in ir.useCases) for (m in s.methods) {

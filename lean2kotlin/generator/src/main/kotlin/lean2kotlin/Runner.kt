@@ -56,12 +56,7 @@ object Lean2KotlinGeneration {
 		// View(UseCase の出力語彙)のメンバーであってはならない。形が同じでも
 		// 偶然の一致 — 同一化しない。破れはモデル(Lean の View 定義)側の是正が必要
 		for (td in ir.types.filter { it.role == "viewDto" }) {
-			val shape = td.shape
-			val fieldRefs = when (shape) {
-				is IrShape.Structure -> shape.fields.flatMap { it.type.leafRefs() }
-				is IrShape.Sealed -> shape.ctors.flatMap { c -> c.fields.flatMap { it.type.leafRefs() } }
-				else -> emptyList()
-			}
+			val fieldRefs = td.fieldTypes().flatMap { it.leafRefs() }
 			for (r in fieldRefs.distinct().filter { ir.typeDef(it).role == "readModelRow" }) {
 				log("note: View→Row の壁の破れ: ${td.lean} が Row(${r})を運んでいます — " +
 					"View の語彙は View 自身が持つべきです(Lean の View 定義側の是正が必要)")
@@ -72,11 +67,7 @@ object Lean2KotlinGeneration {
 		// 本番値の等価比較もリテラル生成も成立しない — 参照系ケースは生成されない。
 		// 是正はモデル側(View 自身の語彙の導入)
 		for (td in ir.types.filter { it.role == "viewDto" || it.role == "error" }) {
-			val fieldRefs = when (val shape = td.shape) {
-				is IrShape.Structure -> shape.fields.flatMap { it.type.leafRefs() }
-				is IrShape.Sealed -> shape.ctors.flatMap { c -> c.fields.flatMap { it.type.leafRefs() } }
-				else -> emptyList()
-			}
+			val fieldRefs = td.fieldTypes().flatMap { it.leafRefs() }
 			for (r in fieldRefs.distinct().filter { ref -> k.reachesEntityLike(IrType.Ref(ref)) }) {
 				log("note: View→ドメイン語彙の壁の破れ: ${td.lean} が interface 化された語彙" +
 					"(${r} 経由)を運んでいます — 期待値の比較が成立しないため該当の参照系" +

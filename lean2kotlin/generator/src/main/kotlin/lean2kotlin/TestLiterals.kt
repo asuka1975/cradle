@@ -125,13 +125,7 @@ internal fun EmitTests.entityRefsOf(t: IrType): List<IrTypeDef> {
 			found[lean] = td
 			return
 		}
-		when (val s = td.shape) {
-			is IrShape.Structure ->
-				s.fields.forEach { f -> f.type.leafRefs().forEach(::visit) }
-			is IrShape.Sealed ->
-				s.ctors.forEach { c -> c.fields.forEach { f -> f.type.leafRefs().forEach(::visit) } }
-			else -> {}
-		}
+		td.fieldTypes().forEach { it.leafRefs().forEach(::visit) }
 	}
 	t.leafRefs().forEach(::visit)
 	return found.values.toList()

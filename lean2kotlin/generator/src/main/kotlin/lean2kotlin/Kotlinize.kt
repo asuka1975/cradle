@@ -117,19 +117,13 @@ class Kotlinize(private val ir: Ir) {
 
 	// ───────────────────────── fixture 語彙の閉包
 
-	private fun shapeFieldTypes(td: IrTypeDef): List<IrType> = when (val s = td.shape) {
-		is IrShape.Structure -> s.fields.map { it.type }
-		is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.map { it.type } }
-		else -> emptyList()
-	}
-
 	/** 型が entity-like(interface+fixture)へ shape を通じて到達するか。 */
 	fun reachesEntityLike(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Ref -> {
 			val td = ir.typeDef(t.lean)
 			if (isEntityLike(td)) true
 			else if (!seen.add(t.lean)) false
-			else shapeFieldTypes(td).any { reachesEntityLike(it, seen) }
+			else td.fieldTypes().any { reachesEntityLike(it, seen) }
 		}
 		is IrType.ListOf -> reachesEntityLike(t.of, seen)
 		is IrType.OptionOf -> reachesEntityLike(t.of, seen)
@@ -143,7 +137,7 @@ class Kotlinize(private val ir: Ir) {
 	fun reachesRole(t: IrType, role: String, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Ref -> {
 			val td = ir.typeDef(t.lean)
-			td.role == role || (seen.add(t.lean) && shapeFieldTypes(td).any { reachesRole(it, role, seen) })
+			td.role == role || (seen.add(t.lean) && td.fieldTypes().any { reachesRole(it, role, seen) })
 		}
 		is IrType.ListOf -> reachesRole(t.of, role, seen)
 		is IrType.OptionOf -> reachesRole(t.of, role, seen)
@@ -156,7 +150,7 @@ class Kotlinize(private val ir: Ir) {
 	/** 型が関数型へ shape を通じて到達するか(値で比較できない — Port の要求・観測に置けない)。 */
 	fun reachesArrow(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Arrow -> true
-		is IrType.Ref -> seen.add(t.lean) && shapeFieldTypes(ir.typeDef(t.lean)).any { reachesArrow(it, seen) }
+		is IrType.Ref -> seen.add(t.lean) && ir.typeDef(t.lean).fieldTypes().any { reachesArrow(it, seen) }
 		is IrType.ListOf -> reachesArrow(t.of, seen)
 		is IrType.OptionOf -> reachesArrow(t.of, seen)
 		is IrType.PairOf -> reachesArrow(t.fst, seen) || reachesArrow(t.snd, seen)
@@ -172,7 +166,7 @@ class Kotlinize(private val ir: Ir) {
 	val fixtureBridged: Set<String> by lazy {
 		ir.types.filter { td ->
 			td.role == "valueObject" && !td.isId && !isEntityLike(td) &&
-				shapeFieldTypes(td).any { reachesEntityLike(it) }
+				td.fieldTypes().any { reachesEntityLike(it) }
 		}.map { it.lean }.toSet()
 	}
 
@@ -279,11 +273,7 @@ class Kotlinize(private val ir: Ir) {
 	fun repoOps(td: IrTypeDef): RepoOps {
 		val idLean = (td.id as? IrType.Ref)?.lean
 		val find = idLean != null && ir.types.any { c ->
-			isInputRole(c.role) && when (val sh = c.shape) {
-				is IrShape.Structure -> sh.fields.any { it.type.leafRefs().contains(idLean) }
-				is IrShape.Sealed -> sh.ctors.any { ct -> ct.fields.any { it.type.leafRefs().contains(idLean) } }
-				else -> false
-			}
+			isInputRole(c.role) && c.fieldTypes().any { it.leafRefs().contains(idLean) }
 		}
 		val stateOps = rootCollectionOf(td)?.let { rc ->
 			ir.behaviors.find { it.subject == rc.state.lean }?.methods?.map { it.name }
