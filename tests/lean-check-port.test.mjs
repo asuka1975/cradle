@@ -34,6 +34,9 @@ test("Runtime/Environment.lean を持つなら、Port の操作ごとに \"<Port
   assert.equal(missingOp.length, 1, JSON.stringify(missingOp));
   assert.match(missingOp[0].message, /^Port の往復 Directory\.find のワイヤ形式（"find"）が Json\.lean に無い/);
   assert.equal(missingOp[0].file, "lean/Example/Runtime/Json.lean");
+  // コメントの中の "find" はワイヤ形式に数えない
+  const commentedOp = fixture(t, pureFind, { "Environment.lean": environment, "Json.lean": json("Directory", "Find") + '-- 旧: "find"\n' }, "wiring");
+  assert.deepEqual(commentedOp.map(f => f.message), missingOp.map(f => f.message));
   const missingBoth = fixture(t, pureFind, { "Environment.lean": environment, "Json.lean": json("Gateway", "authorize") }, "wiring");
   assert.match(missingBoth[0].message, /（"Directory" と "find"）/);
   // Runtime/Environment.lean が無ければ文字列は見ない — 代わりに、Port の置き場があるのに環境が無いことが配線の誤り

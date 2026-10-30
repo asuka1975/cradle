@@ -1,12 +1,14 @@
 // Lean のコメントの消し方（lib の stripLeanComments）と、それを使う lean-check・leanVocabulary の読み方。
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, writeTree, cleanEnv, runNode } from "./helpers.mjs";
 import { stripLeanComments, leanVocabulary } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 const leanCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/lean-check.mjs", import.meta.url));
+const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs", import.meta.url));
 
 test("stripLeanComments は複数行の docstring・入れ子のブロック・行コメントを消し、改行と同じ行のコードを残す", () => {
   assert.equal(stripLeanComments("/-- 確認する。\n  ActorContext は受けない -/\ndef x := 1\n"), "\n\ndef x := 1\n");
@@ -73,4 +75,15 @@ test("lean-check は Command の構成子の docstring の中の | 行を構成�
     "Runtime/Machine.lean": "def Snapshot.applyCommand (cmd : Command) (s : Snapshot) : Except DomainError Snapshot :=\n  match cmd with\n  | .post c => sorry\n",
   });
   assert.deepEqual(findings.filter(f => f.rule === "wiring"), []);
+});
+
+test("lean-check の wiring は Json.lean のコメントの中の \"<構成子>\" をワイヤ形式と数えない", (t) => {
+  const root = tempDir(t, "cradle-lean-wire-");
+  assert.equal(runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env: cleanEnv() }).status, 0);
+  const wiring = () => JSON.parse(runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() }).stdout).findings.filter(f => f.rule === "wiring").map(f => `${f.file} ${f.message}`);
+  assert.deepEqual(wiring(), []);
+  // ワイヤの文字列を "closeNoteX" に変え、古い名前はコメントにだけ残す
+  const json = join(root, "lean/Demo/Runtime/Json.lean");
+  writeFileSync(json, readFileSync(json, "utf8").replaceAll('"closeNote"', '"closeNoteX"') + '-- 旧: "closeNote"\n/- 旧: "closeNote" -/\n');
+  assert.deepEqual(wiring(), ['lean/Demo/Runtime/Json.lean 構成子 closeNote のワイヤ形式（"closeNote"）が Json.lean に無い']);
 });

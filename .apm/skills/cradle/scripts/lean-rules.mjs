@@ -97,8 +97,8 @@ function annotJson({ modelDir, files, src, add }) {
 function wiring({ cfg, modelDir, mainFile, src, add }) {
   const jsonFile = join(modelDir, "Runtime", "Json.lean");
   const machFile = join(modelDir, "Runtime", "Machine.lean");
-  // 無ければ空。Json.lean は元の文面、Machine.lean はコメントを消した形で見る
-  const jsonText = existsSync(jsonFile) ? src(jsonFile).raw : "";
+  // 無ければ空。どちらもコメントを消した形で見る（文字列リテラルは残るので、コメントに残した古い "<構成子>" をワイヤ形式に数えない）
+  const jsonText = existsSync(jsonFile) ? src(jsonFile).code : "";
   const machText = existsSync(machFile) ? src(machFile).code : "";
   const wire = (file, union, applyName) => {
     const { code } = src(file);
