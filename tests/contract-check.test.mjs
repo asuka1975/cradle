@@ -161,6 +161,6 @@ test("--meta 無しで spec-query meta が lake build の失敗（2）で止ま�
     const r = runNode(contractCheck, args, { cwd: root, env: cleanEnv({ PATH: noTools }) });
     assert.equal(r.status, 2, `${args}: ${r.stdout}${r.stderr}`);
     assert.equal(r.stdout, "");
-    assert.match(r.stderr, /^cradle: spec-query meta が何も返しませんでした: cradle: lake build が失敗しました/);
+    assert.match(r.stderr, /^cradle: spec-query meta が何も返しませんでした: cradle: lake build が失敗しました: spawnSync lake ENOENT\n/);
   }
 });

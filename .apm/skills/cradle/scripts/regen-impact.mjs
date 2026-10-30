@@ -48,8 +48,9 @@ if (!opts["no-regen"]) {
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
   if (r.status !== 0) {
     // 作りかけの出力を残さない。戻せなければ再生成の失敗の後ろに添える
+    // sh を起動できない（backend.dir が無い）・出力が上限を超えたときの理由は r.error にしか無い（起動できなければ出力も無い）
     const unrestored = opts["dry-run"] ? restoreGenerated() : "";
-    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}${unrestored && `\n${unrestored}`}`, 2);
+    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:${r.error ? ` ${r.error.message}` : ""}\n${regenOut.slice(-3000)}${unrestored && `\n${unrestored}`}`, 2);
   }
 }
 

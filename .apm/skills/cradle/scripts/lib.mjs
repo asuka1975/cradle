@@ -155,7 +155,8 @@ export const CHILD_OUTPUT_MAX = 256 * 1024 * 1024;
 export function lakeBuild(cfg) {
   const r = spawnSync("lake", ["build"], { cwd: cfg.lean.rootDir, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "pipe"] });
   if (r.status !== 0) {
-    const err = new Error(`lake build が失敗しました:\n${(r.stdout ?? "").slice(-4000)}\n${(r.stderr ?? "").slice(-4000)}`);
+    // lake を起動できない（PATH に無い・置き場が無い）・出力が上限を超えたときの理由は r.error にしか無い（起動できなければ stdout / stderr も無い）
+    const err = new Error(`lake build が失敗しました:${r.error ? ` ${r.error.message}` : ""}\n${(r.stdout ?? "").slice(-4000)}\n${(r.stderr ?? "").slice(-4000)}`);
     err.exitCode = 2;
     throw err;
   }

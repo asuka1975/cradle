@@ -211,6 +211,17 @@ test("生成ディレクトリに未コミットの差分があれば再生成�
   assert.equal(failed.stderr, "cradle: 再生成に失敗しました（echo boom; exit 3）:\nboom\n\n");
 });
 
+test("再生成を起動できなければ（backend.dir が無い）、再生成の失敗の行に spawn の理由を載せて 2 で終わり、生成ディレクトリに何も書かない", (t) => {
+  const { run, porcelain } = fixture(t, "echo boom", hand, { dir: "no-such-backend" });
+  for (const args of [["--no-golden", "--json"], ["--no-golden", "--dry-run"]]) {
+    const failed = run(...args);
+    assert.equal(failed.status, 2, args.join(" "));
+    assert.equal(failed.stdout, "", args.join(" "));
+    assert.equal(failed.stderr, "cradle: 再生成に失敗しました（echo boom）: spawnSync sh ENOENT\n\n", args.join(" "));
+    assert.equal(porcelain(), "", args.join(" "));
+  }
+});
+
 test("値の無い --manifest（空の値も）は再生成する前に golden-check と同じ 1 行で止まり、生成ディレクトリに何も書かない", (t) => {
   const { run, porcelain } = fixture(t);
   for (const args of [["--manifest"], ["--manifest", "--json"], ["--manifest="], ["--manifest", ""], ["--no-regen", "--manifest"]]) {
