@@ -66,6 +66,17 @@ class ReadPlumbingTest {
 	}
 
 	@Test
+	fun `時計を受ける参照系のフックの KDoc は、配線する時計のフィールドを書く`(@TempDir out: Path) {
+		val (test, _) = emit(miniJson, out, "LoansUseCase", "loansusecase")
+		assertTrue("\t/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)。時計は固定の today を配線する(Clock ポート)。 */\n" +
+			"\tprotected abstract fun useCase(today: java.time.LocalDate, books: List<BookRow>): LoansUseCase\n" in test, test)
+		// 時計を受けない参照系のフックの KDoc は時計を書かない
+		val shelf = out.resolve("application/usecase/shelfusecase/ShelfUseCaseContractTest.kt").readText()
+		assertTrue("\t/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)。 */\n" +
+			"\tprotected abstract fun useCase(books: List<BookRow>): ShelfUseCase\n" in shelf, shelf)
+	}
+
+	@Test
 	fun `時計の値がケースに無ければ、時計のフィールドの既定値を配線する`(@TempDir out: Path) {
 		// 定理由来の最初のケースから時計の引数を落とす(遷移契約の固定 today と同じ扱い)
 		val ir = miniJson.mapArray("contracts") { c ->

@@ -195,7 +195,11 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 		sb.append(" * seed は CLI 既定 42、パラメータは既定値、数値鍵は仮置き表現の写し。\n")
 		sb.append(" */\n")
 		sb.append("abstract class ${s.name}ContractTest {\n")
-		sb.append("\t/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)。 */\n")
+		// 時計のフィールドはフックの引数に並ぶ — 遷移契約のフックと同じく何を渡すかを書く
+		val clockFields = factoryParams.filter { it.clockParam != null }
+		val clockDoc = if (clockFields.isNotEmpty())
+			"。時計は固定の ${clockFields.joinToString("・") { it.name }} を配線する(Clock ポート)" else ""
+		sb.append("\t/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)$clockDoc。 */\n")
 		sb.append("\tprotected abstract fun useCase(" +
 			factoryParams.joinToString(", ") { "${ident(it.name)}: ${k.typeRef(it.type)}" } +
 			"): ${s.name}\n")

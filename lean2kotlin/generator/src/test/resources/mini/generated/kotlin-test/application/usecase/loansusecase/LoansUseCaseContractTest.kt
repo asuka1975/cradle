@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
  * seed は CLI 既定 42、パラメータは既定値、数値鍵は仮置き表現の写し。
  */
 abstract class LoansUseCaseContractTest {
-	/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)。 */
+	/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)。時計は固定の today を配線する(Clock ポート)。 */
 	protected abstract fun useCase(today: java.time.LocalDate, books: List<BookRow>): LoansUseCase
 
 	/** 今日の貸出は、時計の今日に貸した本だけを見せる。 */
