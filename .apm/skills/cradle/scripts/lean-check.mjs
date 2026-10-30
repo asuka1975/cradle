@@ -27,7 +27,7 @@
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfig();
@@ -209,7 +209,7 @@ for (const f of files) {
 {
   const sample = scaffoldSampleFiles(cfg);
   const timeline = join(cfg.root, cfg.documents.ddd, "event-timeline.md");
-  const events = (readText(timeline).match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+  const events = countEvents(readText(timeline));
   if (sample.length && events) for (const f of sample) add("scaffold", "warn", f, 1, `骨格のサンプルドメイン（メモ）が残っている。documents/ddd に出来事 ${events} 件の事実があるので、lean-domain-model スキルで実ドメインに丸ごと置き換える`);
 }
 

@@ -8,13 +8,12 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
 const cfg = loadConfig();
 const ddd = join(cfg.root, cfg.documents.ddd);
-const FILES = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"];
 const qfile = join(ddd, "questions.md");
 const nfile = join(ddd, "naming.md");
 const marker = join(ddd, ".session");
@@ -28,15 +27,11 @@ const scaffold = scaffoldSampleFiles(cfg).length > 0;
 // 形式化が付けた名前のうち用語集に行が無いもの。用語集が唯一の正本で、行が立てば一覧から消える
 const unlistedNames = () => { const glossary = glossaryEnglish(cfg); return leanVocabulary(cfg).filter(v => !glossary.has(v.name.toLowerCase())); };
 
-function countRows(text, idRe, statusRe) {
-  return (text.match(new RegExp(`^\\|\\s*${idRe}\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length;
-}
-
 switch (cmd) {
   case "start": {
     // 前のセッションの印が残ったまま記録し直すと、残っているプローブが「開始時点」に入って end を通る
     if (existsSync(marker)) fail(`前のセッション（${cfg.documents.ddd}/.session）が end されていません。プローブを片付けて ddd.mjs end を先に実行する。前の探索は終わっていて lean/ の変更が形式化（フェーズ 2）なら、${cfg.documents.ddd}/.session を消してから start する`);
-    const missing = FILES.filter(f => !existsSync(join(ddd, f)));
+    const missing = DDD_FILES.filter(f => !existsSync(join(ddd, f)));
     if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（cradle-init スキルで骨格を作る）`);
     // プロダクトの一言（event-timeline.md 冒頭の `プロダクト:` 行）は探索役の最初の問いの出発点。無いまま始めない
     if (opts.domain !== undefined) {
@@ -129,13 +124,13 @@ switch (cmd) {
   case "status": {
     const read = (f) => readText(join(ddd, f));
     const tl = read("event-timeline.md");
-    const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+    const events = countEvents(tl);
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");
     const terms = (ul.match(/^\|(?!\s*用語)(?!---)[^|]+\|/gm) ?? []).length;
     console.log(JSON.stringify({
       product: productLine(cfg).value,
-      events, hotspots: { open: countRows(hs, "HS-\\d+", "open"), resolved: countRows(hs, "HS-\\d+", "resolved") },
-      ux: { open: countRows(ux, "UX-\\d+", "open") }, mq: { open: countRows(mq, "MQ-\\d+", "open") }, terms,
+      events, hotspots: { open: countStatusRows(hs, "HS-\\d+", "open"), resolved: countStatusRows(hs, "HS-\\d+", "resolved") },
+      ux: { open: countStatusRows(ux, "UX-\\d+", "open") }, mq: { open: countStatusRows(mq, "MQ-\\d+", "open") }, terms,
       session: existsSync(marker), questionsPending: existsSync(qfile), namingPending: scaffold ? 0 : unlistedNames().length, scaffoldSample: scaffold,
     }, null, 2));
     break;

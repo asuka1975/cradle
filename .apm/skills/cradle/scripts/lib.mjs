@@ -511,3 +511,14 @@ export function sha256(data) { return createHash("sha256").update(data).digest("
 
 /** テキストファイルを読む。無ければ fallback。ディレクトリや読めないファイルは投げる（無いのとは別の事故）。 */
 export function readText(path, fallback = "") { return existsSync(path) ? readFileSync(path, "utf8") : fallback; }
+
+/** 探索の 5 ファイル（documents/ddd）。status と ddd start は欠けているものをこの順で出す。 */
+export const DDD_FILES = Object.freeze(["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"]);
+
+/** 出来事の行の数: 行頭の `|` の直後のセルが番号（`12`・`3.1`・`4a`）の行。ファイルのどの表の行も数える。 */
+export function countEvents(text) { return (text.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length; }
+
+/** 行頭のセルが idRe（正規表現の文字列）で、3 列目以降のどれかのセルがちょうど statusRe の行の数。text が無ければ 0。 */
+export function countStatusRows(text, idRe, statusRe) {
+  return text ? (text.match(new RegExp(`^\\|\\s*${idRe}\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length : 0;
+}

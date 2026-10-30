@@ -3,31 +3,30 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
 const R = (p) => join(cfg.root, p);
 const read = (p) => readText(R(p), null);
-const countRows = (text, statusRe) => text ? (text.match(new RegExp(`^\\|\\s*(?:HS|UX|MQ)-\\d+\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length : 0;
+const ids = "(?:HS|UX|MQ)-\\d+";
 
 const s = { project: cfg.project, phases: [] };
 const phase = (name, state, facts, next) => s.phases.push({ name, state, facts, next });
 
 // 1. 探索（DDD）
 const dddDir = cfg.documents.ddd;
-const files = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"];
-const present = files.filter(f => existsSync(R(`${dddDir}/${f}`)));
-const hsOpen = countRows(read(`${dddDir}/hotspots.md`), "open");
-const uxOpen = countRows(read(`${dddDir}/ux-review.md`), "open");
-const mqOpen = countRows(read(`${dddDir}/model-review.md`), "open");
+const present = DDD_FILES.filter(f => existsSync(R(`${dddDir}/${f}`)));
+const hsOpen = countStatusRows(read(`${dddDir}/hotspots.md`), ids, "open");
+const uxOpen = countStatusRows(read(`${dddDir}/ux-review.md`), ids, "open");
+const mqOpen = countStatusRows(read(`${dddDir}/model-review.md`), ids, "open");
 if (present.length === 0) phase("探索 (DDD)", "未着手", [`${dddDir}/ が無い`], "cradle-init スキルで骨格を作り、ddd スキルで探索を始める");
 else {
   const tl = read(`${dddDir}/event-timeline.md`) ?? "";
-  const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+  const events = countEvents(tl);
   const openQ = existsSync(R(`${dddDir}/questions.md`));
   const product = productLine(cfg);
-  phase("探索 (DDD)", events ? "進行中" : "着手済", [product.value !== null && !product.placeholder ? `プロダクト: ${product.value}` : `プロダクトの一言が無い（${dddDir}/event-timeline.md 冒頭の「プロダクト:」行。ddd.mjs start --domain で書く）`, `出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${files.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
+  phase("探索 (DDD)", events ? "進行中" : "着手済", [product.value !== null && !product.placeholder ? `プロダクト: ${product.value}` : `プロダクトの一言が無い（${dddDir}/event-timeline.md 冒頭の「プロダクト:」行。ddd.mjs start --domain で書く）`, `出来事 ${events} 件`, `open: HS ${hsOpen} / UX ${uxOpen} / MQ ${mqOpen}`, `欠けているファイル: ${DDD_FILES.filter(f => !present.includes(f)).join(", ") || "なし"}`, openQ ? "questions.md が残っている（回答待ちか後片付け漏れ）" : null].filter(Boolean),
     mqOpen ? `ddd スキルで open の MQ ${mqOpen} 件を先に検証する（形式化を止めている問い）` : hsOpen ? `ddd スキルで open の HS ${hsOpen} 件を掘る` : "次の探索テーマを決める、または次フェーズへ");
 }
 
@@ -62,7 +61,7 @@ else {
   const genericUi = existsSync(uiFile) && readFileSync(uiFile, "utf8").includes("Cradle 標準の汎用モックアップ");
   const sample = scaffoldSampleFiles(cfg);
   if (sample.length) {
-    const events = (read(`${cfg.documents.ddd}/event-timeline.md`).match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+    const events = countEvents(read(`${cfg.documents.ddd}/event-timeline.md`));
     phase("Lean 実行可能仕様", "骨格のサンプル", [`実ドメインは未形式化（メモのサンプル: ${sample.map(f => rel(cfg.root, f)).join(", ")}）`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`],
       events ? "lean-domain-model スキルで骨格のサンプルを丸ごと置き換える" : "ddd スキルで探索する（サンプルは探索の根拠にしない）。事実が集まったら lean-domain-model スキルで置き換える");
   } else phase("Lean 実行可能仕様", "進行中", [`${leanFiles.length} ファイル / UseCase ${useCases} 件`, `sorry ${sorry}`, `golden ${goldens} 組`, `CLI ${bin ? "ビルド済" : "未ビルド（lake build）"}`, `画面の口（Views）${outlets} 個`, `モックアップ ${!mockup ? "なし" : genericUi ? "汎用 UI のまま" : "作り込み済"}`],
