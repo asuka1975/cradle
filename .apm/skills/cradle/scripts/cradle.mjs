@@ -51,26 +51,26 @@ if (cmd === "doctor") {
   }
   // ハーネスの置き場と配線: Claude Code は .claude/skills + .claude/settings.json、Codex は .agents/skills + .codex/hooks.json + AGENTS.md、Pi は pi package + .pi/settings.json
   const { existsSync, readFileSync, statSync } = await import("node:fs");
-  const { findProjectRoot } = await import("./lib.mjs");
+  const { findProjectRoot, readText } = await import("./lib.mjs");
   const root = findProjectRoot();
   const homes = [".claude/skills/cradle", ".agents/skills/cradle"].filter(d => existsSync(join(root, d)));
   console.log(`${homes.length ? "ok     " : "missing"} harness    ${homes.join(", ") || "（apm install で配る）"}`);
-  const wired = (f) => existsSync(join(root, f)) && readFileSync(join(root, f), "utf8").includes("hook.mjs");
+  const wired = (f) => readText(join(root, f)).includes("hook.mjs");
   console.log(`${wired(".claude/settings.json") || wired(".codex/hooks.json") ? "ok     " : "missing"} hooks      claude=${wired(".claude/settings.json") ? "ok" : "-"} codex=${wired(".codex/hooks.json") ? "ok" : "-"}`);
   {
     const piSettings = join(root, ".pi", "settings.json");
-    const piPackage = existsSync(piSettings) && readFileSync(piSettings, "utf8").includes("cradle");
+    const piPackage = readText(piSettings).includes("cradle");
     console.log(`${piPackage ? "ok     " : "info   "} pi         ${piPackage ? ".pi/settings.json に cradle パッケージが登録済み" : "pi install -l <cradle> / pi config -l で有効化"}`);
   }
   {
     const opencodeConfig = ["opencode.json", "opencode.jsonc"].find(file =>
-      existsSync(join(root, file)) && readFileSync(join(root, file), "utf8").includes("integrations/opencode"));
+      readText(join(root, file)).includes("integrations/opencode"));
     console.log(`${opencodeConfig ? "ok     " : "info   "} opencode   ${opencodeConfig ? `${opencodeConfig} に Cradle plugin のパスあり（ロード状態は未確認）` : "opencode.json(c) に Cradle の integrations/opencode を plugin として追加"}`);
   }
   if (existsSync(join(root, ".codex/hooks.json"))) {
     // Codex は起動時のレビューで信頼した hook だけを動かし、その記録を ~/.codex/config.toml に [hooks.state."<hooks.json の絶対パス>:<event>:<group>:<hook>"] で持つ
     const home = process.env.CODEX_HOME ?? join(process.env.HOME ?? "", ".codex");
-    const toml = existsSync(join(home, "config.toml")) ? readFileSync(join(home, "config.toml"), "utf8") : "";
+    const toml = readText(join(home, "config.toml"));
     const key = join(root, ".codex/hooks.json") + ":";
     const trusted = toml.split("\n").filter(l => l.startsWith(`[hooks.state."${key}`)).length;
     let expected = 0;
@@ -92,7 +92,7 @@ if (cmd === "doctor") {
   }
   if (existsSync(join(root, "AGENTS.md"))) {
     const size = statSync(join(root, "AGENTS.md")).size;
-    const toml = existsSync(join(root, ".codex/config.toml")) ? readFileSync(join(root, ".codex/config.toml"), "utf8") : "";
+    const toml = readText(join(root, ".codex/config.toml"));
     const limit = Number((toml.match(/^\s*project_doc_max_bytes\s*=\s*(\d+)/m) ?? [])[1] ?? 32768);
     console.log(`${size > limit ? "STALE  " : "ok     "} AGENTS.md  ${size} bytes / Codex の上限 ${limit}${size > limit ? "（.codex/config.toml の project_doc_max_bytes を上げる。超えた分は黙って切られる）" : ""}`);
   }

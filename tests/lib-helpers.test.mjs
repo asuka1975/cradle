@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tempDir, writeTree } from "./helpers.mjs";
-import { sha256, walk, leanSnapshot } from "../.apm/skills/cradle/scripts/lib.mjs";
+import { sha256, walk, leanSnapshot, readText } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -20,4 +20,14 @@ test("walk の既定はビルド成果物と VCS の置き場を見ない。lean
   });
   assert.deepEqual(walk(join(root, "lean")), [join(root, "lean", "A.lean"), join(root, "lean", "lake-manifest.json")]);
   assert.deepEqual(leanSnapshot({ lean: { rootDir: join(root, "lean") } }), { "A.lean": sha256("a") });
+});
+
+test("readText は無いファイルで fallback（既定は空文字）を返し、ディレクトリは無いものとして扱わず投げる", (t) => {
+  const root = tempDir(t, "cradle-read-text-");
+  writeTree(root, { "a.md": "中身\n", "d/x": "" });
+  assert.equal(readText(join(root, "a.md")), "中身\n");
+  assert.equal(readText(join(root, "a.md"), null), "中身\n");
+  assert.equal(readText(join(root, "none.md")), "");
+  assert.equal(readText(join(root, "none.md"), null), null);
+  assert.throws(() => readText(join(root, "d")), { code: "EISDIR" });
 });

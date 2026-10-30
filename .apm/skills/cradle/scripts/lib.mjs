@@ -508,3 +508,6 @@ export function glossaryEnglish(cfg) {
 
 /** 中身（文字列か Buffer）の sha256 の 16 進。 */
 export function sha256(data) { return createHash("sha256").update(data).digest("hex"); }
+
+/** テキストファイルを読む。無ければ fallback。ディレクトリや読めないファイルは投げる（無いのとは別の事故）。 */
+export function readText(path, fallback = "") { return existsSync(path) ? readFileSync(path, "utf8") : fallback; }

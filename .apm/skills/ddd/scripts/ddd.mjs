@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -127,7 +127,7 @@ switch (cmd) {
     process.exit(r.status ?? 1);
   }
   case "status": {
-    const read = (f) => existsSync(join(ddd, f)) ? readFileSync(join(ddd, f), "utf8") : "";
+    const read = (f) => readText(join(ddd, f));
     const tl = read("event-timeline.md");
     const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");

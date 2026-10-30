@@ -3,12 +3,12 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
 const R = (p) => join(cfg.root, p);
-const read = (p) => existsSync(R(p)) ? readFileSync(R(p), "utf8") : null;
+const read = (p) => readText(R(p), null);
 const countRows = (text, statusRe) => text ? (text.match(new RegExp(`^\\|\\s*(?:HS|UX|MQ)-\\d+\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length : 0;
 
 const s = { project: cfg.project, phases: [] };

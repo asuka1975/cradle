@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, walk, rel, git, fail } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, git, fail, readText } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
 const cfg = loadConfig();
@@ -49,7 +49,7 @@ function declsOf(text) {
 }
 function textAt(path, which) {
   if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:${path}`]); } catch { return ""; } }
-  const p = join(cfg.root, path); return existsSync(p) ? readFileSync(p, "utf8") : "";
+  return readText(join(cfg.root, path));
 }
 /** 変わった宣言 = 署名行が片方にしか無いもの（名前が同じでも署名が変われば「変更」）。 */
 const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }

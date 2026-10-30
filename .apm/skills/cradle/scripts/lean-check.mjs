@@ -27,7 +27,7 @@
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfig();
@@ -112,8 +112,8 @@ for (const f of files) {
 {
   const jsonFile = join(modelDir, "Runtime", "Json.lean");
   const machFile = join(modelDir, "Runtime", "Machine.lean");
-  const jsonText = existsSync(jsonFile) ? readFileSync(jsonFile, "utf8") : "";
-  const machText = existsSync(machFile) ? stripComments(readFileSync(machFile, "utf8")) : "";
+  const jsonText = readText(jsonFile);
+  const machText = stripComments(readText(machFile));
   const wire = (file, union, applyName) => {
     const code = stripComments(readFileSync(file, "utf8"));
     const block = code.match(new RegExp(`inductive\\s+${union}\\b[\\s\\S]*?(?=\\n(?:deriving|end|def|structure|inductive|theorem)\\b|$)`));
@@ -209,7 +209,7 @@ for (const f of files) {
 {
   const sample = scaffoldSampleFiles(cfg);
   const timeline = join(cfg.root, cfg.documents.ddd, "event-timeline.md");
-  const events = existsSync(timeline) ? (readFileSync(timeline, "utf8").match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length : 0;
+  const events = (readText(timeline).match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
   if (sample.length && events) for (const f of sample) add("scaffold", "warn", f, 1, `骨格のサンプルドメイン（メモ）が残っている。documents/ddd に出来事 ${events} 件の事実があるので、lean-domain-model スキルで実ドメインに丸ごと置き換える`);
 }
 
