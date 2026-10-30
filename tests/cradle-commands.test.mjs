@@ -117,15 +117,13 @@ test("refs はプロジェクトルートから git grep の行（path:line:cont
   assert.deepEqual([usage.status, usage.stdout, usage.stderr], [1, "", "usage: cradle refs <HS-001|MQ-003|UX-002|INFRA-D-004|イベント#5>\n"]);
 });
 
-test("refs はサブディレクトリからだとその下だけを cwd からの相対パスで探し、git の外では 0 箇所と言う", (t) => {
+test("refs はサブディレクトリから呼んでもプロジェクトルートから探し、パスをルートからの相対で出す。git の外では 0 箇所と言う", (t) => {
   const { root, run } = refsFixture(t);
-  const sub = run(join(root, "lean"), "イベント#1");
-  assert.equal(sub.status, 0, sub.stderr);
-  assert.equal(sub.stdout, [
-    "イベント#1: 2 箇所",
-    "  Example/Domain/Book.lean:1:/-- 本。出典: イベント#1 -/",
-    "  Example/Domain/Retire.lean:1:/-- 除籍。出典: イベント#10 -/",
-  ].join("\n") + "\n" + refsTail);
+  const atRoot = run(root, "イベント#1").stdout;
+  for (const cwd of [join(root, "lean"), join(root, "documents", "ddd")]) {
+    const sub = run(cwd, "イベント#1");
+    assert.deepEqual([sub.status, sub.stdout, sub.stderr], [0, atRoot, ""], cwd);
+  }
   const outside = tempProject(t, "cradle-refs-nogit-");
   writeTree(outside, { "README.md": "イベント#1\n" });
   const r = run(outside, "イベント#1");
