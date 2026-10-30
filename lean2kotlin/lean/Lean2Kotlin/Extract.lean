@@ -688,6 +688,22 @@ def scalarAlternatives (ty : Expr) (orig : Expr) : MetaM (Array Expr) := do
 /-- 値フィールドの候補の組を試す上限(組は候補の混合基数で数える)。 -/
 def scalarAttempts : Nat := 64
 
+/-- プールの直積の先頭 limit 組。積は組む前に上限で切る(全体を作ると binder の数に対して指数で膨らむ)。
+    組の順は混合基数の数え上げ — 先頭のプールが最上位の桁、末尾のプールが最下位の桁。
+    プールが無ければ空の組 1 つ。 -/
+def cartesianTake {α : Type} [Inhabited α] (pools : Array (Array α)) (limit : Nat) :
+    Array (Array α) := Id.run do
+  let total := pools.foldl (· * ·.size) 1
+  let mut out : Array (Array α) := #[]
+  for idx in [0:min total limit] do
+    let mut stride := total
+    let mut combo : Array α := #[]
+    for pool in pools do
+      stride := stride / pool.size
+      combo := combo.push pool[(idx / stride) % pool.size]!
+    out := out.push combo
+  return out
+
 /-- サンプル値の構築。variant 0 = 通常、1 = 境界(List を空に・別 ctor を選ぶ)。
     Id 型は固定鍵 91(泉の領域 100.. と非衝突)。文字列はカウンタで一意。 -/
 partial def buildValue (idHeads : List Name) (ctr : IO.Ref Nat)
@@ -2043,27 +2059,13 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             let mut pool : Array Expr := #[]
             for v in variants do
               strCtr.set (j * 3 + v)   -- 文字列の一意性(組合せに依らず決定的)
-              if v == 2 && tyW.getAppFn.isConstOf ``List then
-                -- List の複合 variant: [通常, 境界] の 2 要素
-                let some c ← buildValue idHeads strCtr tyW.getAppArgs[0]! 0 | continue
-                let some b ← buildValue idHeads strCtr tyW.getAppArgs[0]! 1 | continue
-                let el := tyW.getAppArgs[0]!
-                let nil := mkApp (mkConst ``List.nil [.zero]) el
-                pool := pool.push (mkApp3 (mkConst ``List.cons [.zero]) el c
-                  (mkApp3 (mkConst ``List.cons [.zero]) el b nil))
-              else
-                if let some x ← buildValue idHeads strCtr ty v then pool := pool.push x
+              -- List の複合 variant 2 は混在リスト [通常, 境界](buildValue の variant 3)
+              let bv := if v == 2 && tyW.getAppFn.isConstOf ``List then 3 else v
+              if let some x ← buildValue idHeads strCtr ty bv then pool := pool.push x
             if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
             pools := pools.push (j, pool)
           -- 組合せ列挙(積、上限つき)
-          let mut combos : Array (Array (Nat × Expr)) := #[#[]]
-          for (j, pool) in pools do
-            let mut next : Array (Array (Nat × Expr)) := #[]
-            for c in combos do
-              for v in pool do
-                next := next.push (c.push (j, v))
-            combos := next
-          combos := combos.extract 0 64
+          let combos := cartesianTake (pools.map fun (j, pool) => pool.map ((j, ·))) 64
           let mut caseJs : Array Json := #[]
           let mut seenCase : Array String := #[]
           let mut whys : Array String := #[s!"組合せ {combos.size}"]
@@ -2388,14 +2390,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             if let some x ← buildValue idHeads strCtrF ty v then pool := pool.push (v, x)
           if pool.isEmpty then throwError "サンプルを構築できない型: {ty}"
           pools := pools.push (nm, pool)
-        let mut combos : Array (Array (Name × Nat × Expr)) := #[#[]]
-        for (nm, pool) in pools do
-          let mut nextCs : Array (Array (Name × Nat × Expr)) := #[]
-          for c in combos do
-            for (v, x) in pool do
-              nextCs := nextCs.push (c.push (nm, v, x))
-          combos := nextCs
-        combos := combos.extract 0 64
+        let combos := cartesianTake (pools.map fun (nm, pool) => pool.map ((nm, ·))) 64
         -- 有効ケースの収集(execute 成功のみ)→ ペイロードの多様性で ≤4 に選抜
         let mut collected : Array (String × Json) := #[]
         for combo in combos do
