@@ -119,7 +119,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 
 `generator/` を composite build で解決する（`generator/src/main/kotlin/lean2kotlin/gradle/Lean2KotlinPlugin.kt`。利用側の断片は gradle-wiring.md）。タスクは 2 つ:
 
-- `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml` / `lake-manifest.json` と対象の `lean-toolchain`（ワークスペースには対象の `lean-toolchain` を写し、抽出器もそれでビルドする）。
+- `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml` / `lake-manifest.json` と対象の `lean-toolchain`（ワークスペースには対象の `lean-toolchain` を写し、抽出器もそれでビルドする）。ワークスペースの `lake-manifest.json` は、合成した lakefile と両パッケージの `lakefile.toml` / `lake-manifest.json` の印（`resolution.stamp`）が変わったときだけ捨てて `lake update` で解き直す（require の追加や固定の変更を拾い、毎回は解かない）。
 - `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。配線は `org.jetbrains.kotlin.jvm` を適用したプロジェクトだけ: `compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存する（`wireSourceSets` に依らない）。`wireSourceSets` が true（既定）なら、生成ディレクトリを sourceSets に配線し、source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
 
 拡張 `lean2kotlin { }`:

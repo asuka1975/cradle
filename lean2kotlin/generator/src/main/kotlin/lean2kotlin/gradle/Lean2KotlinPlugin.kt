@@ -13,6 +13,7 @@ import org.gradle.api.tasks.testing.Test
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.process.ExecOperations
+import java.io.File
 import javax.inject.Inject
 
 /** build.gradle.kts の lean2kotlin { } 設定。 */
@@ -51,7 +52,7 @@ abstract class Lean2KotlinExtension {
 	abstract val lakeCommand: Property<String>
 }
 
-/** 抽出ワークスペースの合成テキスト。抽出器の入力で IR のバイトに効く(lakefile は全文比較で manifest を捨てる判定にも使う)。 */
+/** 抽出ワークスペースの合成テキスト。lakefile と driver は抽出器の入力で IR のバイトに効く(lakefile は解決の印にも入る)。 */
 internal object ExtractionWorkspace {
 	/** 対象ドメインの lakefile.toml の package 名(行頭の `name = "…"` の最初)。 */
 	fun domainPackageName(lakefileText: String): String? =
@@ -63,6 +64,16 @@ internal object ExtractionWorkspace {
 		"name = \"lean2kotlin-extraction\"\n\n" +
 		"[[require]]\nname = \"$domainName\"\npath = \"$domainPath\"\n\n" +
 		"[[require]]\nname = \"lean2kotlin\"\npath = \"$extractorPath\"\n"
+
+	/** ワークスペースの解決(lake-manifest.json)の印。解決は合成した lakefile のほか、対象と抽出器の
+	    lakefile.toml(require)と lake-manifest.json(固定)で決まる — 印が変われば古い解決を捨てて解き直す。
+	    domain / extractor はパッケージ直下のファイル名から中身を返し、無ければ null(空のファイルと分ける)。 */
+	fun resolutionStamp(lakefile: String, domain: (String) -> String?, extractor: (String) -> String?): String =
+		lakefile + listOf("domain" to domain, "extractor" to extractor).joinToString("") { (pkg, read) ->
+			listOf("lakefile.toml", "lake-manifest.json").joinToString("") { name ->
+				read(name)?.let { "\n--- $pkg/$name\n$it" } ?: "\n--- $pkg/$name: 無し\n"
+			}
+		}
 
 	/** binder 上書きはキー順 — 設定の Map の順に依らず同じテキストになる。 */
 	fun driver(ns: String, out: String, binderOverrides: Map<String, String>): String {
@@ -123,12 +134,16 @@ abstract class ExtractLeanIrTask : DefaultTask() {
 		val domainName = ExtractionWorkspace.domainPackageName(domainLakefile.readText())
 			?: error("対象ドメインのパッケージ名を読めません: $domainLakefile")
 		val lakefileText = ExtractionWorkspace.lakefile(domainName, domain.absolutePath, extractor.absolutePath)
-		val lakefile = ws.resolve("lakefile.toml")
-		if (!lakefile.exists() || lakefile.readText() != lakefileText) {
-			// 依存の結線が変わった — 古い解決(manifest)を捨てて作り直す
+		fun contents(dir: File): (String) -> String? = { name -> dir.resolve(name).takeIf { it.isFile }?.readText() }
+		val stampText = ExtractionWorkspace.resolutionStamp(lakefileText, contents(domain), contents(extractor))
+		val stamp = ws.resolve("resolution.stamp")
+		if (!stamp.isFile || stamp.readText() != stampText) {
+			// 結線か両パッケージの require・固定が変わった — 古い解決(manifest)を捨てて lake update で作り直す。
+			// 毎回は解かない(git の依存の update はネットワークを要る)
 			ws.resolve("lake-manifest.json").delete()
 		}
-		lakefile.writeText(lakefileText)
+		ws.resolve("lakefile.toml").writeText(lakefileText)
+		stamp.writeText(stampText)
 		ws.resolve("lean-toolchain").writeText(domain.resolve("lean-toolchain").readText())
 		val out = irFile.get().asFile.absolutePath
 		val driver = ws.resolve("Driver.lean")

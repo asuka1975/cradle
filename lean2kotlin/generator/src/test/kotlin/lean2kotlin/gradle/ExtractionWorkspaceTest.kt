@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-// 合成テキストは抽出器の入力で IR のバイトに効く — 文字列をバイトどおりに固定する
+// 合成テキストは抽出器の入力で IR のバイトに効き、解決の印は manifest を捨てるかを決める — 文字列をバイトどおりに固定する
 class ExtractionWorkspaceTest {
 
 	@Test
@@ -40,6 +40,52 @@ class ExtractionWorkspaceTest {
 			|path = "/w/lean"
 			|""".trimMargin(),
 			ExtractionWorkspace.lakefile("sprout-lean", "/w/scaffold-check/build/scaffold/lean", "/w/lean"))
+	}
+
+	@Test
+	fun `resolutionStamp は合成した lakefile に両パッケージの lakefile・manifest を並べ、無いファイルは無いと書く`() {
+		assertEquals(
+			"""
+			|# ws
+			|
+			|--- domain/lakefile.toml
+			|name = "depot-lean"
+			|
+			|--- domain/lake-manifest.json: 無し
+			|
+			|--- extractor/lakefile.toml
+			|name = "lean2kotlin"
+			|
+			|--- extractor/lake-manifest.json
+			|{"packages": []}
+			|""".trimMargin(),
+			ExtractionWorkspace.resolutionStamp("# ws\n",
+				mapOf("lakefile.toml" to "name = \"depot-lean\"\n")::get,
+				mapOf("lakefile.toml" to "name = \"lean2kotlin\"\n", "lake-manifest.json" to "{\"packages\": []}\n")::get))
+	}
+
+	@Test
+	fun `resolutionStamp は require・固定・結線のどれが変わっても変わり、lean と lean-toolchain は読まない`() {
+		val domain = mapOf("lakefile.toml" to "name = \"d\"\n", "lake-manifest.json" to "{\"rev\": \"c1\"}\n",
+			"lean-toolchain" to "leanprover/lean4:v4.33.0\n", "Depot.lean" to "def x := 1\n")
+		val extractor = mapOf("lakefile.toml" to "name = \"lean2kotlin\"\n", "lake-manifest.json" to "{}\n")
+		val asked = mutableSetOf<String>()
+		fun stamp(lakefile: String = "# ws\n", d: Map<String, String> = domain, e: Map<String, String> = extractor) =
+			ExtractionWorkspace.resolutionStamp(lakefile, { asked += it; d[it] }, { asked += it; e[it] })
+		val base = stamp()
+		assertEquals(setOf("lakefile.toml", "lake-manifest.json"), asked)
+		assertEquals(base, stamp(d = domain + ("lean-toolchain" to "leanprover/lean4:v4.34.0\n") + ("Depot.lean" to "def x := 2\n")))
+		val changed = listOf(
+			stamp(lakefile = "# ws 2\n"),
+			stamp(d = domain + ("lake-manifest.json" to "{\"rev\": \"c2\"}\n")),
+			stamp(d = domain + ("lakefile.toml" to "name = \"d\"\n\n[[require]]\nname = \"depb\"\n")),
+			stamp(d = domain - "lake-manifest.json"),
+			stamp(d = domain + ("lake-manifest.json" to "")),
+			stamp(e = extractor + ("lake-manifest.json" to "{\"packages\": [1]}\n")),
+			stamp(e = extractor + ("lakefile.toml" to "name = \"lean2kotlin\"\nversion = \"0.2.0\"\n")),
+			// 同じ中身でも対象と抽出器の入れ替えは別の解決
+			stamp(d = extractor, e = domain))
+		assertEquals(changed.size + 1, (changed + base).toSet().size)
 	}
 
 	@Test

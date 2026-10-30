@@ -4,6 +4,8 @@ import org.gradle.api.Project
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.testfixtures.ProjectBuilder
+import org.junit.jupiter.api.condition.DisabledOnOs
+import org.junit.jupiter.api.condition.OS
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import kotlin.test.Test
@@ -77,6 +79,57 @@ class Lean2KotlinPluginTest {
 			setOf("domain/Sprout.lean", "domain/Sprout/Domain.lean", "domain/lakefile.toml", "domain/lean-toolchain",
 				"domain/lake-manifest.json", "extractor/Lean2Kotlin.lean", "extractor/lakefile.toml", "extractor/lake-manifest.json"),
 			p.extract().leanSources.files.map { it.relativeTo(dir).invariantSeparatorsPath }.toSet())
+	}
+
+	@Test
+	@DisabledOnOs(OS.WINDOWS)
+	fun `抽出は対象か抽出器の lakefile・manifest が変わったときだけワークスペースの manifest を捨てて lake update で解き直す`(@TempDir dir: File) {
+		// lake の代役: サブコマンドを 1 行ずつ記録し、update ならワークスペースに manifest を書く
+		val calls = dir.resolve("calls.txt")
+		val lake = dir.resolve("lake").apply {
+			writeText("#!/bin/sh\necho \"\$1\" >> '$calls'\n[ \"\$1\" = update ] && echo '{}' > lake-manifest.json\nexit 0\n")
+			setExecutable(true)
+		}
+		val domain = dir.resolve("domain").apply { mkdirs() }
+		val extractor = dir.resolve("extractor").apply { mkdirs() }
+		domain.resolve("lakefile.toml").writeText("name = \"depot-lean\"\n")
+		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.33.0\n")
+		domain.resolve("Depot.lean").writeText("def x := 1\n")
+		extractor.resolve("lakefile.toml").writeText("name = \"lean2kotlin\"\n")
+		extractor.resolve("lake-manifest.json").writeText("{\"packages\": []}\n")
+		val p = project(dir.resolve("p"))
+		p.ext().leanRootNamespace.set("Depot")
+		p.ext().leanDomainDir.set(domain)
+		p.ext().leanExtractorDir.set(extractor)
+		p.ext().lakeCommand.set(lake.absolutePath)
+		p.ext().irFile.get().asFile.apply { parentFile.mkdirs(); writeText("{}") }
+		fun updates(): Boolean {
+			calls.delete()
+			p.extract().run()
+			val subcommands = calls.readLines()
+			assertEquals(listOf("build", "env"), subcommands - "update")
+			return "update" in subcommands
+		}
+		assertTrue(updates(), "初回は manifest が無い")
+		assertFalse(updates(), "何も変わらなければ解き直さない")
+		domain.resolve("Depot.lean").writeText("def x := 2\n")
+		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.34.0\n")
+		assertFalse(updates(), ".lean と lean-toolchain は解決に効かない")
+		domain.resolve("lake-manifest.json").writeText("{\"packages\": [{\"name\": \"depb\", \"rev\": \"c1\"}]}\n")
+		assertTrue(updates(), "対象の manifest が現れた")
+		assertFalse(updates())
+		domain.resolve("lake-manifest.json").writeText("{\"packages\": [{\"name\": \"depb\", \"rev\": \"c2\"}]}\n")
+		assertTrue(updates(), "対象の固定だけが変わった")
+		domain.resolve("lakefile.toml").appendText("\n[[require]]\nname = \"depc\"\npath = \"../depc\"\n")
+		assertTrue(updates(), "対象に require が増えた")
+		assertFalse(updates())
+		extractor.resolve("lake-manifest.json").writeText("{\"packages\": [{\"name\": \"x\"}]}\n")
+		assertTrue(updates(), "抽出器の固定が変わった")
+		extractor.resolve("lakefile.toml").appendText("version = \"0.2.0\"\n")
+		assertTrue(updates(), "抽出器の lakefile が変わった")
+		domain.resolve("lake-manifest.json").delete()
+		assertTrue(updates(), "対象の manifest が消えた")
+		assertFalse(updates())
 	}
 
 	@Test
