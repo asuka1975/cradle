@@ -84,7 +84,6 @@ function leanModel({ cfg, R, ddd: { events } }) {
   const bin = existsSync(cfg.lean.bin);
   const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
   const outlets = viewOutlets(cfg);
-  // UI が汎用のまま = index.html が骨格と同一
   const uiFile = R(`${cfg.lean.mockup}/public/index.html`);
   // 骨格の注記が残っていれば汎用のまま（作り込みは注記をこの画面の一文に置き換える — domain-mockup スキル）
   const genericUi = existsSync(uiFile) && readFileSync(uiFile, "utf8").includes("Cradle 標準の汎用モックアップ");
