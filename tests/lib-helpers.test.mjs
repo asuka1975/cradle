@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -101,4 +101,15 @@ test("renameScaffold は Sprout・sprout・__PROJECT__・__PROJECT_LOWER__ を�
   assert.equal(renameScaffold(text, { project: "MonoWa", domain: "  楽団の $1 と $& の管理 " }), "MonoWa.Main monowa MonoWa monowa\nプロダクト: 楽団の $1 と $& の管理\n");
   assert.equal(renameScaffold(text, { project: "MonoWa" }), `MonoWa.Main monowa MonoWa monowa\nプロダクト: ${PRODUCT_PLACEHOLDER}\n`);
   assert.equal(PRODUCT_PLACEHOLDER, "（一言で）");
+});
+
+test("findProjectRoot と loadConfig はルートを指す変数を渡された env から読み、空の env なら cradle.json を持つ祖先と root の cradle.json だけで決める", (t) => {
+  const root = tempDir(t, "cradle-root-env-");
+  writeTree(root, { "a/cradle.json": JSON.stringify({ project: "A" }), "a/b/c/.keep": "", "x/cradle.json": JSON.stringify({ project: "X" }) });
+  const start = join(root, "a/b/c");
+  assert.equal(findProjectRoot(start, {}), join(root, "a"));
+  assert.equal(findProjectRoot(start, { CLAUDE_PROJECT_DIR: join(root, "x") }), join(root, "x"));
+  assert.equal(findProjectRoot(start, { CRADLE_PROJECT_DIR: join(root, "a/b"), CLAUDE_PROJECT_DIR: join(root, "x") }), join(root, "a/b"));
+  assert.equal(loadConfig(join(root, "a"), {}).project, "A");
+  assert.equal(loadConfig(join(root, "a"), { CRADLE_CONFIG: join(root, "x/cradle.json") }).project, "X");
 });

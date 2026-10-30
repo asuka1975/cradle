@@ -5,10 +5,10 @@ import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-/** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd */
-export function findProjectRoot(start = process.cwd()) {
-  for (const env of ["CRADLE_PROJECT_DIR", "CLAUDE_PROJECT_DIR"]) {
-    if (process.env[env]) return resolve(process.env[env]);
+/** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd。変数は env から読む（既定は process.env） */
+export function findProjectRoot(start = process.cwd(), env = process.env) {
+  for (const name of ["CRADLE_PROJECT_DIR", "CLAUDE_PROJECT_DIR"]) {
+    if (env[name]) return resolve(env[name]);
   }
   let dir = resolve(start);
   for (;;) {
@@ -19,9 +19,9 @@ export function findProjectRoot(start = process.cwd()) {
   }
 }
 
-/** cradle.json を読み、既定値で埋める。project 名だけあれば動く。 */
-export function loadConfig(root = findProjectRoot()) {
-  const file = process.env.CRADLE_CONFIG ?? join(root, "cradle.json");
+/** cradle.json を読み、既定値で埋める。project 名だけあれば動く。CRADLE_CONFIG は env から読む（既定は process.env） */
+export function loadConfig(root = findProjectRoot(), env = process.env) {
+  const file = env.CRADLE_CONFIG ?? join(root, "cradle.json");
   let raw = {};
   if (existsSync(file)) {
     try { raw = JSON.parse(readFileSync(file, "utf8")); }

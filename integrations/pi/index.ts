@@ -43,7 +43,8 @@ export default function cradlePiExtension(pi: ExtensionAPI) {
       return;
     }
     let cfg;
-    try { cfg = loadConfig(findProjectRoot(ctx.cwd)); }
+    // ルートはイベントの cwd から決める（hook-client が CLI に渡す環境と同じく、ルートを指す変数を読まない）
+    try { cfg = loadConfig(findProjectRoot(ctx.cwd, {}), {}); }
     catch { return; } // Cradle未導入のプロジェクトは対象外。
     const reason = await checkAll(cfg.root);
     if (!reason) return;
