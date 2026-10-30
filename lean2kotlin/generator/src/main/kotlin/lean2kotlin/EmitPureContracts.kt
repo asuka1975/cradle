@@ -1,5 +1,7 @@
 package lean2kotlin
 
+import kotlinx.serialization.json.JsonElement
+
 // ───────────────────────── 純値形の契約テスト(UseCase の判断・Entity・ふるまい)
 
 /** UseCase の判断(`<X>Rules`)の単体テスト(純値形 — オラクル値との完全一致)。
@@ -19,11 +21,7 @@ internal fun EmitTests.emitRulesTheoremTest(s: IrService, contracts: List<IrCont
 		sb.append("abstract class ${s.name}ContractTest {\n")
 		sb.append("\t/** 判断の実装を返す(UseCase の実装がこの interface を実装してもよい)。 */\n")
 		sb.append("\tprotected abstract fun rules(): ${s.name}\n")
-		for ((_, e) in mats) {
-			sb.append("\t/** fixture の実体化(観測が一致する実装の値を返す)。 */\n")
-			sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
-				"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
-		}
+		appendMaterializerHooks(sb, mats)
 		var emitted = 0
 		for (c in contracts) {
 			val m = s.methods.find { it.name == c.method }
@@ -36,20 +34,8 @@ internal fun EmitTests.emitRulesTheoremTest(s: IrService, contracts: List<IrCont
 					log("  note: ${c.theorem}(${i + 1}): 純値形でないためスキップ")
 					return@forEachIndexed
 				}
-				val callArgs = m.params.map { p ->
-					val j = case.args[p.name] ?: run {
-						log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
-						return@forEachIndexed
-					}
-					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
-				}
-				val doc = kdocLine(c.doc)
-				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
-				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
-				sb.append("\t\t\trules().${ident(c.method)}(" +
-					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
-				sb.append("\t}\n")
+				val callArgs = caseCallArgs(m.params, case.args, c.theorem) ?: return@forEachIndexed
+				appendPureTest(sb, c, i, case.ok, m, "rules()", callArgs)
 				emittedContracts += contractKey(c)
 				emitted++
 			}
@@ -116,13 +102,8 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 			val subjParam = if (subjIdx >= 0) m.params[subjIdx] else null
 			c.cases.forEachIndexed { i, case ->
 				if (case.kind != "pure" || case.ok == null) return@forEachIndexed
-				val callArgs = m.params.filterIndexed { idx, _ -> idx != subjIdx }.map { p ->
-					val j = case.args[p.name] ?: run {
-						log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
-						return@forEachIndexed
-					}
-					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
-				}
+				val callArgs = caseCallArgs(m.params.filterIndexed { idx, _ -> idx != subjIdx }, case.args, c.theorem)
+					?: return@forEachIndexed
 				val receiver = if (subjParam != null) {
 					val j = case.args[subjParam.name] ?: run {
 						log("  note: ${c.theorem}: 主体 ${subjParam.name} がケースにありません")
@@ -138,13 +119,7 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 					}
 					"${decapitalizeFirst(td.kotlin)}($dflt)"
 				}
-				val doc = kdocLine(c.doc)
-				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
-				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
-				sb.append("\t\t\t$receiver.${ident(c.method)}(" +
-					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
-				sb.append("\t}\n")
+				appendPureTest(sb, c, i, case.ok, m, receiver, callArgs)
 				emittedContracts += contractKey(c)
 				emitted++
 			}
@@ -182,11 +157,7 @@ internal fun EmitTests.emitBehaviorsTheoremTest(subject: String, contracts: List
 		sb.append("abstract class ${name}ContractTest {\n")
 		sb.append("\t/** ふるまいの実装(Entity / VO の純関数)を返す。 */\n")
 		sb.append("\tprotected abstract fun behaviors(): $name\n")
-		for ((_, e) in mats) {
-			sb.append("\t/** fixture の実体化(観測が一致する実装の値を返す)。 */\n")
-			sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
-				"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
-		}
+		appendMaterializerHooks(sb, mats)
 		var emitted = 0
 		for (c in contracts) {
 			val m = b.methods.find { it.name == c.method }
@@ -199,20 +170,8 @@ internal fun EmitTests.emitBehaviorsTheoremTest(subject: String, contracts: List
 					log("  note: ${c.theorem}(${i + 1}): 純値形でないためスキップ")
 					return@forEachIndexed
 				}
-				val callArgs = m.params.map { p ->
-					val j = case.args[p.name] ?: run {
-						log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
-						return@forEachIndexed
-					}
-					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
-				}
-				val doc = kdocLine(c.doc)
-				sb.append("\n$doc\t@Test\n")
-				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
-				sb.append("\t\tassertEquals(${k.literal(m.ret, case.ok)},\n")
-				sb.append("\t\t\tbehaviors().${ident(c.method)}(" +
-					callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
-				sb.append("\t}\n")
+				val callArgs = caseCallArgs(m.params, case.args, c.theorem) ?: return@forEachIndexed
+				appendPureTest(sb, c, i, case.ok, m, "behaviors()", callArgs)
 				emittedContracts += contractKey(c)
 				emitted++
 			}
@@ -221,4 +180,17 @@ internal fun EmitTests.emitBehaviorsTheoremTest(subject: String, contracts: List
 		log("  note: 契約定理テスト: ${td.kotlin}Behaviors — 定理 ${contracts.size} 本から $emitted ケース(純値形)")
 		sb.toString()
 	}
+}
+
+/** 純値形の 1 ケース: レシーバのメソッドの返り値を観測に写し、オラクル値と比べる。 */
+private fun EmitTests.appendPureTest(
+	sb: StringBuilder, c: IrContract, i: Int, ok: JsonElement, m: IrMethod, receiver: String, callArgs: List<String>,
+) {
+	val doc = kdocLine(c.doc)
+	sb.append("\n$doc\t@Test\n")
+	sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
+	sb.append("\t\tassertEquals(${k.literal(m.ret, ok)},\n")
+	sb.append("\t\t\t$receiver.${ident(c.method)}(" +
+		callArgs.joinToString(", ") + ")${fixtureNorm(m.ret)})\n")
+	sb.append("\t}\n")
 }

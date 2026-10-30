@@ -250,13 +250,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 						}
 					}
 				}
-				val callArgs = kept.map { p ->
-					val j = case.args[p.name] ?: run {
-						log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
-						return@forEachIndexed
-					}
-					"${ident(p.name)} = ${k.literal(p.type, j)}"
-				}
+				val callArgs = caseCallArgs(kept, case.args, c.theorem, k::literal) ?: return@forEachIndexed
 				val expected = when {
 					case.error != null && errT != null ->
 						"DomainResult.Err(${k.literal(errT, case.error)})"

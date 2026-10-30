@@ -74,14 +74,10 @@ internal fun EmitTests.emitTransitionTheoremTest(
 		for (part in sortedParts) {
 			sb.append("\tprotected abstract fun ${repoVar(part.root)}(): ${part.root.kotlin}Repository\n")
 		}
-		for ((_, e) in linkedMapOf<String, IrTypeDef>().apply {
+		appendMaterializerHooks(sb, linkedMapOf<String, IrTypeDef>().apply {
 			sortedParts.forEach { put(it.root.lean, it.root) }
 			putAll(cmdMats)
-		}) {
-			sb.append("\t/** fixture の実体化(観測が一致する実装の値を返す)。 */\n")
-			sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
-				"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
-		}
+		})
 		val clockDoc = if (clockFields.isNotEmpty())
 			"。時計は固定の ${clockFields.joinToString("・") { it.field.name }} を配線する(Clock ポート)" else ""
 		val actorDoc = if (actorParams.isNotEmpty())
@@ -114,13 +110,7 @@ internal fun EmitTests.emitTransitionTheoremTest(
 				}
 				val beforeO = case.before as JsonObject
 				val afterO = case.after as JsonObject
-				val callArgs = kept.map { p ->
-					val j = case.args[p.name] ?: run {
-						log("  note: ${c.theorem}: 引数 ${p.name} がケースにありません")
-						return@forEachIndexed
-					}
-					"${ident(p.name)} = ${inputLiteral(p.type, j)}"
-				}
+				val callArgs = caseCallArgs(kept, case.args, c.theorem) ?: return@forEachIndexed
 				val doc = kdocLine(c.doc)
 				sb.append("\n$doc\t@Test\n")
 				sb.append("\tfun `${theoremTestName(c.method, c.theorem, i)}`() {\n")
@@ -278,14 +268,10 @@ internal fun EmitTests.emitFaultContractTests() {
 			for (part in sortedParts) {
 				sb.append("\tprotected abstract fun ${repoVar(part.root)}(): ${part.root.kotlin}Repository\n")
 			}
-			for ((_, e) in linkedMapOf<String, IrTypeDef>().apply {
+			appendMaterializerHooks(sb, linkedMapOf<String, IrTypeDef>().apply {
 				sortedParts.forEach { put(it.root.lean, it.root) }
 				putAll(cmdMats)
-			}) {
-				sb.append("\t/** fixture の実体化(観測が一致する実装の値を返す)。 */\n")
-				sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
-					"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
-			}
+			})
 			val hookParams = sortedParts.joinToString(", ") { "${repoVar(it.root)}: ${it.root.kotlin}Repository" } +
 				portDeps.joinToString("") { ", ${portVar(it)}: ${it.name}" } +
 				genParts.joinToString("") { ", ${decapitalizeFirst(it.port.port)}: ${it.port.port}" } +
@@ -310,13 +296,7 @@ internal fun EmitTests.emitFaultContractTests() {
 				fc.cases.forEachIndexed { i, case ->
 					val beforeO = case.before as? JsonObject ?: return@forEachIndexed
 					val afterO = case.after as? JsonObject ?: return@forEachIndexed
-					val callArgs = kept.map { p ->
-						val j = case.args[p.name] ?: run {
-							log("  note: 障害契約 ${fc.def}: 引数 ${p.name} がケースにありません")
-							return@forEachIndexed
-						}
-						"${ident(p.name)} = ${inputLiteral(p.type, j)}"
-					}
+					val callArgs = caseCallArgs(kept, case.args, "障害契約 ${fc.def}") ?: return@forEachIndexed
 					val doc = kdocLine(fc.doc)
 					sb.append("\n$doc\t@Test\n")
 					sb.append("\tfun `${m.name} の途中の技術的障害の観測は ${fc.def} の宣言と一致する(${i + 1})`() {\n")
