@@ -1,0 +1,201 @@
+{"version": 1,
+ "useCases":
+ [{"name": "PlaceOrderUseCase",
+   "module": "PlaceOrderUseCase",
+   "methods":
+   [{"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Depot.DomainError", "k": "ref"}},
+     "params":
+     [{"type":
+       {"name": "Depot.Application.PlaceOrderUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type":
+       {"name": "Depot.Application.PlaceOrderUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "execute",
+     "doc": "揃えた品番を足す。 "}],
+   "kind": "command",
+   "input": "Depot.Application.PlaceOrderUseCase.Sku"}],
+ "types":
+ [{"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Depot.Application.PlaceOrderUseCase.Sku", "k": "ref"},
+      "name": "sku"},
+     {"type": {"k": "nat"}, "name": "quantity"}]},
+   "role": "command",
+   "module": "Depot.Application.UseCase.PlaceOrderUseCase.Command",
+   "lean": "Depot.Application.PlaceOrderUseCase.Command",
+   "kotlin": "PlaceOrderCommand"},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "string"}, "name": "raw"}]},
+   "role": "command",
+   "module": "Depot.Application.UseCase.PlaceOrderUseCase.Command",
+   "lean": "Depot.Application.PlaceOrderUseCase.Sku",
+   "kotlin": "PlaceOrderSku",
+   "doc": "入力のままの品番（揃える前）。 "},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"of": {"name": "Depot.Sku", "k": "ref"}, "k": "list"},
+      "name": "skus"}]},
+   "role": "repositoryState",
+   "module": "Depot.Application.UseCase.PlaceOrderUseCase.UseCase",
+   "lean": "Depot.Application.PlaceOrderUseCase.State",
+   "kotlin": "PlaceOrderState"},
+  {"shape":
+   {"kind": "structure",
+    "fields":
+    [{"type": {"name": "Depot.OrderId", "k": "ref"}, "name": "id"},
+     {"type": {"name": "Depot.Quantity", "k": "ref"}, "name": "quantity"},
+     {"type": {"k": "bool"}, "name": "refunded"}]},
+   "role": "aggregateRoot",
+   "module": "Depot.Domain.Entity.Order",
+   "lean": "Depot.Domain.Order",
+   "kotlin": "Order",
+   "id": {"name": "Depot.OrderId", "k": "ref"},
+   "doc": "注文。 "},
+  {"shape":
+   {"kind": "sealed",
+    "ctors":
+    [{"name": "outOfStock", "fields": [{"type": {"k": "nat"}, "name": "arg0"}]},
+     {"name": "emptyOrder", "fields": []}]},
+   "role": "error",
+   "module": "Depot.Domain.Error",
+   "lean": "Depot.DomainError",
+   "kotlin": "DomainError"},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "value"}]},
+   "role": "valueObject",
+   "module": "Depot.Domain.ValueObject",
+   "lean": "Depot.OrderId",
+   "kotlin": "OrderId",
+   "isId": true,
+   "doc": "注文の同一性。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "nat"}, "name": "count"}]},
+   "role": "valueObject",
+   "module": "Depot.Domain.ValueObject",
+   "lean": "Depot.Quantity",
+   "kotlin": "Quantity",
+   "doc": "数量。 "},
+  {"shape":
+   {"kind": "structure", "fields": [{"type": {"k": "string"}, "name": "code"}]},
+   "role": "valueObject",
+   "module": "Depot.Domain.ValueObject",
+   "lean": "Depot.Sku",
+   "kotlin": "Sku",
+   "doc": "揃えた品番。入力語彙の PlaceOrderUseCase.Sku と短い名前が同じ。 "}],
+ "rootNamespace": "Depot",
+ "queryServices": [],
+ "ports": [],
+ "faultContracts": [],
+ "domainServices":
+ [{"name": "RefundService",
+   "module": "Refund",
+   "methods":
+   [{"ret": {"k": "nat"},
+     "params":
+     [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
+     "name": "quote",
+     "doc": "急ぎの返金の見積り（1 つ少ない）。 "},
+    {"ret": {"k": "nat"},
+     "params":
+     [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
+     "name": "quote",
+     "doc": "通常の返金の見積り（数量のまま）。 "}]}],
+ "diagnostics":
+ {"dropped":
+  [{"reason":
+    "Depot.Application.PlaceOrderUseCase.validate: lean2kotlin: Kotlin へ写像できない型定数です: Int",
+    "name": "Depot.Application.PlaceOrderUseCase.validate",
+    "kind": "signature"},
+   {"reason": "@[contract] は theorem に付ける",
+    "name": "Depot.Laws.zeroQuantity",
+    "kind": "contract"},
+   {"reason":
+    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
+    "name": "Depot.Application.StockUseCase.reorderPoint_zero",
+    "kind": "contract"},
+   {"reason":
+    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
+    "name": "Depot.Domain.Order.instantRefund_refunded",
+    "kind": "contract"},
+   {"reason":
+    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
+    "name": "Depot.Laws.count_le_succ",
+    "kind": "contract"},
+   {"reason":
+    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
+    "name": "Depot.Quantity.adjust_zero",
+    "kind": "contract"},
+   {"reason": "翻訳できない: サンプルを構築できない型: Nat → Nat",
+    "name": "Depot.Quantity.recount_count",
+    "kind": "contract"},
+   {"reason": "有効なケースを演繹できない(組合せ 14, 仮定が偽)",
+    "name": "Depot.Quantity.reserve_huge",
+    "kind": "contract"},
+   {"reason": "@[faultContract] は def に付ける",
+    "name": "Depot.Laws.quantity_refl",
+    "kind": "faultContract"},
+   {"reason": "翻訳できない: UseCase ディレクトリ在住ではありません: Depot.Laws.Nominations",
+    "name": "Depot.Laws.afterCrash",
+    "kind": "faultContract"}]},
+ "contracts":
+ [{"useCase": "Depot.Quantity",
+   "theorem": "reserve_short",
+   "target": "behaviors",
+   "method": "reserve",
+   "doc": "足りなければ断る。オラクルが名前の無い引数の構成子（outOfStock）を運ぶ。 ",
+   "cases":
+   [{"ok": {"error": {"outOfStock": {"a._@._internal._hyg.0": 5}}},
+     "kind": "pure",
+     "args": {"stock": 4, "q": {"count": 5}}},
+    {"ok": {"error": {"outOfStock": {"a._@._internal._hyg.0": 6}}},
+     "kind": "pure",
+     "args": {"stock": 4, "q": {"count": 6}}},
+    {"ok": {"error": {"outOfStock": {"a._@._internal._hyg.0": 6}}},
+     "kind": "pure",
+     "args": {"stock": 5, "q": {"count": 6}}},
+    {"ok": {"error": {"outOfStock": {"a._@._internal._hyg.0": 7}}},
+     "kind": "pure",
+     "args": {"stock": 4, "q": {"count": 7}}}]}],
+ "behaviors":
+ [{"subject": "Depot.Domain.Order",
+   "module": "Depot.Domain.Entity.Order",
+   "methods":
+   [{"ret": {"name": "Depot.Domain.Order", "k": "ref"},
+     "params":
+     [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
+     "name": "refund",
+     "doc": "返金する。 "}]},
+  {"subject": "Depot.Quantity",
+   "module": "Depot.Domain.ValueObject",
+   "methods":
+   [{"ret": {"name": "Depot.Quantity", "k": "ref"},
+     "params":
+     [{"type": {"name": "Depot.Quantity", "k": "ref"}, "name": "q"},
+      {"type": {"to": {"k": "nat"}, "k": "arrow", "from": {"k": "nat"}},
+       "name": "f"}],
+     "name": "recount",
+     "doc": "数え直す。関数の引数はサンプルを組めない。 "},
+    {"ret":
+     {"ok": {"name": "Depot.Quantity", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Depot.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Depot.Quantity", "k": "ref"}, "name": "q"},
+      {"type": {"k": "nat"}, "name": "stock"}],
+     "name": "reserve",
+     "doc": "在庫 stock から引き当てる。足りなければ要った数を運ぶ失敗。 "}]},
+  {"subject": "Depot.Sku",
+   "module": "Depot.Application.UseCase.PlaceOrderUseCase.Command",
+   "methods":
+   [{"ret": {"k": "string"},
+     "params":
+     [{"type": {"name": "Depot.Application.PlaceOrderUseCase.Sku", "k": "ref"},
+       "name": "s"}],
+     "name": "normalized",
+     "doc": "揃えた品番の文字列。 "}]}]}
