@@ -1200,7 +1200,7 @@ structure DeriveCtx where
   ruleDefs : Std.HashMap Name String
   /-- ふるまい・判断・射影の候補のうち署名で除いた def → 理由 -/
   sigFailures : Std.HashMap Name String
-  /-- ふるまいの候補のうち主対象の型を決められずに除いた def → 理由 -/
+  /-- ふるまいの候補のうち主対象の型を決められずに除いた def → 理由と直し方 -/
   subjectFailures : Std.HashMap Name String
   hasFunctionField : Name → Elab.TermElabM Bool
   valueBinders : Name → Elab.TermElabM (Array (Name × Expr))
@@ -2350,7 +2350,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         (ucNs.isPrefixOf m && (m.components.getLast! == `Command || m.components.getLast! == `Observation))
     -- 署名で除いたふるまい・判断・射影の候補 → 理由(主対象に触れない契約の診断が引く)
     let mut sigFailures : Std.HashMap Name String := {}
-    -- 主対象の型を決められずに除いたふるまいの候補 → 理由(同じ診断が引く。直すのは署名でなく def の置き場なので別に持つ)
+    -- 主対象の型を決められずに除いたふるまいの候補 → 理由と直し方(同じ診断が引く。直すのは署名でなく def の置き場か指名なので別に持つ)
     let mut subjectFailures : Std.HashMap Name String := {}
     let mut behaviorDefs : Std.HashMap Name Name := {}
     let mut behaviorByType : Std.HashMap Name (Array (Name × Json)) := {}
@@ -2365,7 +2365,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       if comps.length < 2 then continue
       let pLast := comps[comps.length - 2]!
       -- 主対象は親 namespace の型そのもの。型でなければ短い名前が同じ型が 1 つのときだけ —
-      -- UseCase ごとの型(Command・入力語彙・State)は同じ短い名前で並ぶので、2 つ以上なら決めない
+      -- UseCase ごとの型(Command・入力語彙・State)は同じ短い名前で並ぶので、2 つ以上なら決めない。
+      -- 決められない理由は直し方まで持つ(置き場を直すか指名を直すかが理由で分かれる)
+      let placeInType := "def を分類済みの型そのものの namespace に置く"
       let subject : Except String Name ← do
         if (roles.get? n.getPrefix).any behaviorSubjectRoles.contains then pure (.ok n.getPrefix)
         else
@@ -2373,12 +2375,17 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             if t.components.getLast! == pLast && behaviorSubjectRoles.contains ro then some t else none
           match cands with
           | [t] => pure (.ok t)
-          | [] => pure (.error s!"短い名前 {pLast} の分類済みの型が無い")
+          | [] =>
+            -- ここで名前空間の型に区分があれば主対象でない区分(error・clockPort・actorPort)— 分類済みの型が無いとは言わない
+            match roles.get? n.getPrefix with
+            | some r => pure (.error
+                s!"名前空間の型 {n.getPrefix} は区分 {r.str} でふるまいの主対象にならない — 指名を外すか、def をふるまいの主対象の型の namespace に置く")
+            | none => pure (.error s!"短い名前 {pLast} の分類済みの型が無い — {placeInType}")
           | _ =>
             let sorted := (cands.map toString).toArray.qsort (· < ·)
             let msg := s!"短い名前 {pLast} の型が複数({", ".intercalate sorted.toList})"
             logInfo m!"lean2kotlin: ふるまい {n} は主対象を決められないため除外: {msg}"
-            pure (.error msg)
+            pure (.error s!"{msg} — {placeInType}")
       let tyN ← match subject with
         | .ok t => pure t
         | .error msg =>
@@ -2649,8 +2656,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           nonUseCaseContracts := nonUseCaseContracts + 1
           droppedJs := droppedJs.push (dropped "contract" (toString thmName) (match sigFailure, subjectFailure with
             | some (fn, msg), _ => s!"主対象の候補 {fn} の署名を写像できない: {msg}"
-            | none, some (fn, msg) =>
-              s!"主対象の候補 {fn} は主対象の型を決められない: {msg} — def を分類済みの型そのものの namespace に置く"
+            | none, some (fn, msg) => s!"主対象の候補 {fn} は主対象の型を決められない: {msg}"
             | none, none => "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する"))
         | .noCases whys =>
           logInfo m!"lean2kotlin: 契約定理 {thmName}: 有効なケースを演繹できませんでした({whys.toList.eraseDups})"

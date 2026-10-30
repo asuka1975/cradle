@@ -53,4 +53,19 @@ def Sku.label (s : Sku) : String := s.code
 /-- 表示は品番そのもの。主対象の label が型を 1 つに決められずに除かれたあとの指名。 -/
 @[contract] theorem Sku.label_code (s : Sku) : Sku.label s = s.code := rfl
 
+/-- 注文の失敗。Entity に置いた *Error の帰納型は error 区分で、ふるまいの主対象にならない。 -/
+inductive OrderError where
+  | late
+  | lost
+deriving Repr, DecidableEq
+
+/-- 失敗の符号。名前空間の OrderError は分類済みだが、区分がふるまいの主対象でない。 -/
+def OrderError.code (e : OrderError) : Nat :=
+  match e with
+  | .late => 1
+  | .lost => 2
+
+/-- 遅れの符号は 1。主対象の code が区分で主対象の型から外れたあとの指名。 -/
+@[contract] theorem OrderError.code_late : OrderError.code .late = 1 := rfl
+
 end Depot.Domain

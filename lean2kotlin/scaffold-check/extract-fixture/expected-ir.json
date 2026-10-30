@@ -57,6 +57,12 @@
    "kotlin": "Order",
    "id": {"name": "Depot.OrderId", "k": "ref"},
    "doc": "注文。 "},
+  {"shape": {"kind": "enum", "ctors": ["late", "lost"]},
+   "role": "error",
+   "module": "Depot.Domain.Entity.Order",
+   "lean": "Depot.Domain.OrderError",
+   "kotlin": "OrderError",
+   "doc": "注文の失敗。Entity に置いた *Error の帰納型は error 区分で、ふるまいの主対象にならない。 "},
   {"shape":
    {"kind": "sealed",
     "ctors":
@@ -131,6 +137,10 @@
    {"reason":
     "主対象の候補 Depot.Domain.Order.channel の署名を写像できない: 未分類の型を参照(#[Depot.Domain.Channel])",
     "name": "Depot.Domain.Order.channel_refunded",
+    "kind": "contract"},
+   {"reason":
+    "主対象の候補 Depot.Domain.OrderError.code は主対象の型を決められない: 名前空間の型 Depot.Domain.OrderError は区分 error でふるまいの主対象にならない — 指名を外すか、def をふるまいの主対象の型の namespace に置く",
+    "name": "Depot.Domain.OrderError.code_late",
     "kind": "contract"},
    {"reason":
     "主対象の候補 Depot.Domain.Sku.label は主対象の型を決められない: 短い名前 Sku の型が複数(Depot.Application.PlaceOrderUseCase.Sku, Depot.Sku) — def を分類済みの型そのものの namespace に置く",
