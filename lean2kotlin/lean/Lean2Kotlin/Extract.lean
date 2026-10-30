@@ -269,6 +269,15 @@ def decapitalize (s : String) : String :=
 def auxiliaryLeafNames : List Name :=
   [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx, `ofNat]
 
+/-- 節の中のメソッドを葉名順に並べる。環境の走査順は import 全体の定数の数で変わるので IR に持ち込まない。
+    同じ葉名(DomainService のファイルが別の namespace に同じ葉を持つ)は宣言の完全名で決める。 -/
+def sortMethodsByName (ms : Array (Name × Json)) : Array Json :=
+  ms.qsort (fun (a, _) (b, _) =>
+      let la := toString (a.updatePrefix Name.anonymous)
+      let lb := toString (b.updatePrefix Name.anonymous)
+      la < lb || (la == lb && toString a < toString b))
+    |>.map (·.2)
+
 def isKotlinIdent (s : String) : Bool :=
   !s.isEmpty && s.front.isAlpha && s.all (fun c => c.isAlphanum || c == '_')
 
@@ -1313,8 +1322,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         (only : List Name := []) (stateResult : Bool := false)
         (anyLeaf : Bool := false) :
         Elab.TermElabM (Array Json × Array String) := do
-      let mut byMod : Std.HashMap Name (Array Json) := {}
-      let mut skipped : Array String := #[]
+      let mut byMod : Std.HashMap Name (Array (Name × Json)) := {}
+      let mut skipped : Array (Name × String) := #[]
       let isStateRef (j : Json) : Bool :=
         match j.getObjVal? "k", j.getObjVal? "name" with
         | .ok (.str "ref"), .ok (.str nm) =>
@@ -1413,14 +1422,14 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             | none => typeToIR rootNs reg retTy
           pure (some (params, ret))
         catch e =>
-          skipped := skipped.push s!"{n}: {← e.toMessageData.toString}"
+          skipped := skipped.push (n, s!"{n}: {← e.toMessageData.toString}")
           pure none
         if let some (params, ret) := sigResult then
           -- 署名が参照する型はすべて生成区分を持つこと(未分類参照ならスキップ明示)
           let refs := (params.map (·.type)).push ret |>.foldl (fun a t => collectRefs t a) #[]
           let missing := refs.filter (fun r => !roles.contains r)
           if !missing.isEmpty then
-            skipped := skipped.push s!"{n}: 未分類の型を参照({missing})"
+            skipped := skipped.push (n, s!"{n}: 未分類の型を参照({missing})")
             continue
           let methodJ := Json.mkObj [
             ("name", toString (n.updatePrefix Name.anonymous)),
@@ -1430,7 +1439,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           -- ファイル = サービス単位なので葉そのもの
           let dir := if anyLeaf then m.components.getLast!
             else m.components.dropLast.getLast!
-          byMod := byMod.insert dir ((byMod.get? dir |>.getD #[]).push methodJ)
+          byMod := byMod.insert dir ((byMod.get? dir |>.getD #[]).push (n, methodJ))
       let svcJs := byMod.toList.toArray.qsort (fun a b => toString a.1 < toString b.1)
         |>.map fun (dir, methods) =>
           let dirS := toString dir
@@ -1443,8 +1452,9 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             else if dirS.endsWith "UseCase" then (dirS.dropEnd "UseCase".length).toString ++ suffix
             else dirS ++ suffix
           Json.mkObj [("name", name), ("module", dirS),
-                      ("methods", Json.arr methods)]
-      return (svcJs, skipped)
+                      ("methods", Json.arr (sortMethodsByName methods))]
+      -- 除外も宣言名順(logInfo と diagnostics.dropped の並びを走査順に依らせない)。1 宣言 1 件なので順は一意
+      return (svcJs, skipped.qsort (fun a b => toString a.1 < toString b.1) |>.map (·.2))
     -- 参照系: 各 UseCase ディレクトリの QueryService(固定名 query)
     let (queryJs, qSkipped) ← extractServices ucNs `QueryService "QueryService"
       (only := [`query])
@@ -1502,7 +1512,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         m == appNs ++ `RepositoryState ||
         (ucNs.isPrefixOf m && (m.components.getLast! == `Command || m.components.getLast! == `Observation))
     let mut behaviorDefs : Std.HashMap Name Name := {}
-    let mut behaviorByType : Std.HashMap Name (Array Json) := {}
+    let mut behaviorByType : Std.HashMap Name (Array (Name × Json)) := {}
     let mut behaviorMods : Std.HashMap Name Name := {}
     for (n, ci) in env.constants.toList do
       unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
@@ -1556,7 +1566,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           ("doc", (← findDocString? env n).getD ""),
           ("params", Json.arr (params.map FieldIR.toJson)), ("ret", ret)]
         behaviorByType := behaviorByType.insert tyN
-          ((behaviorByType.get? tyN |>.getD #[]).push methodJ)
+          ((behaviorByType.get? tyN |>.getD #[]).push (n, methodJ))
         behaviorDefs := behaviorDefs.insert n tyN
         behaviorMods := behaviorMods.insert tyN m
     let behaviorsJs := behaviorByType.toList.toArray.qsort
@@ -1564,7 +1574,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       |>.map fun (tyN, methods) =>
         Json.mkObj [("subject", toString tyN),
           ("module", toString ((behaviorMods.get? tyN).getD Name.anonymous)),
-          ("methods", Json.arr methods)]
+          ("methods", Json.arr (sortMethodsByName methods))]
 
     -- 5. 判断関数(QueryService モジュールの query 以外)と
     -- 射影(Application/Projection — DDL テストのオラクル源)の走査。

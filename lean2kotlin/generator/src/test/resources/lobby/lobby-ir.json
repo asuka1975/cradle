@@ -50,20 +50,6 @@
    "module": "ConfirmPaymentUseCase",
    "methods":
    [{"ret":
-     {"ok": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-      "k": "result",
-      "err": {"name": "Lobby.DomainError", "k": "ref"}},
-     "params":
-     [{"type":
-       {"name": "Lobby.Application.ConfirmPaymentUseCase.Observation",
-        "k": "ref"},
-       "name": "o"},
-      {"type":
-       {"name": "Lobby.Application.ConfirmPaymentUseCase.State", "k": "ref"},
-       "name": "before"}],
-     "name": "validate",
-     "doc": "始まる前の拒否: 試みが無い（無関係な通知）/ まだ送っていない試みへの通知（無関係な結果）/ 確定した結果と矛盾する通知。 "},
-    {"ret":
      {"ok": {"k": "unit"},
       "k": "result",
       "err": {"name": "Lobby.DomainError", "k": "ref"}},
@@ -76,7 +62,21 @@
        {"name": "Lobby.Application.ConfirmPaymentUseCase.State", "k": "ref"},
        "name": "before"}],
      "name": "execute",
-     "doc": ""}],
+     "doc": ""},
+    {"ret":
+     {"ok": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type":
+       {"name": "Lobby.Application.ConfirmPaymentUseCase.Observation",
+        "k": "ref"},
+       "name": "o"},
+      {"type":
+       {"name": "Lobby.Application.ConfirmPaymentUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "validate",
+     "doc": "始まる前の拒否: 試みが無い（無関係な通知）/ まだ送っていない試みへの通知（無関係な結果）/ 確定した結果と矛盾する通知。 "}],
    "kind": "observation",
    "input": "Lobby.Application.ConfirmPaymentUseCase.Observation"},
   {"ports":
@@ -89,20 +89,6 @@
    "module": "DispatchPaymentUseCase",
    "methods":
    [{"ret":
-     {"ok": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-      "k": "result",
-      "err": {"name": "Lobby.DomainError", "k": "ref"}},
-     "params":
-     [{"type":
-       {"name": "Lobby.Application.DispatchPaymentUseCase.Observation",
-        "k": "ref"},
-       "name": "o"},
-      {"type":
-       {"name": "Lobby.Application.DispatchPaymentUseCase.State", "k": "ref"},
-       "name": "before"}],
-     "name": "validate",
-     "doc": "始まる前の拒否: 試みが無い（無関係な契機）/ 送れる状態でない（印つき・通知待ち・確定済み・結果不明からは送り直さない）。 "},
-    {"ret":
      {"ok": {"k": "unit"},
       "k": "result",
       "err": {"name": "Lobby.DomainError", "k": "ref"}},
@@ -119,7 +105,21 @@
        {"name": "Lobby.Application.DispatchPaymentUseCase.State", "k": "ref"},
        "name": "before"}],
      "name": "execute",
-     "doc": ""}],
+     "doc": ""},
+    {"ret":
+     {"ok": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type":
+       {"name": "Lobby.Application.DispatchPaymentUseCase.Observation",
+        "k": "ref"},
+       "name": "o"},
+      {"type":
+       {"name": "Lobby.Application.DispatchPaymentUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "validate",
+     "doc": "始まる前の拒否: 試みが無い（無関係な契機）/ 送れる状態でない（印つき・通知待ち・確定済み・結果不明からは送り直さない）。 "}],
    "kind": "observation",
    "input": "Lobby.Application.DispatchPaymentUseCase.Observation"},
   {"ports":
@@ -169,19 +169,6 @@
    "module": "LeaveUseCase",
    "methods":
    [{"ret":
-     {"ok": {"name": "Lobby.Domain.Visit", "k": "ref"},
-      "k": "result",
-      "err": {"name": "Lobby.DomainError", "k": "ref"}},
-     "params":
-     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
-       "name": "_actor"},
-      {"type": {"name": "Lobby.Application.LeaveUseCase.Command", "k": "ref"},
-       "name": "c"},
-      {"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
-       "name": "before"}],
-     "name": "validate",
-     "doc": "始まる前の拒否: 宛先が無い / もう退出している。 "},
-    {"ret":
      {"ok": {"k": "unit"},
       "k": "result",
       "err": {"name": "Lobby.DomainError", "k": "ref"}},
@@ -193,7 +180,20 @@
       {"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
        "name": "before"}],
      "name": "execute",
-     "doc": ""}],
+     "doc": ""},
+    {"ret":
+     {"ok": {"name": "Lobby.Domain.Visit", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Lobby.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Lobby.Application.ActorContext", "k": "ref"},
+       "name": "_actor"},
+      {"type": {"name": "Lobby.Application.LeaveUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "before"}],
+     "name": "validate",
+     "doc": "始まる前の拒否: 宛先が無い / もう退出している。 "}],
    "kind": "command",
    "input": "Lobby.Application.LeaveUseCase.Command"},
   {"name": "StartPaymentUseCase",
@@ -5143,33 +5143,10 @@
      [{"type":
        {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
        "name": "s"},
-      {"type": {"name": "Lobby.Runtime.PaymentAttemptId", "k": "ref"},
-       "name": "id"},
-      {"type":
-       {"to": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-        "k": "arrow",
-        "from": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"}},
-       "name": "f"}],
-     "name": "update",
-     "doc": "1 件を差し替える。同一性を変えない操作にのみ使う。**消す操作は無い**。 "},
-    {"ret":
-     {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
-     "params":
-     [{"type":
-       {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
-       "name": "s"},
       {"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
        "name": "a"}],
      "name": "add",
      "doc": "末尾に足す。受け付けるのは新鮮な同一性だけ。 "},
-    {"ret": {"k": "bool"},
-     "params":
-     [{"type":
-       {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
-       "name": "s"},
-      {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "visit"}],
-     "name": "hasOpenFor",
-     "doc": "その来訪に未確定の試み（送る前・通知待ち・結果不明）があるか。 "},
     {"ret":
      {"of": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"}, "k": "option"},
      "params":
@@ -5180,6 +5157,14 @@
        "name": "id"}],
      "name": "find?",
      "doc": ""},
+    {"ret": {"k": "bool"},
+     "params":
+     [{"type":
+       {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
+       "name": "s"},
+      {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "visit"}],
+     "name": "hasOpenFor",
+     "doc": "その来訪に未確定の試み（送る前・通知待ち・結果不明）があるか。 "},
     {"ret":
      {"of": {"name": "Lobby.Runtime.PaymentAttemptId", "k": "ref"},
       "k": "list"},
@@ -5188,22 +5173,44 @@
        {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
        "name": "s"}],
      "name": "ids",
-     "doc": ""}]},
+     "doc": ""},
+    {"ret":
+     {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
+     "params":
+     [{"type":
+       {"name": "Lobby.Application.PaymentAttemptRepositoryState", "k": "ref"},
+       "name": "s"},
+      {"type": {"name": "Lobby.Runtime.PaymentAttemptId", "k": "ref"},
+       "name": "id"},
+      {"type":
+       {"to": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+        "k": "arrow",
+        "from": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"}},
+       "name": "f"}],
+     "name": "update",
+     "doc": "1 件を差し替える。同一性を変えない操作にのみ使う。**消す操作は無い**。 "}]},
   {"subject": "Lobby.Application.VisitRepositoryState",
    "module": "Lobby.Application.RepositoryState",
    "methods":
-   [{"ret": {"k": "bool"},
+   [{"ret": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
      "params":
      [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
-       "name": "s"}],
-     "name": "vacant",
-     "doc": "受付中の来訪が無い（ひと組を受け入れられる）。 "},
+       "name": "s"},
+      {"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
+     "name": "add",
+     "doc": "末尾に足す。受け付けるのは新鮮な同一性と、ロビーが空いているときだけ。 "},
     {"ret": {"of": {"name": "Lobby.Domain.Visit", "k": "ref"}, "k": "option"},
      "params":
      [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
        "name": "s"},
       {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"}],
      "name": "find?",
+     "doc": ""},
+    {"ret": {"of": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "ids",
      "doc": ""},
     {"ret": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
      "params":
@@ -5217,48 +5224,27 @@
        "name": "f"}],
      "name": "update",
      "doc": "1 件を差し替える。同一性を変えず、受付中を増やさない操作にのみ使う。**消す操作は無い**。 "},
-    {"ret": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
-     "params":
-     [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
-       "name": "s"},
-      {"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
-     "name": "add",
-     "doc": "末尾に足す。受け付けるのは新鮮な同一性と、ロビーが空いているときだけ。 "},
-    {"ret": {"of": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "k": "list"},
+    {"ret": {"k": "bool"},
      "params":
      [{"type": {"name": "Lobby.Application.VisitRepositoryState", "k": "ref"},
        "name": "s"}],
-     "name": "ids",
-     "doc": ""}]},
+     "name": "vacant",
+     "doc": "受付中の来訪が無い（ひと組を受け入れられる）。 "}]},
   {"subject": "Lobby.Domain.PaymentAttempt",
    "module": "Lobby.Domain.Entity.PaymentAttempt",
    "methods":
-   [{"ret": {"k": "bool"},
-     "params":
-     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-       "name": "a"},
-      {"type": {"name": "Lobby.PaymentResult", "k": "ref"}, "name": "r"}],
-     "name": "settledAs",
-     "doc": "その確定結果で決着しているか（同じ結果の通知の重複の判定）。 "},
-    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-     "params":
-     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-       "name": "a"},
-      {"type": {"name": "Lobby.PaymentResult", "k": "ref"}, "name": "r"}],
-     "name": "settle",
-     "doc": "確定する。 "},
-    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+   [{"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
      "params":
      [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
        "name": "a"}],
      "name": "awaitConfirmation",
      "doc": "受け付けられ、確定の通知を待つ。 "},
-    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+    {"ret": {"k": "bool"},
      "params":
      [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
        "name": "a"}],
-     "name": "resetPending",
-     "doc": "提供元に届いていなかった: 送れる状態に戻す（同じ冪等キーで送り直す）。 "},
+     "name": "isInquirable",
+     "doc": "送っている途中（印つき）か、答えを失ったか、通知待ちか — 照会で確かめる状態。 "},
     {"ret": {"k": "bool"},
      "params":
      [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
@@ -5273,28 +5259,51 @@
      "doc": "送ったが答えを失った（送り直さず照会する）。 "},
     {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
      "params":
+     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+       "name": "a"}],
+     "name": "markSending",
+     "doc": "送る前に印を付ける: 試行番号を進め、送ったかどうか分からない状態（sending）にする（冪等キーは変えない）。 "},
+    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+       "name": "a"}],
+     "name": "resetPending",
+     "doc": "提供元に届いていなかった: 送れる状態に戻す（同じ冪等キーで送り直す）。 "},
+    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+       "name": "a"},
+      {"type": {"name": "Lobby.PaymentResult", "k": "ref"}, "name": "r"}],
+     "name": "settle",
+     "doc": "確定する。 "},
+    {"ret": {"k": "bool"},
+     "params":
+     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+       "name": "a"},
+      {"type": {"name": "Lobby.PaymentResult", "k": "ref"}, "name": "r"}],
+     "name": "settledAs",
+     "doc": "その確定結果で決着しているか（同じ結果の通知の重複の判定）。 "},
+    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
+     "params":
      [{"type": {"name": "Lobby.Runtime.PaymentAttemptId", "k": "ref"},
        "name": "id"},
       {"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "visit"},
       {"type": {"name": "Lobby.Money", "k": "ref"}, "name": "amount"}],
      "name": "start",
-     "doc": "始める: 送れる状態で保存する（まだ送っていない）。 "},
-    {"ret": {"k": "bool"},
-     "params":
-     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-       "name": "a"}],
-     "name": "isInquirable",
-     "doc": "送っている途中（印つき）か、答えを失ったか、通知待ちか — 照会で確かめる状態。 "},
-    {"ret": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-     "params":
-     [{"type": {"name": "Lobby.Domain.PaymentAttempt", "k": "ref"},
-       "name": "a"}],
-     "name": "markSending",
-     "doc": "送る前に印を付ける: 試行番号を進め、送ったかどうか分からない状態（sending）にする（冪等キーは変えない）。 "}]},
+     "doc": "始める: 送れる状態で保存する（まだ送っていない）。 "}]},
   {"subject": "Lobby.Domain.Visit",
    "module": "Lobby.Domain.Entity.Visit",
    "methods":
-   [{"ret": {"k": "bool"},
+   [{"ret": {"name": "Lobby.Domain.Visit", "k": "ref"},
+     "params":
+     [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
+      {"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"},
+       "name": "host"},
+      {"type": {"k": "string"}, "name": "hostName"},
+      {"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "visitor"}],
+     "name": "book",
+     "doc": "受け付ける（採番は呼び出し側の関心）。 "},
+    {"ret": {"k": "bool"},
      "params":
      [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
      "name": "isExpected",
@@ -5303,16 +5312,7 @@
      "params":
      [{"type": {"name": "Lobby.Domain.Visit", "k": "ref"}, "name": "v"}],
      "name": "leave",
-     "doc": "退出する。 "},
-    {"ret": {"name": "Lobby.Domain.Visit", "k": "ref"},
-     "params":
-     [{"type": {"name": "Lobby.Runtime.VisitId", "k": "ref"}, "name": "id"},
-      {"type": {"name": "Lobby.Runtime.EmployeeId", "k": "ref"},
-       "name": "host"},
-      {"type": {"k": "string"}, "name": "hostName"},
-      {"type": {"name": "Lobby.VisitorName", "k": "ref"}, "name": "visitor"}],
-     "name": "book",
-     "doc": "受け付ける（採番は呼び出し側の関心）。 "}]},
+     "doc": "退出する。 "}]},
   {"subject": "Lobby.VisitorName",
    "module": "Lobby.Domain.ValueObject",
    "methods":

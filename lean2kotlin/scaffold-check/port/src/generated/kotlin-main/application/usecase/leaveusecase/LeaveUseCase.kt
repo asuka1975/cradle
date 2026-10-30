@@ -16,6 +16,7 @@ import dev.cradle.lobby.domain.entity.Visit
  * 実装は AI が別ファイルに書く。default 禁止。
  */
 interface LeaveUseCase {
+	fun execute(c: LeaveCommand): DomainResult<DomainError, Unit>
 	/**
 	 * 始まる前の拒否: 宛先が無い / もう退出している。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
@@ -23,5 +24,4 @@ interface LeaveUseCase {
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。
 	 */
 	fun validate(c: LeaveCommand): DomainResult<DomainError, Visit>
-	fun execute(c: LeaveCommand): DomainResult<DomainError, Unit>
 }

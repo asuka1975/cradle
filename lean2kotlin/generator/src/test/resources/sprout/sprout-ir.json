@@ -37,20 +37,6 @@
    "module": "NotesUseCase",
    "methods":
    [{"ret":
-     {"ok": {"k": "unit"},
-      "k": "result",
-      "err": {"name": "Sprout.Application.QueryError", "k": "ref"}},
-     "params":
-     [{"type": {"name": "Sprout.Application.ActorContext", "k": "ref"},
-       "name": "_actor"},
-      {"type": {"name": "Sprout.Application.NotesUseCase.Query", "k": "ref"},
-       "name": "_q"},
-      {"type":
-       {"name": "Sprout.Application.NotesUseCase.ReadModel", "k": "ref"},
-       "name": "_rm"}],
-     "name": "validate",
-     "doc": "検証対象が無いので常に成功（型の形が表明）。 "},
-    {"ret":
      {"ok":
       {"of": {"name": "Sprout.Application.NoteView", "k": "ref"}, "k": "list"},
       "k": "result",
@@ -64,12 +50,40 @@
        {"name": "Sprout.Application.NotesUseCase.ReadModel", "k": "ref"},
        "name": "rm"}],
      "name": "execute",
-     "doc": ""}],
+     "doc": ""},
+    {"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Sprout.Application.QueryError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Sprout.Application.ActorContext", "k": "ref"},
+       "name": "_actor"},
+      {"type": {"name": "Sprout.Application.NotesUseCase.Query", "k": "ref"},
+       "name": "_q"},
+      {"type":
+       {"name": "Sprout.Application.NotesUseCase.ReadModel", "k": "ref"},
+       "name": "_rm"}],
+     "name": "validate",
+     "doc": "検証対象が無いので常に成功（型の形が表明）。 "}],
    "kind": "query"},
   {"name": "PostNoteUseCase",
    "module": "PostNoteUseCase",
    "methods":
    [{"ret":
+     {"ok": {"k": "unit"},
+      "k": "result",
+      "err": {"name": "Sprout.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Sprout.Application.ActorContext", "k": "ref"},
+       "name": "actor"},
+      {"type":
+       {"name": "Sprout.Application.PostNoteUseCase.Command", "k": "ref"},
+       "name": "c"},
+      {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
+       "name": "before"}],
+     "name": "execute",
+     "doc": "execute は validate を呼ぶ定義（入り口の一致は定義の系）。 "},
+    {"ret":
      {"ok":
       {"name": "Sprout.Application.PostNoteUseCase.FreeTitle", "k": "ref"},
       "k": "result",
@@ -83,21 +97,7 @@
       {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
        "name": "before"}],
      "name": "validate",
-     "doc": "始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題になれて空いている証拠を返す。 "},
-    {"ret":
-     {"ok": {"k": "unit"},
-      "k": "result",
-      "err": {"name": "Sprout.DomainError", "k": "ref"}},
-     "params":
-     [{"type": {"name": "Sprout.Application.ActorContext", "k": "ref"},
-       "name": "actor"},
-      {"type":
-       {"name": "Sprout.Application.PostNoteUseCase.Command", "k": "ref"},
-       "name": "c"},
-      {"type": {"name": "Sprout.Application.PostNoteUseCase.State", "k": "ref"},
-       "name": "before"}],
-     "name": "execute",
-     "doc": "execute は validate を呼ぶ定義（入り口の一致は定義の系）。 "}],
+     "doc": "始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題になれて空いている証拠を返す。 "}],
    "kind": "command",
    "input": "Sprout.Application.PostNoteUseCase.Command"}],
  "types":
@@ -1089,13 +1089,7 @@
  [{"subject": "Sprout.Application.NoteRepositoryState",
    "module": "Sprout.Application.RepositoryState",
    "methods":
-   [{"ret": {"of": {"name": "Sprout.Title", "k": "ref"}, "k": "list"},
-     "params":
-     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
-       "name": "s"}],
-     "name": "titles",
-     "doc": ""},
-    {"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
+   [{"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
        "name": "s"},
@@ -1109,6 +1103,18 @@
       {"type": {"name": "Sprout.Runtime.NoteId", "k": "ref"}, "name": "id"}],
      "name": "find?",
      "doc": ""},
+    {"ret": {"of": {"name": "Sprout.Runtime.NoteId", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "ids",
+     "doc": ""},
+    {"ret": {"of": {"name": "Sprout.Title", "k": "ref"}, "k": "list"},
+     "params":
+     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
+       "name": "s"}],
+     "name": "titles",
+     "doc": ""},
     {"ret": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
      "params":
      [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
@@ -1120,17 +1126,19 @@
         "from": {"name": "Sprout.Domain.Note", "k": "ref"}},
        "name": "f"}],
      "name": "update",
-     "doc": "1 件を差し替える（同一性も題も変えない操作にのみ使う）。**消す操作は無い**。 "},
-    {"ret": {"of": {"name": "Sprout.Runtime.NoteId", "k": "ref"}, "k": "list"},
-     "params":
-     [{"type": {"name": "Sprout.Application.NoteRepositoryState", "k": "ref"},
-       "name": "s"}],
-     "name": "ids",
-     "doc": ""}]},
+     "doc": "1 件を差し替える（同一性も題も変えない操作にのみ使う）。**消す操作は無い**。 "}]},
   {"subject": "Sprout.Domain.Note",
    "module": "Sprout.Domain.Entity.Note",
    "methods":
-   [{"ret": {"k": "bool"},
+   [{"ret":
+     {"ok": {"name": "Sprout.Domain.Note", "k": "ref"},
+      "k": "result",
+      "err": {"name": "Sprout.DomainError", "k": "ref"}},
+     "params":
+     [{"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
+     "name": "close",
+     "doc": "閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 "},
+    {"ret": {"k": "bool"},
      "params":
      [{"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
      "name": "isOpen",
@@ -1141,12 +1149,4 @@
       {"type": {"name": "Sprout.Runtime.UserId", "k": "ref"}, "name": "author"},
       {"type": {"name": "Sprout.Title", "k": "ref"}, "name": "title"}],
      "name": "post",
-     "doc": "書く（採番は呼び出し側の関心）。 "},
-    {"ret":
-     {"ok": {"name": "Sprout.Domain.Note", "k": "ref"},
-      "k": "result",
-      "err": {"name": "Sprout.DomainError", "k": "ref"}},
-     "params":
-     [{"type": {"name": "Sprout.Domain.Note", "k": "ref"}, "name": "n"}],
-     "name": "close",
-     "doc": "閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 "}]}]}
+     "doc": "書く（採番は呼び出し側の関心）。 "}]}]}

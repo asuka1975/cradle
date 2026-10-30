@@ -172,7 +172,7 @@ class KotlinizeTest {
 
 	@Test
 	fun `ふるまいは主体を取るものと主体を作るものに仕分けられる`() {
-		assertEquals(listOf("isOpen", "close"), k.instanceMethodsOf(td(note)).map { it.name })
+		assertEquals(listOf("close", "isOpen"), k.instanceMethodsOf(td(note)).map { it.name })
 		assertEquals(listOf("post"), k.factoryMethodsOf(td(note)).map { it.name })
 		assertTrue(k.instanceMethodsOf(td(title)).isEmpty())
 		assertEquals("id", k.idFieldName(td(note)))
