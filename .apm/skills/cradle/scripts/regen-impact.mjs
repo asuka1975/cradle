@@ -69,8 +69,8 @@ for (const c of changed) {
   }
 }
 
-// 参照元を探す手書き: src/main と src/test のうち生成ディレクトリの外
-const handFiles = [...walk(join(cfg.root, cfg.backend.dir, "src", "main"), { ext: [".kt"] }), ...walk(join(cfg.root, cfg.backend.dir, "src", "test"), { ext: [".kt"] })]
+// 参照元を探す手書き: src/main・src/test・src/adapterTest（Adapter の適合テストの具象クラス）のうち生成ディレクトリの外
+const handFiles = ["main", "test", "adapterTest"].flatMap(d => walk(join(cfg.root, cfg.backend.dir, "src", d), { ext: [".kt"] }))
   .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
 const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
 const impact = impactOf(symbols.values(), handTexts);

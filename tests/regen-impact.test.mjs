@@ -57,9 +57,11 @@ const files = {
 };
 const exposed = "backend/src/main/kotlin/p/infrastructure/ExposedNoteRepository.kt";
 const controller = "backend/src/main/kotlin/p/presentation/NoteController.kt";
+const adapterImpl = "backend/src/adapterTest/kotlin/p/DirectoryAdapterContractTestImpl.kt";
 const sym = (symbol, kind, file, referencedBy = []) => ({ symbol, kinds: [kind], generatedFiles: [file], referencedBy });
 // 追跡済みの差分（diff --name-status の順）の後に未追跡（ls-files --others の順）。シンボルは参照元の多い順、同数なら名前順。
-// src/adapterTest で配線した DirectoryAdapterContractTest は配線済み（status と同じく、Adapter の適合テストは src/adapterTest に探す）
+// src/adapterTest で配線した DirectoryAdapterContractTest は配線済み（status と同じく、Adapter の適合テストは src/adapterTest に探す）。
+// 参照元も src/adapterTest に探し、適合テストの具象クラスが参照する Directory と適合テストのシンボルを影響を受ける手書きに数える
 const expected = {
   changedGeneratedFiles: [
     { status: "D", path: files.legacy }, { status: "M", path: files.note }, { status: "M", path: files.repo }, { status: "M", path: files.contract },
@@ -68,11 +70,11 @@ const expected = {
   symbols: [
     sym("Note", "changed", files.note, [exposed, controller]),
     sym("NoteRepository.find", "changed", files.repo, [exposed, controller]),
+    sym("Directory", "added", files.port, [adapterImpl]),
+    sym("DirectoryAdapterContractTest", "added", files.adapterTest, [adapterImpl]),
+    sym("DirectoryAdapterContractTest.adapter", "added", files.adapterTest, [adapterImpl]),
     sym("NoteRepository.save", "removed", files.repo, [exposed]),
-    sym("Directory", "added", files.port),
     sym("Directory.find", "added", files.port),
-    sym("DirectoryAdapterContractTest", "added", files.adapterTest),
-    sym("DirectoryAdapterContractTest.adapter", "added", files.adapterTest),
     sym("Legacy", "removed", files.legacy),
     sym("NoteRepository.delete", "added", files.repo),
     sym("NoteRepositoryContractTest.clock", "added", files.contract),
@@ -81,18 +83,23 @@ const expected = {
   golden: null,
   restored: false,
 };
-const expectedText = [
+const diffText = [
   "# regen-impact — Example",
   "",
   "生成物の差分: 6 ファイル",
   `  D ${files.legacy}`, `  M ${files.note}`, `  M ${files.repo}`, `  M ${files.contract}`, `  A ${files.adapterTest}`, `  A ${files.port}`,
+].join("\n") + "\n";
+const expectedText = diffText + [
   "",
-  "影響を受ける手書きコード（変わった生成シンボルを参照している）: 3 シンボル",
+  "影響を受ける手書きコード（変わった生成シンボルを参照している）: 6 シンボル",
   "  Note [changed]", `      ${exposed}`, `      ${controller}`,
   "  NoteRepository.find [changed]", `      ${exposed}`, `      ${controller}`,
+  "  Directory [added]", `      ${adapterImpl}`,
+  "  DirectoryAdapterContractTest [added]", `      ${adapterImpl}`,
+  "  DirectoryAdapterContractTest.adapter [added]", `      ${adapterImpl}`,
   "  NoteRepository.save [removed]", `      ${exposed}`,
   "",
-  "参照元の無い生成シンボル（新規 interface など — これから実装するもの）: Directory, Directory.find, DirectoryAdapterContractTest, DirectoryAdapterContractTest.adapter, Legacy, NoteRepository.delete, NoteRepositoryContractTest.clock",
+  "参照元の無い生成シンボル（新規 interface など — これから実装するもの）: Directory.find, Legacy, NoteRepository.delete, NoteRepositoryContractTest.clock",
 ].join("\n") + "\n";
 // 既定の再生成を 1 度回した後の生成ディレクトリの git status --porcelain
 const dirtyLines = [
@@ -143,7 +150,36 @@ test("未配線の契約テストは status と同じ数え方: Adapter の適�
   assert.deepEqual(JSON.parse(json.stdout).unwiredContractTests, ["NoteRepositoryContractTest", "DirectoryAdapterContractTest"]);
   const text = run("--no-regen", "--no-golden");
   assert.equal(text.status, 0, text.stderr);
-  assert.equal(text.stdout, `${expectedText}\n未配線の契約テスト: NoteRepositoryContractTest, DirectoryAdapterContractTest\n`);
+  // 適合テストの具象クラスが無いので、Directory と適合テストのシンボルは参照元の無い側に出る
+  assert.equal(text.stdout, diffText + [
+    "",
+    "影響を受ける手書きコード（変わった生成シンボルを参照している）: 3 シンボル",
+    "  Note [changed]", `      ${exposed}`, `      ${controller}`,
+    "  NoteRepository.find [changed]", `      ${exposed}`, `      ${controller}`,
+    "  NoteRepository.save [removed]", `      ${exposed}`,
+    "",
+    "参照元の無い生成シンボル（新規 interface など — これから実装するもの）: Directory, Directory.find, DirectoryAdapterContractTest, DirectoryAdapterContractTest.adapter, Legacy, NoteRepository.delete, NoteRepositoryContractTest.clock",
+    "",
+    "未配線の契約テスト: NoteRepositoryContractTest, DirectoryAdapterContractTest",
+  ].join("\n") + "\n");
+});
+
+test("参照元は src/adapterTest の手書きにも探し、Adapter の適合テストの抽象メソッドの署名が変われば具象クラスを影響を受ける手書きコードに出す", (t) => {
+  const root = tempProject(t, "cradle-regen-adapter-", { project: "Example", backend: { regenerate: "cp -R ../regen/. src/generated/" } });
+  const contract = (params) => `${GEN}abstract class DirectoryAdapterContractTest {\n\tprotected abstract fun adapter(${params}): Directory\n}\n`;
+  writeTree(root, { [files.adapterTest]: contract(""), [adapterImpl]: hand[adapterImpl], [files.adapterTest.replace("backend/src/generated/", "regen/")]: contract("clock: Clock") });
+  commitAll(root);
+  const { run } = runner(root);
+  const json = run("--no-golden", "--json");
+  assert.equal(json.status, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).symbols, [sym("DirectoryAdapterContractTest.adapter", "changed", files.adapterTest, [adapterImpl])]);
+  const text = run("--no-regen", "--no-golden");
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(text.stdout, [
+    "# regen-impact — Example", "", "生成物の差分: 1 ファイル", `  M ${files.adapterTest}`,
+    "", "影響を受ける手書きコード（変わった生成シンボルを参照している）: 1 シンボル",
+    "  DirectoryAdapterContractTest.adapter [changed]", `      ${adapterImpl}`,
+  ].join("\n") + "\n");
 });
 
 test("再生成で消えた契約テストは配線の対象にせず、未配線と言わない（差分には D で出す）", (t) => {
