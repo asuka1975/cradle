@@ -37,7 +37,7 @@ export function reminder(result) {
   return result?.reason ?? result?.hookSpecificOutput?.additionalContext;
 }
 
-// Piでは未初期化のGitリポジトリでも検査するため、既存CLIの--allを利用する。
+// --diffはGitの外で2で止まり、runはそれを失敗として投げる。PiではGitに依らない既存CLIの--allで設定のディレクトリ全部を検査する（Claude/CodexのStopの差分とは範囲が違う）。
 export async function checkAll(root) {
   const result = await run("unslop-lint.mjs", ["--all", "--json"], root);
   return unslopErrorSummary(result?.findings ?? [], { lead: (n) => `unslop --all の検査対象にerrorが ${n} 件あります。終了前に修正してください。`, full: "cradle unslop --all" });
