@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test
  * Lean: @[contract] 契約定理から演繹された DispatchPaymentUseCase のパラメトリックテスト。
  * 契約は**状態遷移**を本物の Repository で検査する:
  * 作用前を add で播種 → execute / validate → 作用後を集約単位の観測
- * (findAll — 並びは保存順)で突き合わせる。repository() は
+ * (findAll — 並びは保存順)で突き合わせる。paymentAttemptRepository() は
  * **呼び出しごとに空のリポジトリ**を返すこと。採番は注入された
  * IdGenerator から消費順どおりに採番すること(泉の契約)。
  */

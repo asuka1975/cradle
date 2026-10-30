@@ -157,7 +157,7 @@ internal fun EmitTests.emitTransitionTheoremTest(
 		sb.append(" * Lean: @[contract] 契約定理から演繹された ${ucName} のパラメトリックテスト。\n")
 		sb.append(" * 契約は**状態遷移**を本物の Repository で検査する:\n")
 		sb.append(" * 作用前を add で播種 → execute / validate → 作用後を集約単位の観測\n")
-		sb.append(" * (findAll — 並びは保存順)で突き合わせる。repository() は\n")
+		sb.append(" * (findAll — 並びは保存順)で突き合わせる。${h.sortedParts.joinToString("・") { "${h.repoVar(it.root)}()" }} は\n")
 		sb.append(" * **呼び出しごとに空のリポジトリ**を返すこと。採番は注入された\n")
 		sb.append(" * IdGenerator から消費順どおりに採番すること(泉の契約)。\n")
 		sb.append(" */\n")
