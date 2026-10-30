@@ -2,9 +2,8 @@
 // フェーズは ctx（設定・読み方・フェーズをまたいで使う数）を受けて { name, state, facts, next } を返す。
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, goldenFlows, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
+import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, goldenFlows, productLine, readText, DDD_FILES, DDD_QUESTION_IDS, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
 
-const ids = "(?:HS|UX|MQ)-\\d+";
 const phase = (name, state, facts, next) => ({ name, state, facts, next });
 
 /** フェーズの並び（探索 → … → 本番投入）。各フェーズはちょうど 1 つの結果を返す。 */
@@ -15,14 +14,13 @@ export function collectStatus(cfg) {
   const R = (p) => join(cfg.root, p);
   const read = (p) => readText(R(p), null);
   const dddDir = cfg.documents.ddd;
+  const openRows = (f) => countStatusRows(read(`${dddDir}/${f}`), DDD_QUESTION_IDS[f], "open");
   const ctx = {
     cfg, R, read,
     // 閉じていない問いは探索とフロントエンドの両方が、出来事の数は探索と Lean（骨格のサンプルの次の一手）が使う（ファイルが無ければ 0）
     ddd: {
       events: countEvents(read(`${dddDir}/event-timeline.md`) ?? ""),
-      hsOpen: countStatusRows(read(`${dddDir}/hotspots.md`), ids, "open"),
-      uxOpen: countStatusRows(read(`${dddDir}/ux-review.md`), ids, "open"),
-      mqOpen: countStatusRows(read(`${dddDir}/model-review.md`), ids, "open"),
+      hsOpen: openRows("hotspots.md"), uxOpen: openRows("ux-review.md"), mqOpen: openRows("model-review.md"),
     },
     deploy: deployTable(read(`${cfg.documents.infraDesign}/README.md`)),
   };

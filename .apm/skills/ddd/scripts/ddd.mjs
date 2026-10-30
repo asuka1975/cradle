@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, leanGitStatus, sha256, readText, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, leanGitStatus, sha256, readText, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, DDD_QUESTION_IDS, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -127,12 +127,13 @@ switch (cmd) {
     const tl = read("event-timeline.md");
     const events = countEvents(tl);
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");
+    const { "hotspots.md": hsId, "ux-review.md": uxId, "model-review.md": mqId } = DDD_QUESTION_IDS;
     // 用語は表のデータ行。見出しと区切り行（Prettier の | --- | や揃えの |:---| も）は数えない
     const terms = tableRows(ul).length;
     console.log(JSON.stringify({
       product: productLine(cfg).value,
-      events, hotspots: { open: countStatusRows(hs, "HS-\\d+", "open"), resolved: countStatusRows(hs, "HS-\\d+", "resolved") },
-      ux: { open: countStatusRows(ux, "UX-\\d+", "open") }, mq: { open: countStatusRows(mq, "MQ-\\d+", "open") }, terms,
+      events, hotspots: { open: countStatusRows(hs, hsId, "open"), resolved: countStatusRows(hs, hsId, "resolved") },
+      ux: { open: countStatusRows(ux, uxId, "open") }, mq: { open: countStatusRows(mq, mqId, "open") }, terms,
       session: existsSync(marker), questionsPending: existsSync(qfile), namingPending: scaffold ? 0 : unlistedNames().length, scaffoldSample: scaffold,
     }, null, 2));
     break;

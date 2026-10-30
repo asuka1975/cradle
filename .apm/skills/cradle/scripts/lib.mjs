@@ -639,6 +639,9 @@ export function readText(path, fallback = "") { return existsSync(path) ? readFi
 /** 探索の 5 ファイル（documents/ddd）。status と ddd start は欠けているものをこの順で出す。 */
 export const DDD_FILES = Object.freeze(["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"]);
 
+/** 問いの台帳ごとの ID（countStatusRows の idRe）。台帳は自分の接頭辞の行だけを数える — hotspots.md に書いた MQ の行を HS の問いにしない（status と ddd status が同じ数を出す）。 */
+export const DDD_QUESTION_IDS = Object.freeze({ "hotspots.md": "HS-\\d+", "ux-review.md": "UX-\\d+", "model-review.md": "MQ-\\d+" });
+
 /** 出来事の行の数: 行頭の `|` の直後のセルが番号（`12`・`3.1`・`4a`）の行。ファイルのどの表の行も数える。 */
 export function countEvents(text) { return (text.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length; }
 

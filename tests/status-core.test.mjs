@@ -1,7 +1,8 @@
 // status の中身（status-core.mjs）の単体テスト。プロセスを起こさず、集めた事実・文章の行・バックエンドの数え方を直に見る。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tempProject, writeTree } from "./helpers.mjs";
+import { fileURLToPath } from "node:url";
+import { tempProject, writeTree, cleanEnv, runNode } from "./helpers.mjs";
 import { loadConfig } from "../.apm/skills/cradle/scripts/lib.mjs";
 import { collectStatus, renderStatus, generatedPorts, adaptedPorts } from "../.apm/skills/cradle/scripts/status-core.mjs";
 
@@ -39,6 +40,22 @@ test("collectStatus は閉じていない HS / MQ を探索とフロントエン
   assert.ok(byName["インフラ実装"].facts.includes("投入表 local: 未"));
   assert.deepEqual([byName["本番投入"].state, byName["本番投入"].facts, byName["本番投入"].next], ["投入済", ["投入表 prod: 済（2026-10-01）"], "—"]);
   assert.equal(s.aiNotes, 1);
+});
+
+test("閉じていない問いは台帳ごとに自分の接頭辞の行だけを数え（hotspots.md の MQ の行を HS にしない）、ddd status と同じ数を出す", (t) => {
+  const cfg = setup(t, {
+    "documents/ddd/hotspots.md": "| HS-001 | x | open |\n| MQ-001 | y | open |\n",
+    "documents/ddd/model-review.md": "| HS-002 | z | open |\n",
+    "documents/ddd/ux-review.md": "| MQ-003 | w | open |\n| HS-004 | v | open |\n",
+  });
+  const byName = Object.fromEntries(collectStatus(cfg).phases.map(p => [p.name, p]));
+  assert.ok(byName["探索 (DDD)"].facts.includes("open: HS 1 / UX 0 / MQ 0"), byName["探索 (DDD)"].facts.join(" / "));
+  assert.equal(byName["探索 (DDD)"].next, "ddd スキルで open の HS 1 件を掘る");
+  assert.deepEqual(byName["フロントエンド"].facts, ["open の HS 1 / MQ 0（業務の流れを止めている問いがあれば先に閉じる）"]);
+  const ddd = runNode(fileURLToPath(new URL("../.apm/skills/ddd/scripts/ddd.mjs", import.meta.url)), ["status"], { cwd: cfg.root, env: cleanEnv() });
+  assert.equal(ddd.status, 0, ddd.stderr);
+  const j = JSON.parse(ddd.stdout);
+  assert.deepEqual([j.hotspots.open, j.ux.open, j.mq.open], [1, 0, 0]);
 });
 
 test("backend.generated・frontend.generated に文字列 1 つを書いても、その置き場の生成物を数える", (t) => {
