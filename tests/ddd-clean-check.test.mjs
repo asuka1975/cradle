@@ -91,6 +91,22 @@ test("ベースライン無しの ddd-clean-check は lake build が書いた le
   assert.deepEqual(JSON.parse(ng.stdout).problems.map(p => p.split("\n").slice(1)), [[" M lean/Example/Runtime/Command.lean"]]);
 });
 
+test("ベースライン無しの ddd-clean-check は利用者の git 設定（status.branch・color.ui=always・status.showUntrackedFiles=no）に左右されず、HEAD との差分の行だけを出す", (t) => {
+  const { root, lean } = fixture(t);
+  const config = { "status.branch": "true", "color.ui": "always", "status.showUntrackedFiles": "no" };
+  const env = cleanEnv(Object.assign({ GIT_CONFIG_COUNT: String(Object.keys(config).length) },
+    ...Object.entries(config).map(([k, v], i) => ({ [`GIT_CONFIG_KEY_${i}`]: k, [`GIT_CONFIG_VALUE_${i}`]: v }))));
+  const run = (...args) => runNode(check, args, { cwd: root, env });
+  const ok = run();
+  assert.equal(ok.status, 0, ok.stdout);
+  assert.equal(ok.stdout, "OK 後片付け済み\n");
+  writeFileSync(lean("Example/Runtime/Command.lean"), COMMAND + "  | bar\n");
+  writeFileSync(lean("Example/Extra.lean"), "def x := 1\n");
+  const ng = run("--json");
+  assert.equal(ng.status, 1);
+  assert.deepEqual(JSON.parse(ng.stdout).problems.map(p => p.split("\n").slice(1)), [[" M lean/Example/Runtime/Command.lean", "?? lean/Example/Extra.lean"]]);
+});
+
 test("印が残ったままの start は止まり、最初の記録が残る", (t) => {
   const { run, lean, marker } = fixture(t);
   assert.equal(run(ddd, "start").status, 0);

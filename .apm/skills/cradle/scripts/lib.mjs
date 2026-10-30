@@ -204,6 +204,12 @@ export function leanSnapshot(cfg) {
   return out;
 }
 
+/** lean/ の HEAD との差分（git status --porcelain の行。パスはリポジトリのルートから）。--short と違って status.branch の ## 行も色も付かず、
+    未追跡（残ったプローブ）は status.showUntrackedFiles に依らず出す。lake-manifest.json は lake build が書くので leanSnapshot と同じく数えない。git の外・git が無ければ投げる。 */
+export function leanGitStatus(cfg) {
+  return git(cfg.root, ["status", "--porcelain", "--untracked-files=normal", "--", cfg.lean.dir, `:(exclude)${cfg.lean.dir}/lake-manifest.json`]);
+}
+
 /** 素朴な glob → 正規表現（**, *, ? だけ）。 */
 export function globToRegExp(glob) {
   const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&")
