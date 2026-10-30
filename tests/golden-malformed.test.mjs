@@ -1,6 +1,6 @@
 // 読めない golden（壊れた -flow.json / -init.json と、JSON としては読めても形の違う -flow.json）: status は E2E のフェーズにそれを出して後のフェーズも出し、
 // flows-from-golden は既定の出力でも --check（門）でもファイル名つきの 1 行で 1 で終わる。
-// golden-check は形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と sidecar
+// golden-check は形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script / 手の interactions が配列でない・手と往復がオブジェクトでない）と sidecar
 // （init / flow のリクエストが無い・オブジェクトでない、external の flow.inputs が配列でない・手がオブジェクトでない）をファイル名つきの error の行にして再生せず、
 // 残りの golden の行も出す（--manifest でも、golden-check を呼ぶ regen-impact でも stack trace にしない）。
 import test from "node:test";
@@ -188,6 +188,31 @@ test("golden-check は ok がオブジェクトでない・ok.env.script が配�
     assert.deepEqual(JSON.parse(json.stdout), { failed: 1, report: [{ name: "a", kind, status: "error", reason }, okSkipped] }, label);
     const text = run(goldenCheck, "--build", "never");
     assert.equal(text.status, 1, label + "\n" + text.stderr);
+    assert.equal(text.stderr, "", label);
+    assert.ok(text.stdout.startsWith(`error    a-${kind}: ${reason}\nskipped  ok: ${okSkipped.reason}\n\n0 ok, 1 changed/error, 1 skipped\n`), label + "\n" + text.stdout);
+  }
+});
+
+// 外部能力の往復の形が違う golden（ok.env.script の要素・手の interactions が配列でない・その要素がオブジェクトでない）も同じ:
+// `undefined.undefined が Lean の Port に無い` と言わず、null の要素も黙って落とさず、ファイル名つきの error の行にして再生しない
+const flowWith = (interactions) => JSON.stringify({ ok: { trace: [{ actor: alice, command: { postNote: { title: "a" } }, state: {}, views: { notes: [] }, interactions }] } });
+const portCallShapes = [
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: [5] } } }), "a-flow.json": flow }, "init", "a-init.json の ok.env.script の 1 番目がオブジェクトではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: [{ port: "Clock", operation: "now" }, null] } } }), "a-flow.json": flow }, "init", "a-init.json の ok.env.script の 2 番目がオブジェクトではない"],
+  [{ "a-init.json": init, "a-flow.json": flowWith(5) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions が配列ではない"],
+  [{ "a-init.json": init, "a-flow.json": flowWith({ port: "Clock", operation: "now" }) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions が配列ではない"],
+  [{ "a-init.json": init, "a-flow.json": flowWith(["abc"]) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions の 1 番目がオブジェクトではない"],
+];
+
+test("golden-check は外部能力の往復の形が違う golden をファイル名つきの error の行にし、stack trace を出さずに残りの golden も出す", (t) => {
+  for (const [golden, kind, reason] of portCallShapes) {
+    const label = JSON.stringify(golden);
+    const { run } = fixture(t, { ...golden, "a.request.json": externalSidecar });
+    const json = run(goldenCheck, "--json", "--build", "never");
+    assert.equal(json.status, 1, label + "\n" + json.stderr);
+    assert.equal(json.stderr, "", label);
+    assert.deepEqual(JSON.parse(json.stdout), { failed: 1, report: [{ name: "a", kind, status: "error", reason }, okSkipped] }, label);
+    const text = run(goldenCheck, "--build", "never");
     assert.equal(text.stderr, "", label);
     assert.ok(text.stdout.startsWith(`error    a-${kind}: ${reason}\nskipped  ok: ${okSkipped.reason}\n\n0 ok, 1 changed/error, 1 skipped\n`), label + "\n" + text.stdout);
   }

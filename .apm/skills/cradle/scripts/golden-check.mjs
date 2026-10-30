@@ -18,7 +18,7 @@
 // — flow は連続する step の定義そのものなので、ずれれば実行器の不整合。
 // 応答に現れる外部能力の往復（init の env の script・trace の interactions の port / operation）は Lean の Port の一覧
 // （Application/Port/<Port>/<操作>.lean、Domain/Port も同じ）に要り、無ければ error。
-// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と sidecar（init / flow のリクエストが無い・オブジェクトでない・
+// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script / 手の interactions が配列でない・手と往復がオブジェクトでない）と sidecar（init / flow のリクエストが無い・オブジェクトでない・
 // flow.inputs が配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない。
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
@@ -56,20 +56,25 @@ function manifestRequests(name, flow) {
 const isOk = (res) => !!res && typeof res === "object" && "ok" in res;
 const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** 保存した ok の応答に現れる外部能力の往復（init は env の script、flow は trace の interactions）。ok がオブジェクトでない・init の ok.env.script が
-    配列でなければファイル名を添えて投げ、flow の trace の形は readGoldenTrace が status の事実と同じ理由で投げる。
+/** 保存した ok の応答に現れる外部能力の往復（init は env の script、flow は trace の interactions）。ok がオブジェクトでない・
+    init の ok.env.script と flow の手の interactions が配列でない・その要素がオブジェクトでなければファイル名を添えて投げ
+    （port も operation も無い要素を `undefined.undefined が Port に無い` と言わず、null を黙って落とさない）、flow の trace の形は readGoldenTrace が status の事実と同じ理由で投げる。
     CLI の応答（再生・連鎖）は isOk だけで判定する — 形を締めるのは保存した golden だけ。 */
 function storedPortCalls(kind, name, top) {
   const file = `${name}-${kind}.json`;
   if (!isObject(top.ok)) throw new Error(`${file} の ok がオブジェクトではない`);
-  if (kind === "flow") return readGoldenTrace(goldenDir, file).flatMap(t => t.interactions ?? []);
-  const script = top.ok.env?.script ?? [];
-  if (!Array.isArray(script)) throw new Error(`${file} の ok.env.script が配列ではない`);
-  return script;
+  const calls = (list, where) => {
+    if (!Array.isArray(list)) throw new Error(`${file} の ${where} が配列ではない`);
+    const bad = list.findIndex(c => !isObject(c));
+    if (bad >= 0) throw new Error(`${file} の ${where} の ${bad + 1} 番目がオブジェクトではない`);
+    return list;
+  };
+  if (kind === "flow") return readGoldenTrace(goldenDir, file).flatMap((t, i) => calls(t.interactions ?? [], `ok.trace の ${i + 1} 手目の interactions`));
+  return calls(top.ok.env?.script ?? [], "ok.env.script");
 }
 
 /** 外部能力の往復のうち Lean の Port に無いもの（"<Port>.<operation>"、重複無し）。 */
-const unknownPortCalls = (calls) => [...new Set(calls.filter(c => c && !hasPortOperation(portList, c.port, c.operation)).map(c => `${c.port}.${c.operation}`))];
+const unknownPortCalls = (calls) => [...new Set(calls.filter(c => !hasPortOperation(portList, c.port, c.operation)).map(c => `${c.port}.${c.operation}`))];
 
 const CHAIN_KEYS = ["result", "state", "views", "env", "interactions", "domainError", "faultContract"];
 const pickFields = (src, keys) => Object.fromEntries(keys.filter(k => src?.[k] !== undefined).map(k => [k, src[k]]));
