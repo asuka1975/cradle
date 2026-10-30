@@ -27,7 +27,10 @@ if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
 if (target === true) { console.error("--dir <path> が要ります（骨格を敷くディレクトリ）"); process.exit(1); }
 if (only === true) { console.error("--only <prefix> が要ります（例: lean/mockup）"); process.exit(1); }
-if (backendPkg && backendPkg !== true && !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(backendPkg)) { console.error("--backend は Java のパッケージ名（例: com.example.notes）"); process.exit(1); }
+if (backendPkg === true) { console.error("--backend <package> が要ります（例: com.example.notes）"); process.exit(1); }
+if (backendPkg && !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(backendPkg)) { console.error("--backend は Java のパッケージ名（例: com.example.notes）"); process.exit(1); }
+// parseArgs は --force=false も文字列として残すので、付けたことにすると手で書いた内容を上書きする。値を付けた形は受けない
+for (const k of ["force", "dry-run"]) if (typeof opts[k] === "string") { console.error(`--${k} は値を取りません（--${k}=${opts[k]}）`); process.exit(1); }
 // import.meta の dirname は Node 20.11 から。要件の Node 20 のどの版でも動くよう URL から引く
 const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
@@ -78,7 +81,7 @@ for (const f of walk(join(assets, "lean"))) {
   put(join("lean", rel), rename(text), { exec: f.endsWith(".mjs") });
 }
 
-if (backendPkg && backendPkg !== true) {
+if (backendPkg) {
   for (const f of walk(join(assets, "backend"))) {
     const relPath = relative(join(assets, "backend"), f);
     put(join("backend", relPath), rename(readFileSync(f, "utf8")).replace(/__PACKAGE__/g, backendPkg));

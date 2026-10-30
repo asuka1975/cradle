@@ -38,3 +38,23 @@ test("init は値の無い --dir と --only を何も書かずに 1 で止め、
   assert.deepEqual([only.status, only.stdout, only.stderr], [1, "", "--only <prefix> が要ります（例: lean/mockup）\n"]);
   assert.deepEqual(readdirSync(cwd), []);
 });
+
+test("init は値を付けた --force / --dry-run（--force=false など）と値の無い --backend を何も書かずに 1 で止め、手で書いた内容を上書きしない", (t) => {
+  const env = cleanEnv();
+  const root = tempDir(t, "cradle-init-flagval-");
+  const full = runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env });
+  assert.equal(full.status, 0, full.stderr);
+  const hotspots = join(root, "documents/ddd/hotspots.md");
+  writeFileSync(hotspots, "# 書き込んだ HS\n");
+  for (const [flag, line] of [["--force=false", "--force は値を取りません（--force=false）\n"], ["--force=true", "--force は値を取りません（--force=true）\n"], ["--dry-run=x", "--dry-run は値を取りません（--dry-run=x）\n"]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", root, "--only", "documents/ddd/hotspots.md", flag], { cwd: root, env });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", line], flag);
+    assert.equal(readFileSync(hotspots, "utf8"), "# 書き込んだ HS\n", flag);
+  }
+  const cwd = tempDir(t, "cradle-init-nobackend-");
+  for (const args of [["--backend"], ["--backend", "--dry-run"]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", cwd, ...args], { cwd, env });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "--backend <package> が要ります（例: com.example.notes）\n"], args.join(" "));
+  }
+  assert.deepEqual(readdirSync(cwd), []);
+});
