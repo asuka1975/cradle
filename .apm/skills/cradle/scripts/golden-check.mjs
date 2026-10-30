@@ -18,8 +18,8 @@
 // — flow は連続する step の定義そのものなので、ずれれば実行器の不整合。
 // 応答に現れる外部能力の往復（init の env の script・trace の interactions の port / operation）は Lean の Port の一覧
 // （Application/Port/<Port>/<操作>.lean、Domain/Port も同じ）に要り、無ければ error。
-// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と sidecar（flow.inputs が配列でない・手がオブジェクトでない）は
-// ファイル名つきの error にして再生しない。
+// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）と sidecar（init / flow のリクエストが無い・オブジェクトでない・
+// flow.inputs が配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない。
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -156,7 +156,10 @@ for (const name of wanted) {
   const replayed = {};
   for (const kind of ["init", "flow"]) {
     const file = join(goldenDir, `${name}-${kind}.json`);
-    if (!existsSync(file) || !reqs[kind]) continue;
+    if (!existsSync(file)) continue;
+    // 片方のリクエストが無い・オブジェクトでない sidecar は、その片方を黙って飛ばさず error にする — 飛ばすと保存した応答を見ないまま通る
+    // （callLean は文字列を JSON の文としてそのまま渡す）。manifest からの復元は 2 本とも組む
+    if (!isObject(reqs[kind])) { error(name, reqs[kind] == null ? `${name}.request.json に ${kind} のリクエストが無い` : `${name}.request.json の ${kind} がオブジェクトではない`, kind); continue; }
     const expected = stored[kind];
     let actual;
     try { actual = await callLean(cfg, reqs[kind], { build }); }
