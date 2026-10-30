@@ -47,7 +47,7 @@ class EmitTests(
 		"${ident(p.name)} = ${render(p.type, j)}"
 	}
 
-	/** 実体化フック(fixture → 実装)の宣言。noun は KDoc の「実装の…を返す」に入る語。 */
+	/** 実体化フック(fixture → 実装)の宣言。noun は KDoc の「実装の…を返す」に入る語(英字の語は前後の空白ごと渡す)。 */
 	internal fun appendMaterializerHooks(sb: StringBuilder, mats: Map<String, IrTypeDef>, noun: String = "値") {
 		for ((_, e) in mats) {
 			sb.append("\t/** fixture の実体化(観測が一致する実装の${noun}を返す)。 */\n")

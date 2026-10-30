@@ -53,7 +53,7 @@ internal fun EmitTests.synthesizeArg(t: IrType, state: JsonObject): String? = wh
 					"計算する読み取りモデルは golden の状態から合成できません(読み取りの回帰は Lean の golden-check と E2E が担う)")
 			return null
 		}
-		"listOf<${td.kotlin}>(${arr.joinToString(", ") { k.refLiteral(td, it) }})"
+		"listOf<${k.name(td.lean)}>(${arr.joinToString(", ") { k.refLiteral(td, it) }})"
 	}
 	is IrType.Ref -> {
 		val td = ir.typeDef(t.lean)

@@ -81,11 +81,7 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 		sb.append(" * (fixture → 実装の Entity)で作り、返り値は観測(toFixture)で比較する。\n")
 		sb.append(" */\n")
 		sb.append("abstract class ${td.kotlin}EntityContractTest {\n")
-		for ((_, e) in mats) {
-			sb.append("\t/** fixture の実体化(観測が一致する実装の Entity を返す)。 */\n")
-			sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
-				"fixture: ${e.kotlin}Fixture): ${k.name(e.lean)}\n")
-		}
+		appendMaterializerHooks(sb, mats, noun = " Entity ")
 		if (needsFactory) {
 			sb.append("\t/** ファクトリの実装を返す。 */\n")
 			sb.append("\tprotected abstract fun factory(): ${td.kotlin}Factory\n")
