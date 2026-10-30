@@ -80,3 +80,26 @@ test("wiredCount は `: <名前>(` で継承されている抽象テストの数
   assert.equal(wiredCount(text, ["BookRepositoryContractTest", "LoanContractTest", "OtherContractTest", "MissingContractTest"]), 2);
   assert.equal(wiredCount("", ["A"]), 0);
 });
+
+test("画面の口は leanVocabulary と同じ読み方で数え、改行コード・字下げの幅・deriving の有無・コメントの中の `名前:` に依らない", (t) => {
+  const views = (body) => `namespace Example.Runtime\n\n/-- 画面の束。 -/\n${body}\nend Example.Runtime\n`;
+  const lf = "structure Views where\n  /-- メモの一覧。 -/\n  notes : List Nat\nderiving Repr, DecidableEq\n";
+  const cases = [
+    ["骨格と同じ形", views(lf), 1],
+    ["CRLF", views(lf).replace(/\n/g, "\r\n"), 1],
+    ["deriving が無い", views("structure Views where\n  notes : List Nat\n  loans : List Nat\n\ndef views : Nat := 0\n"), 2],
+    ["字下げが 4 つ", views("structure Views where\n    notes : List Nat\n  deriving Repr\n"), 1],
+    ["docstring の中の `名前:`", views("structure Views where\n  /-- メモの一覧。\n  memo: 書いた本人だけが閉じられる -/\n  notes : List Nat\n  loans : List Nat\n  deriving Repr\n"), 2],
+    ["deriving が無く後の structure に deriving がある", views("structure Views where\n  notes : List Nat\n\nstructure Other where\n  a : Nat\n  b : Nat\n  deriving Repr\n"), 1],
+  ];
+  const base = { "lean/Example/Domain/Note.lean": "namespace Example\nend Example\n", "lean/.lake/build/bin/example": "" };
+  for (const [label, text, n] of cases) {
+    const lean = collectStatus(setup(t, { ...base, "lean/Example/Runtime/Views.lean": text })).phases.find(p => p.name === "Lean 実行可能仕様");
+    assert.ok(lean.facts.includes(`画面の口（Views）${n} 個`), `${label}: ${lean.facts.join(" / ")}`);
+    assert.equal(lean.next, "domain-mockup スキルで仕様アニメーションを作る", label);
+  }
+  // Views.lean が無ければ 0 個で、口を足すのが次の一手
+  const none = collectStatus(setup(t, base)).phases.find(p => p.name === "Lean 実行可能仕様");
+  assert.ok(none.facts.includes("画面の口（Views）0 個"), none.facts.join(" / "));
+  assert.match(none.next, /一覧の口を Views に足す/);
+});

@@ -2,7 +2,7 @@
 // フェーズは ctx（設定・読み方・フェーズをまたいで使う数）を受けて { name, state, facts, next } を返す。
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines } from "./lib.mjs";
+import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary } from "./lib.mjs";
 
 const ids = "(?:HS|UX|MQ)-\\d+";
 const phase = (name, state, facts, next) => ({ name, state, facts, next });
@@ -69,6 +69,10 @@ function infraDesign({ cfg, R }) {
     open.length ? `未決 INFRA-Q ${open.length} 件をユーザー判断で閉じる（状況列に 決着。INFRA-D-nnn）` : "—");
 }
 
+/** 画面の口の数: Runtime/Views.lean の structure Views のフィールド。unslop と ddd の命名の確かめ（leanVocabulary）と同じ読み方で、
+    コメントの中の `名前:` を数えず、改行コード・字下げの幅・deriving の有無に依らない（無ければ 0）。 */
+const viewOutlets = (cfg) => leanVocabulary(cfg).filter(v => v.kind === "画面の口").length;
+
 // 3. Lean モデル
 function leanModel({ cfg, R, ddd: { events } }) {
   if (!existsSync(cfg.lean.modelDir)) return phase("Lean 実行可能仕様", "未着手", [`${cfg.lean.dir}/${cfg.lean.root}/ が無い`], "lean-domain-model スキルで初回生成");
@@ -81,10 +85,8 @@ function leanModel({ cfg, R, ddd: { events } }) {
   const goldens = existsSync(goldenDir) ? goldenFlowFiles(goldenDir).length : 0;
   const bin = existsSync(cfg.lean.bin);
   const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
-  // 画面の口: Runtime/Views.lean の structure Views のフィールド数。UI が汎用のまま = index.html が骨格と同一
-  const viewsFile = join(cfg.lean.modelDir, "Runtime", "Views.lean");
-  const viewsBody = existsSync(viewsFile) ? (readFileSync(viewsFile, "utf8").match(/^structure Views where\n([\s\S]*?)^\s*deriving/m)?.[1] ?? "") : "";
-  const outlets = viewsBody.split("\n").filter(l => /^\s{2}[A-Za-z_]\w*\s*:/.test(l)).length;
+  const outlets = viewOutlets(cfg);
+  // UI が汎用のまま = index.html が骨格と同一
   const uiFile = R(`${cfg.lean.mockup}/public/index.html`);
   // 骨格の注記が残っていれば汎用のまま（作り込みは注記をこの画面の一文に置き換える — domain-mockup スキル）
   const genericUi = existsSync(uiFile) && readFileSync(uiFile, "utf8").includes("Cradle 標準の汎用モックアップ");
