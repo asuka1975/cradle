@@ -236,6 +236,18 @@ def shapeOf (rootNs : Name) (reg : MonoReg) (head : Name) (targs : Array Expr) :
         ("ctors", Json.arr (ctors.map fun (name, fields) =>
           Json.mkObj [("name", name), ("fields", Json.arr (fields.map FieldIR.toJson))]))]
 
+/-- UseCase 層のモジュール `<Root>.Application.UseCase.<X>UseCase.<葉>` の UseCase ディレクトリ `<X>UseCase`
+    (モジュールの親)。 -/
+def ucDir (m : Name) : Name := m.components.dropLast.getLast!
+
+/-- 末尾の `UseCase` を落とす(`PostNoteUseCase` → `PostNote`)。UseCase で終わらなければそのまま。 -/
+def stripUseCase (s : String) : String :=
+  if s.endsWith "UseCase" then (s.dropEnd "UseCase".length).toString else s
+
+/-- interface 名: UseCase ディレクトリ `<X>UseCase` は `<X>` + suffix(`PostNoteUseCase` → `PostNoteRules`)、
+    それ以外(DomainService のファイル名)は名前 + suffix。 -/
+def serviceName (dirS suffix : String) : String := stripUseCase dirS ++ suffix
+
 def defaultKotlinName (n : Name) : String :=
   let comps := n.components
   match comps.getLast? with
@@ -253,8 +265,7 @@ def defaultKotlinName (n : Name) : String :=
     match parents.getLast? with
     | some parent =>
       let p := toString parent
-      if p.endsWith "UseCase" && p != "UseCase" then
-        (p.dropEnd "UseCase".length).toString ++ lastS
+      if p.endsWith "UseCase" && p != "UseCase" then stripUseCase p ++ lastS
       else lastS
     | none => lastS
 
@@ -305,6 +316,9 @@ structure PortDep where
   op : String
   request : Name
   outcome : Name
+
+/-- Port モジュール `<Root>.<Layer>.Port.<Port>` の Port 名 `<Port>`。 -/
+def portName (portMod : Name) : String := toString portMod.components.getLast!
 
 /-! ### 役割 -/
 
@@ -1420,8 +1434,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             ("params", Json.arr (params.map FieldIR.toJson)), ("ret", ret)]
           -- 所属は UseCase ディレクトリ名(モジュールの親)。anyLeaf(DomainService)は
           -- ファイル = サービス単位なので葉そのもの
-          let dir := if anyLeaf then m.components.getLast!
-            else m.components.dropLast.getLast!
+          let dir := if anyLeaf then m.components.getLast! else ucDir m
           byMod := byMod.insert dir ((byMod.get? dir |>.getD #[]).push (n, methodJ))
       let svcJs := byMod.toList.toArray.qsort (fun a b => toString a.1 < toString b.1)
         |>.map fun (dir, methods) =>
@@ -1432,8 +1445,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           -- 単一ファイル `Domain/DomainService.lean` の葉はそのまま `DomainService`
           -- (末尾の文字数で切ると短い名前が同名に潰れ、生成物が上書きで消える)
           let name := if suffix.isEmpty || dirS == "DomainService" then dirS
-            else if dirS.endsWith "UseCase" then (dirS.dropEnd "UseCase".length).toString ++ suffix
-            else dirS ++ suffix
+            else serviceName dirS suffix
           Json.mkObj [("name", name), ("module", dirS),
                       ("methods", Json.arr (sortMethodsByName methods))]
       -- 除外も宣言名順(logInfo と diagnostics.dropped の並びを走査順に依らせない)。1 宣言 1 件なので順は一意
@@ -1457,8 +1469,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let some m := modOf n | continue
       unless ucNs.isPrefixOf m && m.components.getLast! == `UseCase do continue
       if fixedUseCaseNames.contains (n.updatePrefix Name.anonymous) || isFaultTagged n then continue
-      let dirS := toString m.components.dropLast.getLast!
-      let svc := (if dirS.endsWith "UseCase" then (dirS.dropEnd "UseCase".length).toString else dirS) ++ "Rules"
+      let svc := serviceName (toString (ucDir m)) "Rules"
       let listed := rulesAll.any fun j =>
         match j.getObjVal? "name", j.getObjVal? "methods" with
         | .ok (.str nm), .ok (.arr ms) => nm == svc && ms.any fun mj =>
@@ -1567,7 +1578,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let some m := modOf n | continue
       if ucNs.isPrefixOf m && m.components.getLast! == `UseCase &&
           (n.updatePrefix Name.anonymous) == `execute then
-        execByDir := execByDir.insert (m.components.dropLast.getLast!) n
+        execByDir := execByDir.insert (ucDir m) n
       let isJudgment := ucNs.isPrefixOf m && m.components.getLast! == `QueryService &&
         (n.updatePrefix Name.anonymous) != `query
       let isProjection := m == appNs ++ `Projection
@@ -1614,7 +1625,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         let some rowTy := rowTy? | continue
         projDefs := projDefs.insert n (stTy, rowTy)
       else
-        judgmentDefs := judgmentDefs.insert n (m.components.dropLast.getLast!)
+        judgmentDefs := judgmentDefs.insert n (ucDir m)
 
     -- 値引数の (名前, 型) 列(サンプルのプール用)。型・インスタンス引数は規約で埋め、
     -- 制約(Prop)の引数は含めない
@@ -1708,7 +1719,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       unless rootNs.isPrefixOf n && !n.hasMacroScopes do continue
       let some m := modOf n | continue
       unless ucNs.isPrefixOf m && m.components.getLast! == `QueryService do continue
-      let dir := m.components.dropLast.getLast!
+      let dir := ucDir m
       let readsOutcome ← do
         let .defnInfo _ := ci | pure false
         -- 見るのは interface 面の候補だけ
@@ -1724,7 +1735,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         throwError "lean2kotlin: 参照系 UseCase {dir} が Port を使っています(Port を使う固定形は更新系だけ)"
     let ucPortsJson (dep : PortDep) : Json :=
       Json.mkObj [("param", Json.str (toString dep.param)),
-        ("port", Json.str (toString dep.portMod.components.getLast!)),
+        ("port", Json.str (portName dep.portMod)),
         ("operation", Json.str (decapitalize dep.op)),
         ("request", Json.str (toString dep.request)), ("outcome", Json.str (toString dep.outcome))]
     let useCaseJs := useCaseJs.map fun j =>
@@ -1849,7 +1860,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             | .const fn _ =>
               (toString (fn.updatePrefix Name.anonymous)) == nm &&
                 (match modOf fn with
-                 | some m => (appNs ++ `UseCase).isPrefixOf m
+                 | some m => ucNs.isPrefixOf m
                  | none => false)
             | _ => false
           let mut hypIdx : Array Nat := #[]
@@ -2177,7 +2188,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                 -- 要求は無い = 呼ばれない)、観測は execute の観測引数。生成テストがモックを組む
                 let portsExtra : List (String × Json) ← do
                   if behaviorMode || projectionMode || judgmentMode || ruleMode then pure [] else
-                  let dir := ((modOf execName).getD Name.anonymous).components.dropLast.getLast!
+                  let dir := ucDir ((modOf execName).getD Name.anonymous)
                   match ucPorts.get? dir with
                   | none => pure []
                   | some dep =>
@@ -2198,7 +2209,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                         else if r.getAppFn.isConstOf ``Except.error then pure Json.null
                         else throwError "request の評価結果が Except の構成子ではありません: {r}"
                     pure [("ports", Json.arr #[Json.mkObj [
-                      ("port", Json.str (toString dep.portMod.components.getLast!)),
+                      ("port", Json.str (portName dep.portMod)),
                       ("operation", Json.str (decapitalize dep.op)),
                       ("request", requestJ), ("outcome", outcomeJ)]])]
                 let mut caseFields : List (String × Json) := [("args", Json.mkObj argJs)] ++ portsExtra
@@ -2301,7 +2312,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             else if ruleMode then (ruleDefs.get? execName).getD ""
             else if projectionMode then
               toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).1)
-            else toString (((modOf execName).getD Name.anonymous).components.dropLast.getLast!)
+            else toString (ucDir ((modOf execName).getD Name.anonymous))
           let rowTy :=
             if projectionMode then
               toString (((projDefs.get? execName).getD (Name.anonymous, Name.anonymous)).2)
@@ -2374,7 +2385,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
           | throwError "在住モジュールを特定できません"
         unless ucNs.isPrefixOf fMod && fMod.components.getLast! == `UseCase do
           throwError "UseCase ディレクトリ在住ではありません: {fMod}"
-        let dir := fMod.components.dropLast.getLast!
+        let dir := ucDir fMod
         let some execC := execByDir.get? dir
           | throwError "UseCase {dir} の execute が見つかりません"
         let fVals ← valueBinders fName
@@ -2480,7 +2491,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
                   throwError "execute が成功する入力で request が拒否しています(request と execute は同じ validate を通る固定形)"
                 else throwError "request の評価結果が Except の構成子ではありません: {r}"
               pure [("ports", Json.arr #[Json.mkObj [
-                ("port", Json.str (toString dep.portMod.components.getLast!)),
+                ("port", Json.str (portName dep.portMod)),
                 ("operation", Json.str (decapitalize dep.op)),
                 ("request", requestJ), ("outcome", outcomeJ)]])]
           let caseJ := Json.mkObj ([("args", Json.mkObj argJs)] ++ portsExtra ++ [
@@ -2523,7 +2534,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         opsJ := opsJ.push (Json.mkObj [("name", Json.str op), ("method", Json.str (decapitalize op)),
           ("request", Json.str (toString req)), ("outcome", Json.str (toString out)),
           ("doc", Json.str ((← findDocString? env req).getD ""))])
-      portsJs := portsJs.push (Json.mkObj [("name", Json.str (toString portMod.components.getLast!)),
+      portsJs := portsJs.push (Json.mkObj [("name", Json.str (portName portMod)),
         ("layer", Json.str layer), ("module", Json.str (toString portMod)),
         ("operations", Json.arr opsJ)])
 
@@ -2541,7 +2552,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let shape ← shapeOf rootNs reg n targs
       -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
       let (constraints, unreadable) ← structConstraints rootNs n targs
-      let observed := role.str == "repositoryState"
+      let observed := role == .repositoryState
       if observed then
         for (f, pp) in unreadable do
           logInfo m!"lean2kotlin: {n}.{f}: {pp} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、Repository 契約テストの個体の列はこの制約を満たすとは限りません"
@@ -2617,7 +2628,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     for (nm, md) in serviceNames do
       seen := seen.insert nm md.toName
     for (portMod, _) in portOps.toList do
-      let k := toString portMod.components.getLast!
+      let k := portName portMod
       if let some prev := seen.get? k then
         throwError "lean2kotlin: Kotlin 名 {k} が衝突しています: {prev} と {portMod}"
       seen := seen.insert k portMod
