@@ -202,6 +202,10 @@ const portCallShapes = [
   [{ "a-init.json": init, "a-flow.json": flowWith(5) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions が配列ではない"],
   [{ "a-init.json": init, "a-flow.json": flowWith({ port: "Clock", operation: "now" }) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions が配列ではない"],
   [{ "a-init.json": init, "a-flow.json": flowWith(["abc"]) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions の 1 番目がオブジェクトではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: [{}] } } }), "a-flow.json": flow }, "init", "a-init.json の ok.env.script の 1 番目の port / operation が文字列ではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: [{ port: "Clock" }] } } }), "a-flow.json": flow }, "init", "a-init.json の ok.env.script の 1 番目の port / operation が文字列ではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: [{ port: { toString: 5 }, operation: "x" }] } } }), "a-flow.json": flow }, "init", "a-init.json の ok.env.script の 1 番目の port / operation が文字列ではない"],
+  [{ "a-init.json": init, "a-flow.json": flowWith([{ port: "Clock", operation: { toString: "now" } }]) }, "flow", "a-flow.json の ok.trace の 1 手目の interactions の 1 番目の port / operation が文字列ではない"],
 ];
 
 test("golden-check は外部能力の往復の形が違う golden をファイル名つきの error の行にし、stack trace を出さずに残りの golden も出す", (t) => {

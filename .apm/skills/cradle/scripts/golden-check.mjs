@@ -60,8 +60,9 @@ const isOk = (res) => !!res && typeof res === "object" && "ok" in res;
 const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** 保存した ok の応答に現れる外部能力の往復（init は env の script、flow は trace の interactions）。ok がオブジェクトでない・
-    init の ok.env.script と flow の手の interactions が配列でない・その要素がオブジェクトでなければファイル名を添えて投げ
-    （port も operation も無い要素を `undefined.undefined が Port に無い` と言わず、null を黙って落とさない）、flow の trace の形は readGoldenTrace が status の事実と同じ理由で投げる。
+    init の ok.env.script と flow の手の interactions が配列でない・その要素がオブジェクトでない・要素の port / operation が文字列でなければファイル名を添えて投げ
+    （欠けた欄を `undefined.undefined が Port に無い` と言わず、自前の toString を持つ欄で "<port>.<operation>" の文字列化が投げず、null を黙って落とさない）、
+    flow の trace の形は readGoldenTrace が status の事実と同じ理由で投げる。
     CLI の応答（再生・連鎖）は isOk だけで判定する — 形を締めるのは保存した golden だけ。 */
 function storedPortCalls(kind, name, top) {
   const file = `${name}-${kind}.json`;
@@ -70,6 +71,8 @@ function storedPortCalls(kind, name, top) {
     if (!Array.isArray(list)) throw new Error(`${file} の ${where} が配列ではない`);
     const bad = list.findIndex(c => !isObject(c));
     if (bad >= 0) throw new Error(`${file} の ${where} の ${bad + 1} 番目がオブジェクトではない`);
+    const unnamed = list.findIndex(c => typeof c.port !== "string" || typeof c.operation !== "string");
+    if (unnamed >= 0) throw new Error(`${file} の ${where} の ${unnamed + 1} 番目の port / operation が文字列ではない`);
     return list;
   };
   if (kind === "flow") return readGoldenTrace(goldenDir, file).flatMap((t, i) => calls(t.interactions ?? [], `ok.trace の ${i + 1} 手目の interactions`));
