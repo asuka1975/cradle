@@ -1198,6 +1198,8 @@ structure DeriveCtx where
   judgmentDefs : Std.HashMap Name Name
   projDefs : Std.HashMap Name (Name × Name)
   ruleDefs : Std.HashMap Name String
+  /-- ふるまい・判断・射影の候補のうち署名で除いた def → 理由 -/
+  sigFailures : Std.HashMap Name String
   hasFunctionField : Name → Elab.TermElabM Bool
   valueBinders : Name → Elab.TermElabM (Array (Name × Expr))
   applyWith : Name → (Name → Expr → Elab.TermElabM (Option Expr)) →
@@ -1205,8 +1207,9 @@ structure DeriveCtx where
 
 /-- 契約定理 1 本の演繹の結果。診断と件数は呼び出し側が積む。 -/
 inductive ContractDerivation where
-  /-- 主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない -/
-  | untouched
+  /-- 主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない。
+      sigFailure は定理が語る def のうち署名で主対象から除いたもの(view の順で最初の 1 つ)と理由 -/
+  | untouched (sigFailure : Option (Name × String))
   /-- 有効なケースが無い。whys は組合せを試した順の理由 -/
   | noCases (whys : Array String)
   | derived (contract : Json)
@@ -1225,6 +1228,7 @@ def deriveContract (cx : DeriveCtx) (thmName : Name) : Elab.TermElabM ContractDe
   let judgmentDefs := cx.judgmentDefs
   let projDefs := cx.projDefs
   let ruleDefs := cx.ruleDefs
+  let sigFailures := cx.sigFailures
   let hasFunctionField := cx.hasFunctionField
   let applyWith := cx.applyWith
   let ci ← getConstInfo thmName
@@ -1274,7 +1278,10 @@ def deriveContract (cx : DeriveCtx) (thmName : Name) : Elab.TermElabM ContractDe
   let behaviorMode := !touchesExec && !projectionMode && !judgmentMode && !ruleMode &&
     viewHas isBehaviorTarget
   unless touchesExec || behaviorMode || judgmentMode || projectionMode || ruleMode do
-    return .untouched
+    -- 定理が語る def が署名で主対象の候補から除かれていれば、触れない理由ではなくその署名の理由を返す
+    return .untouched (view.findSome? fun e => do
+      let fn ← (e.find? fun x => x.constName?.any sigFailures.contains) >>= Expr.constName?
+      return (fn, ← sigFailures.get? fn))
   -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
   let mut core := stmt
   repeat
@@ -2336,6 +2343,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       (domainNs ++ `Entity).isPrefixOf m || m == domainNs ++ `ValueObject ||
         m == appNs ++ `RepositoryState ||
         (ucNs.isPrefixOf m && (m.components.getLast! == `Command || m.components.getLast! == `Observation))
+    -- 署名で除いたふるまい・判断・射影の候補 → 理由(主対象に触れない契約の診断が引く)
+    let mut sigFailures : Std.HashMap Name String := {}
     let mut behaviorDefs : Std.HashMap Name Name := {}
     let mut behaviorByType : Std.HashMap Name (Array (Name × Json)) := {}
     let mut behaviorMods : Std.HashMap Name Name := {}
@@ -2363,16 +2372,21 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
             logInfo m!"lean2kotlin: ふるまい {n} は主対象を決められないため除外: 短い名前 {pLast} の型が複数({", ".intercalate sorted.toList})"
             pure none
       let some tyN := subject? | continue
-      let sigResult ← try
+      let sigResult : Except String (Array FieldIR × Json) ← try
         let (params, ty) ← sigParams ci.type false
-        pure (some (params, ← typeToIR rootNs reg (← whnf ty)))
+        pure (.ok (params, ← typeToIR rootNs reg (← whnf ty)))
       catch e =>
-        logInfo m!"lean2kotlin: ふるまい {n} の署名を写像できず除外: {← e.toMessageData.toString}"
-        pure none
-      if let some (params, ret) := sigResult then
+        let msg ← e.toMessageData.toString
+        logInfo m!"lean2kotlin: ふるまい {n} の署名を写像できず除外: {msg}"
+        pure (.error msg)
+      match sigResult with
+      | .error msg => sigFailures := sigFailures.insert n msg
+      | .ok (params, ret) =>
         let refs := (params.map (·.type)).push ret |>.foldl (fun a t => collectRefs t a) #[]
-        if refs.any (fun r => !roles.contains r) then
+        let missing := refs.filter (fun r => !roles.contains r)
+        if !missing.isEmpty then
           logInfo m!"lean2kotlin: ふるまい {n} は未分類の型を参照するため除外"
+          sigFailures := sigFailures.insert n s!"未分類の型を参照({missing})"
           continue
         let methodJ := Json.mkObj [
           ("name", toString (n.updatePrefix Name.anonymous)),
@@ -2408,13 +2422,20 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let isProjection := m == appNs ++ `Projection
       unless isJudgment || isProjection do continue
       unless (← isInterfaceCandidate env n) do continue
-      let sigResult ← try
+      let sigResult : Except String (Array FieldIR × Json) ← try
         let (params, ty) ← sigParams ci.type false
-        pure (some (params, ← typeToIR rootNs reg (← whnf ty)))
-      catch _ => pure none
-      let some (params, ret) := sigResult | continue
+        pure (.ok (params, ← typeToIR rootNs reg (← whnf ty)))
+      catch e => pure (.error (← e.toMessageData.toString))
+      let (params, ret) ← match sigResult with
+        | .ok r => pure r
+        | .error msg =>
+          sigFailures := sigFailures.insert n msg
+          continue
       let refs := (params.map (·.type)).push ret |>.foldl (fun a t => collectRefs t a) #[]
-      if refs.any (fun r => !roles.contains r) then continue
+      let missing := refs.filter (fun r => !roles.contains r)
+      if !missing.isEmpty then
+        sigFailures := sigFailures.insert n s!"未分類の型を参照({missing})"
+        continue
       if isProjection then
         -- 射影: 主体が State(親 namespace か先頭の値引数)で Row の列を返すものだけ対象
         let comps := n.components
@@ -2605,16 +2626,17 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       if ci matches .thmInfo _ then some n else none
     let cx : DeriveCtx := {
       rootNs, env, ucNs, modOf, roles, idHeads, execByDir, ucPorts,
-      behaviorDefs, judgmentDefs, projDefs, ruleDefs, hasFunctionField, valueBinders, applyWith }
+      behaviorDefs, judgmentDefs, projDefs, ruleDefs, sigFailures, hasFunctionField, valueBinders, applyWith }
     let mut contractJs : Array Json := #[]
     let mut nonUseCaseContracts : Nat := 0
     for thmName in contractNames do
       try
         match ← deriveContract cx thmName with
-        | .untouched =>
+        | .untouched sigFailure =>
           nonUseCaseContracts := nonUseCaseContracts + 1
-          droppedJs := droppedJs.push (dropped "contract" (toString thmName)
-            "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する")
+          droppedJs := droppedJs.push (dropped "contract" (toString thmName) (match sigFailure with
+            | some (fn, msg) => s!"主対象の候補 {fn} の署名を写像できない: {msg}"
+            | none => "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する"))
         | .noCases whys =>
           logInfo m!"lean2kotlin: 契約定理 {thmName}: 有効なケースを演繹できませんでした({whys.toList.eraseDups})"
           droppedJs := droppedJs.push (dropped "contract" (toString thmName)
