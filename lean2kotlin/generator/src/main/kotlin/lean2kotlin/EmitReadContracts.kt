@@ -147,10 +147,14 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 	val kept = m.params.filterNot { k.isUseCasePlumbing(it.type) }
 	val errT = (m.ret as? IrType.Result)?.err
 	val okT = (m.ret as? IrType.Result)?.ok ?: m.ret
-	// View→ドメイン語彙の壁: 期待値(View)が interface 化された語彙へ
+	// View→ドメイン語彙の壁: 期待値(View・エラー)が interface 化された語彙へ
 	// 到達する場合、本番値の等価比較もリテラル生成も成立しない — ケースを生成せず
 	// note で明示する(是正はモデル側で View 自身の語彙を導入)
-	val viewWall = okT.leafRefs().any { k.reachesEntityLike(IrType.Ref(it)) }
+	val viewWall = listOfNotNull(okT, errT).any { t -> t.leafRefs().any { k.reachesEntityLike(IrType.Ref(it)) } }
+	// 入力(Query の DTO 等)が届く場合も本番語彙の実引数を組めない — 実体化フックで組むと
+	// Runner の note(該当の参照系ケースは生成されない)に反するので、同じくケースを生成しない
+	val wallInputs = kept.filter { k.reachesEntityLike(it.type) }
+	val inputWall = wallInputs.isNotEmpty()
 	// 配管(ReadModel・鍵・主体)はファクトリ引数へ — ReadModel はフィールドに展開、
 	// 主体(actorPort)は丸ごと 1 引数(値は定理由来のケースの args が運ぶ)
 	data class FactoryParam(
@@ -188,7 +192,10 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 		if (viewWall) {
 			log("  note: ${s.name}: View→ドメイン語彙の壁の破れ(期待値が interface 化された語彙を運ぶ)— 参照系ケースは生成できません(モデル側の是正待ち)")
 		}
-		if (golden != null && !viewWall) for (snap in goldenSnapshots) {
+		for (p in wallInputs) {
+			log("  note: ${s.name}: View→ドメイン語彙の壁の破れ(入力 ${p.name} が interface 化された語彙を運ぶ)— 参照系ケースは生成できません(モデル側の是正待ち)")
+		}
+		if (golden != null && !viewWall && !inputWall) for (snap in goldenSnapshots) {
 			val viewJson = if (screenKey == null) snap.views else snap.views[screenKey]
 			if (viewJson == null) {
 				log("  note: ${s.name}.${m.name}: golden ${snap.source} に $screenKey がないためスキップ")
@@ -221,7 +228,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 				log("  note: ${c.theorem}: 対象 ${c.method} は参照系の検証面(${m.name})ではないため読み飛ばし")
 				continue
 			}
-			if (viewWall) continue
+			if (viewWall || inputWall) continue
 			c.cases.forEachIndexed { i, case ->
 				if (case.kind != "value" || case.readModel == null) {
 					log("  note: ${c.theorem}(${i + 1}): 値形でないためスキップ")
