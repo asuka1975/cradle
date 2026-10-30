@@ -70,8 +70,9 @@ const handFiles = [...walk(join(cfg.root, cfg.backend.dir, "src", "main"), { ext
 const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
 const impact = impactOf(symbols.values(), handTexts);
 
-// 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）
-const abstractTests = changed.filter(c => /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
+// 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）。
+// 再生成で消えた（D）抽象テストは配線するものが無い。残った具象クラスは消えたシンボルの参照元に出る
+const abstractTests = changed.filter(c => c.status !== "D" && /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
 const unwired = contractTestWiring(cfg, abstractTests).filter(w => !w.wired).map(w => w.name);
 
 let golden = null;

@@ -146,6 +146,21 @@ test("未配線の契約テストは status と同じ数え方: Adapter の適�
   assert.equal(text.stdout, `${expectedText}\n未配線の契約テスト: NoteRepositoryContractTest, DirectoryAdapterContractTest\n`);
 });
 
+test("再生成で消えた契約テストは配線の対象にせず、未配線と言わない（差分には D で出す）", (t) => {
+  // 具象クラスの無い契約テストをコミットしておき、再生成がそれを消す
+  const old = `${testGen}/domain/repository/OldRepositoryContractTest.kt`;
+  const { run } = fixture(t, `cp -R ../regen/. src/generated/ && rm src/generated/kotlin-main/domain/entity/Legacy.kt ${old.replace("backend/", "")}`,
+    { ...hand, [old]: `${GEN}abstract class OldRepositoryContractTest {\n\tprotected abstract fun repository(): OldRepository\n}\n` });
+  const json = run("--no-golden", "--json");
+  assert.equal(json.status, 0, json.stderr);
+  const result = JSON.parse(json.stdout);
+  assert.deepEqual(result.unwiredContractTests, []);
+  assert.ok(result.changedGeneratedFiles.some(c => c.status === "D" && c.path === old));
+  const text = run("--no-regen", "--no-golden");
+  assert.equal(text.status, 0, text.stderr);
+  assert.doesNotMatch(text.stdout, /未配線の契約テスト/);
+});
+
 test("生成ディレクトリに未コミットの差分があれば再生成せずに止まり、再生成が失敗すればその出力の末尾を出して 2 で終わる", (t) => {
   const { run } = fixture(t);
   assert.equal(run("--no-golden").status, 0);
