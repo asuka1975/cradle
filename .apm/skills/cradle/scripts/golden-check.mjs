@@ -21,7 +21,7 @@
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
+import { loadConfigOrFail, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, isExternalGolden, readGoldenTrace, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool", name: "list" });
 if (opts.name?.some(n => n === true || n === "")) fail("--name には golden の名前が要ります（--name N を繰り返せば複数）");
@@ -38,28 +38,24 @@ const names = [...new Set(readdirSync(goldenDir).filter(f => /-(init|flow)\.json
 const wanted = opts.name ? [...new Set(opts.name)] : names;
 const portList = ports(cfg);
 
-/** 旧経路の golden だけ: manifest の項目と trace から init / flow のリクエストを復元する。 */
-function manifestRequests(name) {
+/** 旧経路の golden だけ: manifest の項目と保存した flow の応答（flow）の trace から init / flow のリクエストを復元する。
+    flow は検査のループで読んだもの — ok の応答の trace はそこで形を確かめてあり、ok でない応答・無いファイルは 0 手。 */
+function manifestRequests(name, flow) {
   const m = manifest[name];
   if (!m) return null;
   const base = { scenario: m.scenario ?? "basic" };
   if (m.viewer !== undefined) base.viewer = m.viewer;
   if (m.today !== undefined) base.today = m.today;
   if (m.actor !== undefined) base.actor = m.actor;
-  const flowFile = join(goldenDir, `${name}-flow.json`);
-  let commands = [];
-  if (existsSync(flowFile)) {
-    const trace = JSON.parse(readFileSync(flowFile, "utf8")).ok?.trace ?? [];
-    commands = trace.map(t => t.actor ? { actor: t.actor, command: t.command } : t.command);
-  }
+  const commands = (flow?.ok?.trace ?? []).map(t => t.actor ? { actor: t.actor, command: t.command } : t.command);
   return { init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands } };
 }
 
 const isOk = (res) => !!res && typeof res === "object" && "ok" in res;
 
-/** 応答に現れる外部能力の往復のうち Lean の Port に無いもの（"<Port>.<operation>"、重複無し）。 */
-function unknownPortCalls(kind, top) {
-  const calls = kind === "init" ? top.ok.env?.script ?? [] : (top.ok.trace ?? []).flatMap(t => t?.interactions ?? []);
+/** 応答に現れる外部能力の往復のうち Lean の Port に無いもの（"<Port>.<operation>"、重複無し）。flow は readGoldenTrace で形を確かめた trace から読む。 */
+function unknownPortCalls(kind, top, trace) {
+  const calls = kind === "init" ? top.ok.env?.script ?? [] : trace.flatMap(t => t.interactions ?? []);
   return [...new Set(calls.filter(c => c && !hasPortOperation(portList, c.port, c.operation)).map(c => `${c.port}.${c.operation}`))];
 }
 
@@ -113,7 +109,11 @@ for (const name of wanted) {
     let top; try { top = JSON.parse(readFileSync(file, "utf8")); } catch (e) { error(name, `JSON として読めない: ${e.message}`, kind); stop = true; continue; }
     if (!isOk(top)) error(name, "トップレベルが {\"ok\": …} ではない（CLI の応答そのものを置く）", kind);
     else {
-      const unknown = unknownPortCalls(kind, top);
+      // flow の trace が配列でない・手がオブジェクトでなければ status の事実と同じ理由（ファイル名つき）の error にして再生しない
+      // — 投げると stack trace だけで、残りの golden の行も出ない
+      let trace;
+      if (kind === "flow") try { trace = readGoldenTrace(goldenDir, `${name}-flow.json`); } catch (e) { error(name, e.message, kind); stop = true; continue; }
+      const unknown = unknownPortCalls(kind, top, trace);
       if (unknown.length) { error(name, `外部能力の往復 ${unknown.join(", ")} が Lean の Port（Application/Port/<Port>/<操作>.lean）に無い`, kind); stop = true; }
     }
     stored[kind] = top;
@@ -133,7 +133,7 @@ for (const name of wanted) {
       if (mismatch) { error(name, `手 #${mismatch.step} は障害契約 ${mismatch.fault} を指名しているのに、保存した flow の応答の result が fault ではない（${JSON.stringify(mismatch.result)}）— sidecar と応答が食い違っている。モックアップで採り直す`, "flow"); continue; }
     }
   } else {
-    reqs = sidecar ?? manifestRequests(name);
+    reqs = sidecar ?? manifestRequests(name, stored.flow);
     if (!reqs) { report.push({ name, status: "skipped", reason: `${name}.request.json が無い（再生できない golden）— モックアップで採り直すか --manifest で補う` }); continue; }
   }
   const replayed = {};
