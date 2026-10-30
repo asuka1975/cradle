@@ -42,9 +42,13 @@ const isHarnessCode = (relPath) => isHarnessProse(relPath) && extname(relPath) !
 function candidateFiles() {
   if (opts._.length) {
     const files = opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p));
-    // 綴りの誤ったパスを落として「0 findings」で通さない。2 は検査できなかった印（1 は error が見つかった）
+    // 綴りの誤ったパスとディレクトリ（拡張子で検査から外れる）を落として「0 findings」で通さない。2 は検査できなかった印（1 は error が見つかった）
     const missing = opts._.filter((p, i) => !existsSync(files[i]));
-    if (missing.length) fail(`ファイルがありません（プロジェクトルートからの相対）: ${missing.join(", ")}`, 2);
+    const notFiles = opts._.filter((p, i) => existsSync(files[i]) && !statSync(files[i]).isFile());
+    const problems = [missing.length && `ファイルがありません（プロジェクトルートからの相対）: ${missing.join(", ")}`,
+      notFiles.length && `ファイルではありません（ディレクトリは中のファイルを並べて渡すか --all で見る）: ${notFiles.join(", ")}`].filter(Boolean);
+    // fail は先頭の行にだけ cradle: を付けるので、2 つめの行にも付ける
+    if (problems.length) fail(problems.join("\ncradle: "), 2);
     return files;
   }
   if (opts.all) {

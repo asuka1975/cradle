@@ -31,3 +31,16 @@ test("unslop に渡した相対パスはプロジェクトルートから読み�
     assert.deepEqual(JSON.parse(r.stdout).findings.map(f => `${f.rule} ${f.file}:${f.line}`), ["hedge e2e/flow.ts:1"]);
   }
 });
+
+test("unslop に渡したパスがディレクトリなら、拡張子で外して 0 件と言わずに渡した形のまま並べて 2 で終わる", (t) => {
+  const { root, run } = fixture(t);
+  writeTree(root, { "lean/A.lean": "-- たぶん動く\ndef a := 1\n" });
+  for (const args of [["lean", "--json"], ["lean/"], [join(root, "lean")]]) {
+    const r = run(args);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [2, "", `cradle: ファイルではありません（ディレクトリは中のファイルを並べて渡すか --all で見る）: ${args[0]}\n`]);
+  }
+  // 無いパスと混ざれば、無いパスの行（文はファイルだけのときと同じ）とディレクトリの行を両方出し、在るファイルも検査しない
+  const mixed = run(["e2e/flow.ts", "lean", "e2e/missing.ts", "e2e"]);
+  assert.deepEqual([mixed.status, mixed.stdout, mixed.stderr], [2, "",
+    "cradle: ファイルがありません（プロジェクトルートからの相対）: e2e/missing.ts\ncradle: ファイルではありません（ディレクトリは中のファイルを並べて渡すか --all で見る）: lean, e2e\n"]);
+});
