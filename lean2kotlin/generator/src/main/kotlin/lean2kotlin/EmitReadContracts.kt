@@ -379,12 +379,8 @@ internal fun EmitTests.emitDdlContractTest(projCs: List<IrContract>) {
 		for (c in projCs) {
 			val rowTd = c.rowType?.let { ir.typeDef(it) } ?: continue
 			val stateTd = ir.typeDef(c.useCase)
-			val stShape = stateTd.shape as? IrShape.Structure ?: continue
-			val collField = stShape.fields.singleOrNull { it.type is IrType.ListOf }?.name ?: continue
-			val rootTd = ir.types.find {
-				it.role == "aggregateRoot" &&
-					it.kotlin == stateTd.kotlin.removeSuffix("RepositoryState")
-			} ?: continue
+			val rootTd = rootOfStateType(stateTd) ?: continue
+			val collField = k.rootCollectionOf(rootTd)?.coll?.name ?: continue
 			val (rm, fields) = rms.firstOrNull { (_, fs) ->
 				fs.any { rowLeanOf(it.type) == rowTd.lean }
 			} ?: continue
