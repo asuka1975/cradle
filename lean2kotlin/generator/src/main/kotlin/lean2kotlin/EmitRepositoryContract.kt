@@ -3,12 +3,13 @@ package lean2kotlin
 // ───────────────────────── Repository 契約テスト(規約由来 — Lean 由来ではない)
 
 /** 同一性を持つ集約の Repository 契約テストの規約の一文。@Test を選ぶのと同じ条件で書く(update と findById で
-    引けることの検査は add の播種を要る)— interface に無い操作も、検査しない操作も名指さない。 */
+    引けることの検査は add の播種を要る)— interface に無い操作も、検査しない操作も名指さない。add も findById も
+    無ければクラスに @Test は無く、findAll も検査しないので、検査する操作が無いとだけ書く。 */
 internal fun repositoryContractRule(ops: Kotlinize.RepoOps, idField: String): String = listOfNotNull(
 	"add は末尾への追加".takeIf { ops.add },
 	"update は $idField で既存個体を書き換えて並びを保つ".takeIf { ops.add && ops.update },
 	(if (ops.add) "findById は $idField で引いて未知なら null" else "findById は未知の $idField なら null").takeIf { ops.find },
-).ifEmpty { listOf("findAll は保存順") }.joinToString("・")
+).ifEmpty { listOf("検査する操作なし") }.joinToString("・")
 
 internal fun EmitTests.emitRepositoryContractTest(td: IrTypeDef) {
 	val rootK = td.kotlin

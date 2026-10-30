@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** 契約テストのクラス KDoc は、同じクラスが宣言するフックと、@Test が検査する操作だけを名指す。 */
+/** 契約テストのクラス KDoc は、同じクラスが宣言するフックと、@Test が検査する操作だけを名指す(検査する操作が無ければそう書く)。 */
 class ContractKdocTest {
 
 	private fun emitTests(ir: Ir, out: Path) =
@@ -41,11 +41,11 @@ class ContractKdocTest {
 	}
 
 	@Test
-	fun `Repository 契約の規約は @Test と同じ条件で操作を書き、add の無い Repository は update を名指さない`() {
+	fun `Repository 契約の規約は @Test と同じ条件で操作を書き、add の無い Repository は update を、@Test の無いクラスは操作を名指さない`() {
 		fun rule(find: Boolean, add: Boolean, update: Boolean) = repositoryContractRule(Kotlinize.RepoOps(find, add, update), "id")
 		assertEquals("add は末尾への追加・findById は id で引いて未知なら null", rule(find = true, add = true, update = false))
 		assertEquals("add は末尾への追加・update は id で既存個体を書き換えて並びを保つ", rule(find = false, add = true, update = true))
 		assertEquals("findById は未知の id なら null", rule(find = true, add = false, update = true))
-		assertEquals("findAll は保存順", rule(find = false, add = false, update = true))
+		assertEquals("検査する操作なし", rule(find = false, add = false, update = true))
 	}
 }
