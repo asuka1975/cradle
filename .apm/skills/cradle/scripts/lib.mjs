@@ -257,6 +257,25 @@ export function fail(msg, code = 1) {
   process.exit(code);
 }
 
+/** Lean のコメントを消した写し。改行は残し（行番号と行の index を動かさない）、消した文字は空白で埋めない（`/- … -/import` の行も `^import` で拾う）。
+    左から読む: コードの `--` は行末まで、`/-`（docstring の `/--` も）からはブロックで、ブロックの中の `/-` と `-/` で深さを数える。
+    正規表現を 2 回かける読み方では、`/--` の `--` を行コメントとして消すと docstring の続きの行がコードに残り、行コメントの中の `/-` からブロックを開くと次の `-/` までのコードが消える。
+    文字列リテラルは区別しない（`"--"` も消す）。 */
+export function stripLeanComments(text) {
+  let out = "", depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i + 1];
+    if (depth === 0) {
+      if (c === "-" && n === "-") { const e = text.indexOf("\n", i); if (e < 0) break; i = e - 1; continue; }
+      if (c === "/" && n === "-") { depth = 1; i++; continue; }
+      out += c;
+    } else if (c === "/" && n === "-") { depth++; i++; }
+    else if (c === "-" && n === "/") { depth--; i++; }
+    else if (c === "\n") out += c;
+  }
+  return out;
+}
+
 /** 形式化が付けた名前: コマンド構成子・失敗語彙・画面の口。doc は宣言直前の docstring の 1 文目（無ければ ""）。 */
 export function leanVocabulary(cfg) {
   const targets = [
@@ -270,8 +289,8 @@ export function leanVocabulary(cfg) {
     const file = join(cfg.lean.modelDir, t.file);
     if (!existsSync(file)) continue;
     const raw = readFileSync(file, "utf8");
-    // 宣言の検出はコメントを消した写しで行う（行数は変えない。ブロック（docstring を含む）を先に消してから行コメント）。docstring は元テキストから取る
-    const code = raw.replace(/\/-[\s\S]*?-\//g, (m) => m.replace(/[^\n]/g, "")).replace(/--.*$/gm, "").split("\n");
+    // 宣言の検出はコメントを消した写しで行う（行数は変えない）。docstring は元テキストから取る
+    const code = stripLeanComments(raw).split("\n");
     const start = code.findIndex(l => t.decl.test(l));
     if (start < 0) continue;
     const indent = code[start].match(/^\s*/)[0].length;

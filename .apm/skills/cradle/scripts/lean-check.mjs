@@ -27,7 +27,7 @@
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { loadConfigOrFail, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents, stripLeanComments } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
 const cfg = loadConfigOrFail();
@@ -41,11 +41,9 @@ const allFiles = existsSync(mainFile) ? [...files, mainFile] : files;
 const findings = [];
 const add = (rule, severity, file, line, message) => findings.push({ rule, severity, file: rel(cfg.root, file), line, message });
 
-const stripComments = (text) => text.replace(/--.*$/gm, "").replace(/\/-[\s\S]*?-\//g, (m) => m.replace(/[^\n]/g, ""));
-
 for (const f of allFiles) {
   const raw = readFileSync(f, "utf8");
-  const code = stripComments(raw);
+  const code = stripLeanComments(raw);
   const relPath = rel(modelDir, f);
   const layer = relPath.split("/")[0];
   const lines = raw.split("\n");
@@ -90,7 +88,7 @@ for (const f of files) {
   const re = /@\[actorContext\]\s*\n\s*structure\s+(\w+)[^\n]*\n([\s\S]*?)(?=\n\S|$)/g;
   let m;
   while ((m = re.exec(raw))) {
-    const body = m[2].replace(/--.*$/gm, "").replace(/\/-[\s\S]*?-\//g, "");
+    const body = stripLeanComments(m[2]);
     const fields = (body.match(/^\s+\w+\s*:/gm) ?? []).length;
     if (fields === 0) add("actor", "error", f, raw.slice(0, m.index).split("\n").length, `@[actorContext] の ${m[1]} にフィールドが無い — 印だけの型は名義にしない`);
   }
@@ -113,9 +111,9 @@ for (const f of files) {
   const jsonFile = join(modelDir, "Runtime", "Json.lean");
   const machFile = join(modelDir, "Runtime", "Machine.lean");
   const jsonText = readText(jsonFile);
-  const machText = stripComments(readText(machFile));
+  const machText = stripLeanComments(readText(machFile));
   const wire = (file, union, applyName) => {
-    const code = stripComments(readFileSync(file, "utf8"));
+    const code = stripLeanComments(readFileSync(file, "utf8"));
     const block = code.match(new RegExp(`inductive\\s+${union}\\b[\\s\\S]*?(?=\\n(?:deriving|end|def|structure|inductive|theorem)\\b|$)`));
     const ctors = block ? [...block[0].matchAll(/^\s*\|\s*(\w+)/gm)].map(m => m[1]) : [];
     // 腕は applyCommand / applyObservation のブロックの中だけを見る（同名の構成子を別の腕で数えない）
@@ -130,11 +128,11 @@ for (const f of files) {
   if (existsSync(cmdFile)) {
     wire(cmdFile, "Command", "applyCommand");
     // 利用者の操作の合併型に内部入力を混ぜない（通知・契機は Runtime/Observation.lean）
-    for (const m of stripComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
+    for (const m of stripLeanComments(readFileSync(cmdFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bObservation\b/gm)) add("wiring", "error", cmdFile, 1, `構成子 ${m[1]} が内部入力（Observation）を運んでいる — 利用者の操作の合併型に通知・契機を混ぜない（Runtime/Observation.lean に置く）`);
   }
   if (existsSync(obsFile)) {
     wire(obsFile, "Observation", "applyObservation");
-    for (const m of stripComments(readFileSync(obsFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bCommand\b/gm)) add("wiring", "error", obsFile, 1, `構成子 ${m[1]} が利用者の操作（Command）を運んでいる — 内部入力の合併型に利用者の操作を混ぜない（Runtime/Command.lean に置く）`);
+    for (const m of stripLeanComments(readFileSync(obsFile, "utf8")).matchAll(/^\s*\|\s*(\w+)[^\n]*\bCommand\b/gm)) add("wiring", "error", obsFile, 1, `構成子 ${m[1]} が利用者の操作（Command）を運んでいる — 内部入力の合併型に利用者の操作を混ぜない（Runtime/Command.lean に置く）`);
   }
   // 内部入力の UseCase があるなら Runtime/Observation.lean が要る（Runtime の境界を持つプロジェクトだけ）
   const ucDir = join(modelDir, "Application", "UseCase");
@@ -145,7 +143,7 @@ for (const f of files) {
   const hasEnv = existsSync(envFile);
   if (!hasEnv && ["Application", "Domain"].some(l => existsSync(join(modelDir, l, "Port")))) add("wiring", "error", envFile, 1, "Port の置き場（Application/Port か Domain/Port）があるのに Runtime/Environment.lean（外部能力の script と cursor）が無い");
   if (existsSync(mainFile)) {
-    const mainExternal = stripComments(readFileSync(mainFile, "utf8")).includes('"external"');
+    const mainExternal = stripLeanComments(readFileSync(mainFile, "utf8")).includes('"external"');
     if (hasEnv && !mainExternal) add("wiring", "error", mainFile, 1, "Runtime/Environment.lean があるのに Main.lean が cmd external を受けない — 移行が半分（骨格の Main.lean で敷き直す。cradle doctor が差を出す）");
     if (!hasEnv && mainExternal) add("wiring", "error", envFile, 1, "Main.lean が cmd external を受けるのに Runtime/Environment.lean が無い — 移行が半分");
   }
@@ -166,7 +164,7 @@ for (const f of files) {
       const d = join(ucDir, name);
       if (!statSync(d).isDirectory()) continue;
       const has = (f) => existsSync(join(d, f));
-      const read = (f) => stripComments(readFileSync(join(d, f), "utf8"));
+      const read = (f) => stripLeanComments(readFileSync(join(d, f), "utf8"));
       const write = has("Command.lean"), observe = has("Observation.lean"), readSide = has("QueryService.lean");
       if (!has("UseCase.lean")) { add("usecase", "error", d, 1, `${name}/ に UseCase.lean が無い`); continue; }
       if ([write, observe, readSide].filter(Boolean).length !== 1) add("usecase", "error", d, 1, `${name}/ は Command.lean（更新系）・Observation.lean（内部入力）・QueryService.lean（参照系）のどれか 1 つだけを持つ`);
@@ -195,7 +193,7 @@ for (const f of files) {
       if (/Repository$/.test(name)) add("port", "error", d, 1, `Port 名 ${name} は Repository で終えない（Repository は自システムの集約の取得・保存）`);
       for (const f of readdirSync(d).filter(f => f.endsWith(".lean"))) {
         const file = join(d, f);
-        const code = stripComments(readFileSync(file, "utf8"));
+        const code = stripLeanComments(readFileSync(file, "utf8"));
         if (!/\b(structure|inductive)\s+Request\b/.test(code)) add("port", "error", file, 1, "固定名 Request（要求）が無い");
         if (!/\b(structure|inductive)\s+Outcome\b/.test(code)) add("port", "error", file, 1, "固定名 Outcome（観測）が無い");
         for (const m of code.matchAll(/^\s+\w+\s*:\s*[^\n]*→[^\n]*$/gm)) add("port", "error", file, 1, `関数フィールドを持つ（${m[0].trim()}）— Port は要求と観測の純データだけで、外部を呼ぶ関数は UseCase に渡さない`);
@@ -225,7 +223,7 @@ for (const f of files) {
       const f = stack.pop();
       if (!existsSync(f) || seen.has(f)) continue;
       seen.add(f);
-      const code = stripComments(readFileSync(f, "utf8"));
+      const code = stripLeanComments(readFileSync(f, "utf8"));
       for (const m of code.matchAll(/^import\s+(\S+)/gm)) if (m[1].startsWith(root + ".")) stack.push(fileOf(m[1]));
     }
     for (const f of files) if (!seen.has(f)) add("orphan", "warn", f, 1, `${modOf(f)} は ${root}.lean から辿れない（lake build が検査しない）`);
