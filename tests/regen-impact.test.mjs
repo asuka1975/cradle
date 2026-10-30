@@ -4,7 +4,7 @@ import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
+import { tempProject, cleanEnv, gitConfigEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
 const regenImpact = fileURLToPath(new URL("../.apm/skills/cradle/scripts/regen-impact.mjs", import.meta.url));
 
@@ -253,6 +253,23 @@ test("生成ディレクトリに未コミットの差分があれば、--dry-ru
   assert.equal(plain.status, 1);
   assert.equal(plain.stderr, ["cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:", ...dirtyLines].join("\n") + "\n");
   assert.equal(porcelain(), dirty);
+});
+
+test("生成ディレクトリの未追跡は status.showUntrackedFiles=no でも未コミットの差分に数え、--dry-run の後始末で消さない", (t) => {
+  // 再生成は何もしないので、Mine.kt を消しうるのは後始末の git clean だけ
+  const { root, porcelain } = fixture(t, "true");
+  const mine = `${main}/Mine.kt`;
+  writeTree(root, { [mine]: `${GEN}class Mine\n` });
+  const run = (...args) => runNode(regenImpact, args, { cwd: root, env: cleanEnv(gitConfigEnv({ "status.showUntrackedFiles": "no" })) });
+  for (const [args, head] of [
+    [["--no-golden", "--dry-run"], "cradle: 生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:"],
+    [["--no-regen", "--no-golden", "--dry-run"], "cradle: --dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:"],
+  ]) {
+    const r = run(...args);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", `${head}\n?? ${mine}\n`], args.join(" "));
+    assert.ok(existsSync(join(root, mine)), args.join(" "));
+    assert.equal(porcelain(), `?? ${mine}\n`, args.join(" "));
+  }
 });
 
 test("--dry-run で再生成が失敗すれば、作りかけの出力を HEAD に戻してから同じ断りで 2 で終わる", (t) => {

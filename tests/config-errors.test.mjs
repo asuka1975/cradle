@@ -44,7 +44,7 @@ test("git の外の regen-impact は失敗した git の呼び出しの 1 行で
   const r = runNode(cradle, ["regen-impact", "--no-regen"], { cwd: root, env: cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) }) });
   assert.equal(r.status, 1);
   assert.equal(r.stdout, "");
-  assert.equal(r.stderr, "cradle: Command failed: git status --porcelain -- backend/src/generated\n");
+  assert.equal(r.stderr, "cradle: Command failed: git status --porcelain --untracked-files=normal -- backend/src/generated\n");
 });
 
 test("コミットの無いリポジトリの regen-impact は再生成する前にその理由の 1 行で止まり、1 つコミットすれば回る", (t) => {

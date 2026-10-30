@@ -18,8 +18,9 @@ if (blankArg(opts.manifest)) fail("--manifest には manifest のファイル（
 const cfg = loadConfigOrFail();
 const gens = cfg.backend.generated;
 
-// git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない
-let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]); } catch (e) { fail(e.message); }
+// git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない。
+// 未追跡は status.showUntrackedFiles に依らず出す（git clean は設定を見ないので、出さないと --dry-run の後始末が利用者のファイルを消す）
+let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--untracked-files=normal", "--", ...gens]); } catch (e) { fail(e.message); }
 // コミットが 1 つも無いリポジトリでは git status は通るが HEAD と比べられない。再生成する前に止める
 try { git(cfg.root, ["rev-parse", "--verify", "-q", "HEAD"]); } catch { fail("まだコミットがありません。regen-impact は生成物を HEAD と比べるので、先にコミットしてから回す"); }
 if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirty}`);

@@ -20,7 +20,8 @@ export function targetPaths(payload) {
 export function decide(mode, payload, {
   cfg, isClaude,
   exists = existsSync,
-  gitStatus = (dir) => git(cfg.root, ["status", "--porcelain", "--", dir]),
+  // 新しいファイルだけの変更も status.showUntrackedFiles に依らず数える
+  gitStatus = (dir) => git(cfg.root, ["status", "--porcelain", "--untracked-files=normal", "--", dir]),
   leanStatus = () => leanGitStatus(cfg),
   runUnslop = () => spawnSync(process.execPath, [cradleScript("unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "pipe"] }),
   readText = (p) => readFileSync(p, "utf8"),
