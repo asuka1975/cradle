@@ -25,11 +25,13 @@ export function tempProject(t, prefix, config = { project: "Example" }) {
 // 子の git には利用者の設定（global・system・-c で渡した設定）を読ませず、git の hook から npm test を走らせたときに渡る
 // 呼び手のリポジトリ（GIT_DIR・GIT_INDEX_FILE など）も渡さない。git の設定を差し込むテストは extra に GIT_CONFIG_COUNT などを渡す（extra は最後に重ねる）
 // GIT_CONFIG_GLOBAL は設定ファイルだけを替え、core.excludesFile・core.attributesFile が無いと git は既定の $XDG_CONFIG_HOME/git/ignore・attributes を読むので、
-// XDG_CONFIG_HOME を無い場所に向ける（空にすると ~/.config/git/ を読む）
+// XDG_CONFIG_HOME を無い場所に向ける（空にすると ~/.config/git/ を読む）。
+// GIT_CONFIG_NOSYSTEM は system の設定だけを切り、$(prefix)/etc/gitattributes は GIT_ATTR_NOSYSTEM で切る。
+// 呼び手の GIT_TEMPLATE_DIR は fixture の git init ごとに info/exclude と hooks を写すので消す（設定の init.templateDir は GIT_CONFIG_GLOBAL で切れている）
 export function cleanEnv(extra = {}) {
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", XDG_CONFIG_HOME: "/nonexistent-cradle-test-xdg" };
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", XDG_CONFIG_HOME: "/nonexistent-cradle-test-xdg", GIT_ATTR_NOSYSTEM: "1" };
   for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR",
-    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"]) delete env[key];
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_TEMPLATE_DIR"]) delete env[key];
   return { ...env, ...extra };
 }
 

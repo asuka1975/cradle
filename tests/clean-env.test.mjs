@@ -1,7 +1,7 @@
 // テストの足場（helpers.mjs の cleanEnv と commitAll）が、利用者の git 設定と呼び手のリポジトリから切り離されていること。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { tempDir, writeTree, cleanEnv, commitAll } from "./helpers.mjs";
@@ -42,4 +42,22 @@ test("commitAll は git が設定に名前が無くても読む既定の場所�
   }
   const want = ["cradle.json\ne2e/flow.ts\n", "e2e/flow.ts: foo: unspecified\n"];
   assert.deepEqual(got, { "~/.config/git": want, "$XDG_CONFIG_HOME/git": want });
+});
+
+test("commitAll は環境の GIT_TEMPLATE_DIR の雛形（info/exclude・hooks）を git init に写さず、cleanEnv は system の属性ファイル（$(prefix)/etc/gitattributes）も切る", (t) => {
+  const template = tempDir(t, "cradle-template-");
+  writeTree(template, { "info/exclude": "*.ts\n", "hooks/pre-commit": "#!/bin/sh\nexit 0\n" });
+  const root = tempDir(t, "cradle-commit-");
+  writeTree(root, { "cradle.json": "{}\n", "e2e/flow.ts": "export {};\n" });
+  const saved = process.env.GIT_TEMPLATE_DIR;
+  process.env.GIT_TEMPLATE_DIR = template;
+  let env;
+  try { env = cleanEnv(); commitAll(root); }
+  finally { if (saved === undefined) delete process.env.GIT_TEMPLATE_DIR; else process.env.GIT_TEMPLATE_DIR = saved; }
+  assert.equal(gitOut(root, "ls-files").stdout, "cradle.json\ne2e/flow.ts\n");
+  assert.equal(existsSync(join(root, ".git", "hooks", "pre-commit")), false);
+  assert.equal(env.GIT_TEMPLATE_DIR, undefined);
+  // system の属性ファイルはテストから書けないので、git が読まない印が立っていることを見る
+  assert.equal(env.GIT_ATTR_NOSYSTEM, "1");
+  assert.equal(cleanEnv({ GIT_TEMPLATE_DIR: template }).GIT_TEMPLATE_DIR, template);
 });
