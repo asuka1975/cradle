@@ -13,10 +13,10 @@
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { loadConfig, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const goldenDir = goldenDirOf(cfg);
 if (!existsSync(goldenDir)) fail(`golden がありません: ${goldenDir}`);
 

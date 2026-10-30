@@ -8,11 +8,11 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const ddd = join(cfg.root, cfg.documents.ddd);
 const qfile = join(ddd, "questions.md");
 const nfile = join(ddd, "naming.md");

@@ -5,11 +5,11 @@
 //   --baseline は ddd.mjs start が書いた .session（lean に開始時点の sha256）。lean/ をその時点と比べ、無ければ HEAD と比べる
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { loadConfig, parseArgs, fail, walk, rel, git, lakeBuild, readJson, leanSnapshot } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, walk, rel, git, lakeBuild, readJson, leanSnapshot } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", json: "bool" });
 if (opts.baseline === true) fail("usage: ddd-clean-check [--build] [--baseline <file>]");
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const baseline = (() => {
   if (!opts.baseline) return null;
   const file = resolve(cfg.root, opts.baseline);

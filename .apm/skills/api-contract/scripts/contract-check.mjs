@@ -11,10 +11,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, cradleScript } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, cradleScript } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const spec = join(cfg.root, cfg.documents.openapi);
 if (!existsSync(spec)) fail(`契約がありません: ${cfg.documents.openapi}`);
 const meta = jsonArg(opts.meta) ?? queryMeta();

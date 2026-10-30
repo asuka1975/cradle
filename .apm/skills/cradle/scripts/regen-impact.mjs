@@ -8,13 +8,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, walk, rel, git, fail, readText, cradleScript } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const gens = cfg.backend.generated;
 
-const dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]);
+// git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない
+let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]); } catch (e) { fail(e.message); }
 if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirty}`);
 
 let regenOut = null;

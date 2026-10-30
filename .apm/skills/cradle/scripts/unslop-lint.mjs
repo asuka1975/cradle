@@ -25,10 +25,10 @@
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
-import { loadConfig, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const disabled = new Set(cfg.unslop.disable ?? []);
 const CODE_EXT = [".kt", ".kts", ".ts", ".tsx", ".js", ".mjs", ".lean", ".sql", ".tf", ".css", ".html"];
 const DOC_EXT = [".md", ".yaml", ".yml"];

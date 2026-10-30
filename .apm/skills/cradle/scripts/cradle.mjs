@@ -36,8 +36,8 @@ if (cmd === "contract-skeleton") {
 if (cmd === "doctor") {
   if (args.includes("--local")) {
     // local env の鮮度: cradle.json の infra.containers（コンテナ名の配列）の Created と HEAD のコミット時刻を比べる
-    const { loadConfig } = await import("./lib.mjs");
-    const cfg = loadConfig();
+    const { loadConfigOrFail } = await import("./lib.mjs");
+    const cfg = loadConfigOrFail();
     const names = cfg.infra.containers ?? [];
     if (!names.length) { console.log("cradle.json の infra.containers が空（例: [\"myapp-local-backend\", \"myapp-local-frontend\"]）"); process.exit(0); }
     const head = spawnSync("git", ["log", "-1", "--format=%cI"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" }).stdout.trim();

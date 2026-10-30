@@ -27,10 +27,10 @@
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, lakeBuild, callLean, fail, scaffoldSampleFiles, ports, readText, countEvents } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", smoke: "bool", json: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const root = cfg.lean.root;
 const modelDir = cfg.lean.modelDir;
 if (!existsSync(modelDir)) fail(`Lean モデルのディレクトリがありません: ${modelDir}`);

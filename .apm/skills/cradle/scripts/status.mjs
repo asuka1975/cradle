@@ -3,10 +3,10 @@
 //   status [--json]
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, productLine, readText, DDD_FILES, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const R = (p) => join(cfg.root, p);
 const read = (p) => readText(R(p), null);
 const ids = "(?:HS|UX|MQ)-\\d+";

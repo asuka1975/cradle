@@ -23,12 +23,12 @@
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk, traceInputOf, ports } from "./lib.mjs";
+import { loadConfigOrFail, callLean, leanEval, parseArgs, jsonArg, fail, walk, traceInputOf, ports } from "./lib.mjs";
 import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
 const [cmd, ...rest] = opts._;
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const build = opts.build ?? "auto";
 
 const printJson = (v) => process.stdout.write(JSON.stringify(v, null, 2) + "\n");

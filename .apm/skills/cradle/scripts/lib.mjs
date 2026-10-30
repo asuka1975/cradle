@@ -82,6 +82,11 @@ export function loadConfig(root = findProjectRoot()) {
   return cfg;
 }
 
+/** 道具の入口の loadConfig: 読めない・project が無い設定は `cradle: <理由>` で終える（スタックトレースにしない）。hook は自分で握って通す。 */
+export function loadConfigOrFail(root) {
+  try { return loadConfig(root); } catch (e) { fail(e.message); }
+}
+
 /** 骨格のサンプルドメイン（メモ）が残っている Lean ファイル。空なら実ドメインが形式化済み。マーカーの無い古い骨格はサンプルの docstring で拾う。 */
 export function scaffoldSampleFiles(cfg) {
   if (!existsSync(cfg.lean.modelDir)) return [];
