@@ -53,8 +53,8 @@ object Lean2KotlinGeneration {
 				fountainPorts.joinToString(", ") { "${it.port}(供給: ${it.idTd.kotlin})" })
 		}
 		logWallBreaches(ir, k, log)
-		// 「宣言したのに検査に至らない」は失敗 — 抽出器の診断・生成テスト 0 件の契約・閉じていない Port の型を
-		// 集めて最後にまとめて止める(note は生成が続いた情報で、失敗とは分ける)。
+		// 「宣言したのに検査に至らない」は失敗 — 抽出器の診断・生成テスト 0 件の契約を集めて最後にまとめて止め、
+		// 生成に進めないモデルの形(閉じていない Port の型など)は生成の前に止める(note は生成が続いた情報で、失敗とは分ける)。
 		// 見つけた時点で error 行を出す — 生成の途中で例外が出ても、分かっていた分は読める
 		val errors = mutableListOf<String>()
 		val report = { e: String -> errors += e; log("error: $e") }

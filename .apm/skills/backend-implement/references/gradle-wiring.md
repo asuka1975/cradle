@@ -79,7 +79,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 
 ## 生成器の既知の癖
 
-- 参照系で execute 面でない定理に `@[contract]` を付けると note「参照系の検証面ではないため読み飛ばし」が出て、そのファミリは生成されない → モデル側で指名を外す。
+- 参照系で execute 面でない定理に `@[contract]` を付けると note「対象 <面> は参照系の検証面(execute)ではないため読み飛ばし」が出て、その定理の生成テストは 0 件になり、生成は `契約定理 … 生成テストが 0 件` で失敗する → モデル側で指名を外す。
 - 印だけの主体（フィールド 0 の `@[actorContext]`）は作らない（`cradle lean-check` が止める）。
 - Runtime 在住の参照専用 ID VO は `runtime` パッケージに出る → 同一性の VO は Entity の持ち物にするか、`Domain/ValueObject.lean` に置く。
 - `<name>-flow.json` は対の `<name>-init.json` が無ければ無視される（note が出る）。note は失敗として読む。init だけの golden は初期状態 1 件のスナップショットとして読まれる。
@@ -105,12 +105,14 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 |---|---|---|
 | golden … 無視 | 命名か形が規約と違う | golden を採り直す |
 | View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
+| View→ドメイン語彙の壁の破れ(入力 … が interface 化された語彙を運ぶ) | 参照系の execute の入力（Query の DTO 等）がふるまい持ちの VO・Entity に届いている。参照系ケースは出ない | 入力の語彙を閉じたデータ型にする（Lean）。その UseCase に指名した契約定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
 | ふるまい … 主対象を決められない | def の名前空間が型でなく、その短い名前の型が複数ある（VO と UseCase の入力語彙が同名など） | def を型そのものの namespace に置く（Lean） |
 | UseCase … input を書かない | UseCase の置き場に固定名の型が無く、同じ役割の型が複数ある | 置き場に固定名の `Command` / `Observation` 型を置く（Lean） |
 | 契約定理を翻訳できません / 有効なケースを演繹できませんでした | 前提が Decidable でない・fixture から期待値を計算できない・仮定が常に偽 | 定理の形を見直す（Lean）。この note は診断にも残り、生成は失敗する |
 | … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は Repository 契約テストの個体の列が満たすとは限らない |
 | … の制約を満たすサンプルを組めません | VO などの Prop フィールドが、小さな値の候補（lean-conventions §9）のどれでも満たせない | 制約の形を見直す（Lean）。その型の Arb が要る生成は失敗する |
-| 参照系 … 読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean） |
-| interface のみ生成（テストなし） | fixture / golden が無い | fixture か golden を足す |
+| 対象 … は参照系の検証面(execute)ではないため読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean）。この定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
+| 配線 … は参照系の契約テストに写せません | 参照系の execute が配線の無い配管（State・外部能力の観測・precise な入力）を受けている。参照系ケースは出ない | 参照系の execute からその配管を外す（Lean）。その UseCase に指名した契約定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
+| golden の指定なし / golden ディレクトリがありません | `goldenDir` が未指定か、指した先にディレクトリが無い。契約定理のテストは出て、golden 由来のケース（参照系の golden 回帰・Retrieve）だけが出ない | 未指定は設計どおりの除外。ディレクトリが無いなら `goldenDir` のパスを直すか golden を採る |
 | … の要素に無いフィールド … 合成できません | 計算する読み取りモデル（集約横断の集計・別集約からの引き） | 無し（読み取りの回帰は `cradle golden-check` と E2E が担う） |
