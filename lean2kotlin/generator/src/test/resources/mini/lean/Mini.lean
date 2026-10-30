@@ -1,0 +1,25 @@
+-- ライブラリルート。層の壁は Cradle の骨格と同じ。
+import Mini.Prelude
+import Mini.Domain.Annotations
+import Mini.Domain.ValueObject
+import Mini.Domain.Error
+import Mini.Domain.Entity.Book
+import Mini.Application.ActorContext
+import Mini.Application.Clock
+import Mini.Application.RepositoryState
+import Mini.Application.ReadModel
+import Mini.Application.View
+import Mini.Application.Projection
+import Mini.Application.UseCase.LendBookUseCase.Command
+import Mini.Application.UseCase.LendBookUseCase.UseCase
+import Mini.Application.UseCase.ShelfUseCase.ReadModel
+import Mini.Application.UseCase.ShelfUseCase.QueryService
+import Mini.Application.UseCase.ShelfUseCase.UseCase
+import Mini.Application.UseCase.CatalogUseCase.ReadModel
+import Mini.Application.UseCase.CatalogUseCase.QueryService
+import Mini.Application.UseCase.CatalogUseCase.UseCase
+import Mini.Runtime.Ids
+import Mini.Runtime.Machine
+import Mini.Runtime.Views
+import Mini.Runtime.Scenarios
+import Mini.Runtime.Json
