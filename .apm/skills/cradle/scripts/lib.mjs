@@ -152,13 +152,14 @@ export function lakeBuild(cfg) {
   return r.stdout;
 }
 
-/** `lake env lean` で Lean の断片を評価する（#print / #check / #eval）。 */
+/** `lake env lean` で Lean の断片を評価する（#print / #check / #eval）。error は評価が終わらなかった理由（lake を起動できない・時間切れ・signal で止まった）で、
+    終われば undefined — 呼び手が空の出力を「何も無い」と読まないための印。 */
 export function leanEval(cfg, source, { timeoutMs = 120000 } = {}) {
   const tmp = join(process.env.TMPDIR ?? "/tmp", `cradle-query-${process.pid}-${Date.now()}.lean`);
   writeFileSync(tmp, source);
   try {
     const r = spawnSync("lake", ["env", "lean", tmp], { cwd: cfg.lean.rootDir, encoding: "utf8", timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"] });
-    return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message ?? (r.signal ? `killed by ${r.signal}` : undefined) };
   } finally { try { unlinkSync(tmp); } catch {} }
 }
 

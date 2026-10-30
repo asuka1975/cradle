@@ -8,6 +8,7 @@
 //   - 観測は操作が無くてよい（worker だけの受信）。操作があれば公開受信。複数は NG
 //   - 画面の口には GET がある（cradle.json の api.outletsWithoutEndpoint に挙げた口は除く）
 // --meta を渡せば spec-query を起動せずその meta を使う（検査の再現用）。
+// meta が Lean を評価しきれていなければ（evalErrors の commands / observations、views.error）照合せず 2 で終わる。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -18,6 +19,10 @@ const cfg = loadConfigOrFail();
 const spec = join(cfg.root, cfg.documents.openapi);
 if (!existsSync(spec)) fail(`契約がありません: ${cfg.documents.openapi}`);
 const meta = jsonArg(opts.meta) ?? queryMeta();
+// meta が Lean を評価しきれていなければ照合しない — 空の構成子・画面の口の一覧と比べると、誤った NG（モデルに無い構成子）か誤った OK になる。
+// 2 は lake build の失敗と同じ「検査できなかった」
+const unevaluated = [["commands", meta.evalErrors?.commands], ["observations", meta.evalErrors?.observations], ["views", meta.views?.error]].filter(([, e]) => e !== undefined);
+if (unevaluated.length) fail(`spec-query meta が Lean を評価しきれていないので照合しない（${unevaluated.map(([k, e]) => `${k}: ${(typeof e === "string" ? e : JSON.stringify(e)).slice(0, 300)}`).join("; ")}）`, 2);
 const yaml = readFileSync(spec, "utf8");
 
 function queryMeta() {

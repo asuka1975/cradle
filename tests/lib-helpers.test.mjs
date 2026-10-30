@@ -2,12 +2,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, chmodSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -110,6 +110,27 @@ test("headerUsage は shebang の次から続くコメント行を `// ` を外�
   // 先頭の 1 行は shebang として読み飛ばす（コメントでも使い方に入れない）
   writeTree(root, { "plain.mjs": "// 1 行目\n// 2 行目\n" });
   assert.equal(headerUsage(pathToFileURL(join(root, "plain.mjs")).href), "2 行目");
+});
+
+test("leanEval は評価が終わらなかった理由を error に返す — lake が無い・時間切れ・signal で止まった。終われば undefined", (t) => {
+  const root = tempDir(t, "cradle-lean-eval-");
+  const bin = join(root, "bin");
+  // 偽の lake: 本文を引数で選ぶ（PATH は bin だけなので shebang は node の絶対パス）
+  const lake = (body) => { writeTree(root, { "bin/lake": `#!${process.execPath}\n${body}\n` }); chmodSync(join(bin, "lake"), 0o755); };
+  const path = process.env.PATH;
+  t.after(() => { process.env.PATH = path; });
+  process.env.PATH = bin;
+  const cfg = { lean: { rootDir: root } };
+  writeTree(root, { "bin/.keep": "" });
+  assert.match(leanEval(cfg, "#print X\n").error, /ENOENT/);
+  lake(`process.stdout.write("printed " + require("fs").readFileSync(process.argv[4], "utf8"))`);
+  assert.deepEqual(leanEval(cfg, "#print X\n"), { status: 0, stdout: "printed #print X\n", stderr: "", error: undefined });
+  lake("setTimeout(() => {}, 10000)");
+  const slow = leanEval(cfg, "", { timeoutMs: 300 });
+  assert.equal(slow.status, null);
+  assert.match(slow.error, /ETIMEDOUT/);
+  lake(`process.kill(process.pid, "SIGKILL")`);
+  assert.deepEqual(leanEval(cfg, ""), { status: null, stdout: "", stderr: "", error: "killed by SIGKILL" });
 });
 
 test("findProjectRoot と loadConfig はルートを指す変数を渡された env から読み、空の env なら cradle.json を持つ祖先と root の cradle.json だけで決める", (t) => {

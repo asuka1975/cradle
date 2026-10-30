@@ -45,12 +45,12 @@ async function externalProtocol() {
   return typeof res?.error === "string" && /unknown cmd/.test(res.error) ? null : { version: EXTERNAL_VERSION };
 }
 
-/** #print の出力から構成子名と型を抜く。 */
+/** #print の出力から構成子名と型を抜く。評価が終わらなかった（leanEval の error）か構成子の欄が無ければ、error に理由を載せて構成子は空。 */
 function constructorsOf(fullName) {
   const r = leanEval(cfg, `import ${cfg.lean.root}\n#print ${fullName}\n`);
   const lines = joinWrapped(r.stdout.split("\n"));
   const i = lines.findIndex(l => l.startsWith("constructors:"));
-  if (i < 0) return { error: (r.stderr || r.stdout).trim().slice(0, 500), constructors: [] };
+  if (r.error !== undefined || i < 0) return { error: r.error ?? (r.stderr || r.stdout).trim().slice(0, 500), constructors: [] };
   const ctors = [];
   for (const l of lines.slice(i + 1)) {
     const m = l.match(/^(\S+)\s*:\s*(.*)$/);
@@ -59,13 +59,13 @@ function constructorsOf(fullName) {
   return { constructors: ctors };
 }
 
-// 同じ #print を繰り返さない（meta は commands / observations を何度も引く）
+// 同じ #print を繰り返さない（meta は commands / observations / errors を何度も引く）
 const printed = new Map();
 function once(key, compute) { if (!printed.has(key)) printed.set(key, compute()); return printed.get(key); }
 function commands() { return once("commands", () => constructorsOf(`${cfg.lean.root}.Runtime.Command`)); }
 /** 内部入力（通知・worker からの観測）の合併型。持たないプロジェクトでは空。 */
 function observations() { return once("observations", () => existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }); }
-function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
+function errors() { return once("errors", () => constructorsOf(`${cfg.lean.root}.DomainError`)); }
 
 /** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。 */
 function printMany(names) {
@@ -182,11 +182,15 @@ try {
     case "meta": {
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
-      printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
+      const meta = { project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
         scenarios: scenarioNames(cfg), environments: environmentNames(cfg), external: await externalProtocol(),
         commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
-        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
+        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() };
+      // #print が通らなかった合併型の理由は末尾の evalErrors に置き、空の一覧を「モデルに無い」と読ませない。全部通れば鍵ごと出さない。
+      // 終了コードは 0 のまま — モックアップは meta が 0 で終わらなければ全体を捨て、シナリオと画面の口まで失う
+      const evalErrors = Object.fromEntries(Object.entries({ commands: commands(), observations: observations(), errors: errors() }).filter(([, r]) => r.error !== undefined).map(([k, r]) => [k, r.error]));
+      printJson(Object.keys(evalErrors).length ? { ...meta, evalErrors } : meta);
       break;
     }
     case "external": {
@@ -215,7 +219,9 @@ try {
       const r = leanEval(cfg, src);
       process.stdout.write(r.stdout);
       if (r.stderr.trim()) process.stderr.write(r.stderr);
-      process.exit(r.status ?? 0);
+      // lake を起動できない・時間切れなら出力は空なので、理由を出して 0 で終えない
+      if (r.error !== undefined) process.stderr.write(`cradle: \`lake env lean\` で評価できない: ${r.error}\n`);
+      process.exit(r.status ?? 1);
     }
     case "init": {
       if (!opts.scenario) fail("--scenario が要ります");
