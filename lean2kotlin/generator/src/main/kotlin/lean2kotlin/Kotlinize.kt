@@ -462,6 +462,13 @@ class Kotlinize(private val ir: Ir) {
 		return matches.single().name
 	}
 
+	/** 同一性フィールド(Id 型の Ref を運ぶ最初のフィールド)。id が Ref でない・structure でない・見つからなければ null。
+	    一致が一意かは見ない(一意を求めるのは idFieldName)。 */
+	fun idFieldOf(td: IrTypeDef): IrField? {
+		val idLean = (td.id as? IrType.Ref)?.lean ?: return null
+		return (td.shape as? IrShape.Structure)?.fields?.find { (it.type as? IrType.Ref)?.lean == idLean }
+	}
+
 	/** sealed のコンストラクタ名 → Kotlin のサブクラス名。 */
 	fun ctorClassName(ctor: String): String = capitalizeFirst(ctor)
 
@@ -589,11 +596,7 @@ class Kotlinize(private val ir: Ir) {
 	fun listArb(t: IrType.ListOf, keys: List<ConstraintKey>, size: String = "0..5"): String {
 		val el = (t.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
 		val base = "Arb.list(${arbOf(t.of)}, $size)"
-		val idLean = (el?.id as? IrType.Ref)?.lean
-		val idField = if (idLean == null) null
-			else (el.shape as? IrShape.Structure)?.fields?.find { f ->
-				(f.type as? IrType.Ref)?.lean == idLean
-			}
+		val idField = el?.let { idFieldOf(it) }
 		val start = if (idField != null) "xs.distinctBy { x -> x.${ident(idField.name)} }" else "xs"
 		val body = constrainExpr(start, keys.filter { !(it.constraint.kind == "unique" && it.field.name == idField?.name) })
 		return if (body == "xs") base else "$base.map { xs -> $body }"

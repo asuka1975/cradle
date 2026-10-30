@@ -40,9 +40,7 @@ internal fun EmitTests.nestedIdShifts(td: IrTypeDef, index: String): List<String
 		val el = ((f.type as? IrType.ListOf)?.of as? IrType.Ref)
 			?.let { ir.typeDef(it.lean) } ?: return@mapNotNull null
 		val elIdLean = (el.id as? IrType.Ref)?.lean ?: return@mapNotNull null
-		val elIdField = (el.shape as? IrShape.Structure)?.fields
-			?.find { (it.type as? IrType.Ref)?.lean == elIdLean }
-			?: return@mapNotNull null
+		val elIdField = k.idFieldOf(el) ?: return@mapNotNull null
 		val elIdTd = ir.typeDef(elIdLean)
 		val elInner = ident((elIdTd.shape as IrShape.Structure).fields.single().name)
 		val fn = ident(f.name)
