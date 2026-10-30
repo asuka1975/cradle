@@ -2340,8 +2340,21 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let comps := n.components
       if comps.length < 2 then continue
       let pLast := comps[comps.length - 2]!
-      let some (tyN, _) := roles.toList.find? (fun (t, ro) =>
-          t.components.getLast! == pLast && behaviorSubjectRoles.contains ro) | continue
+      -- 主対象は親 namespace の型そのもの。型でなければ短い名前が同じ型が 1 つのときだけ —
+      -- UseCase ごとの型(Command・入力語彙・State)は同じ短い名前で並ぶので、2 つ以上なら決めない
+      let subject? ← do
+        if (roles.get? n.getPrefix).any behaviorSubjectRoles.contains then pure (some n.getPrefix)
+        else
+          let cands := roles.toList.filterMap fun (t, ro) =>
+            if t.components.getLast! == pLast && behaviorSubjectRoles.contains ro then some t else none
+          match cands with
+          | [t] => pure (some t)
+          | [] => pure none
+          | _ =>
+            let sorted := (cands.map toString).toArray.qsort (· < ·)
+            logInfo m!"lean2kotlin: ふるまい {n} は主対象を決められないため除外: 短い名前 {pLast} の型が複数({", ".intercalate sorted.toList})"
+            pure none
+      let some tyN := subject? | continue
       let sigResult ← try
         let (params, ty) ← sigParams ci.type false
         pure (some (params, ← typeToIR rootNs reg (← whnf ty)))
@@ -2398,8 +2411,13 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         -- 射影: 主体が State(親 namespace か先頭の値引数)で Row の列を返すものだけ対象
         let comps := n.components
         let pLast := if comps.length ≥ 2 then comps[comps.length - 2]! else Name.anonymous
-        let byNs := (roles.toList.find? (fun (t, ro) =>
-            ro == .repositoryState && t.components.getLast! == pLast)).map (·.1)
+        -- 親 namespace の State そのもの。型でなければ短い名前が同じ State が 1 つのときだけ(UseCase ごとの State は同名)
+        let byNs :=
+          if roles.get? n.getPrefix == some .repositoryState then some n.getPrefix
+          else match roles.toList.filter (fun (t, ro) =>
+              ro == .repositoryState && t.components.getLast! == pLast) with
+            | [(t, _)] => some t
+            | _ => none
         let byArg := params[0]?.bind fun f =>
           (collectRefs f.type #[]).find? (fun r => roles.get? r == some .repositoryState)
         let some stTy := byNs <|> byArg | continue
@@ -2530,24 +2548,33 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       | _ => j
     -- 5c. UseCase の入力の種別: command(利用者の操作)/ observation(内部入力)/ query(参照系)。
     -- 固定形は排他 — Command と Observation の同居は失敗。内部入力の UseCase は名義を受けない
-    let inputOfDir (dir leaf : Name) (role : Role) : Option Name :=
-      (roles.toList.find? fun (n, r) => r == role && modOf n == some (ucNs ++ dir ++ leaf)).map (·.1)
+    let inputsOfDir (dir leaf : Name) (role : Role) : List Name :=
+      (roles.toList.filter fun (n, r) => r == role && modOf n == some (ucNs ++ dir ++ leaf)).map (·.1)
+    -- input は固定名(Command / Observation)の型、無ければ置き場で唯一の型。入力語彙も同じ置き場の
+    -- 同じ役割なので、決まらなければ input を書かない(種別は置き場に型があることで決まる)
+    let withInput (j : Json) (dir leaf : Name) (cands : List Name) : Elab.TermElabM Json := do
+      match cands.filter (·.components.getLast! == leaf), cands with
+      | [c], _ | [], [c] => pure (j.setObjVal! "input" (toString c))
+      | _, _ =>
+        let sorted := (cands.map toString).toArray.qsort (· < ·)
+        logInfo m!"lean2kotlin: UseCase {dir} の入力の型を 1 つに決められないため input を書かない({", ".intercalate sorted.toList})"
+        pure j
     let useCaseJs ← useCaseJs.mapM fun j => do
       match j.getObjVal? "name" with
       | .ok (.str nm) =>
         let dir := nm.toName
-        match inputOfDir dir `Command .command, inputOfDir dir `Observation .observation with
-        | some _, some _ =>
+        match inputsOfDir dir `Command .command, inputsOfDir dir `Observation .observation with
+        | _ :: _, _ :: _ =>
           throwError "lean2kotlin: UseCase {dir} が Command と Observation の両方を持っています(固定形は Command+UseCase / Observation+UseCase / ReadModel+QueryService+UseCase のどれか 1 つ)"
-        | some c, none => pure ((j.setObjVal! "kind" "command").setObjVal! "input" (toString c))
-        | none, some o =>
+        | cs@(_ :: _), [] => withInput (j.setObjVal! "kind" "command") dir `Command cs
+        | [], os@(_ :: _) =>
           if let some execC := execByDir.get? dir then
             for (nm, ty) in (← valueBinders execC) do
               if let .const h _ := (← whnf ty).getAppFn then
                 if roles.get? h == some .actorPort then
                   throwError "lean2kotlin: UseCase {dir} は Observation 形なのに execute が名義({nm} : ActorContext)を受けています(内部入力は利用者の名義を要求しない)"
-          pure ((j.setObjVal! "kind" "observation").setObjVal! "input" (toString o))
-        | none, none => pure (j.setObjVal! "kind" "query")
+          withInput (j.setObjVal! "kind" "observation") dir `Observation os
+        | [], [] => pure (j.setObjVal! "kind" "query")
       | _ => pure j
     -- 診断: 宣言した契約が IR に入らない・固定形の署名が写らない理由(生成器はこれを失敗として読む)
     let mut droppedJs : Array Json := #[]

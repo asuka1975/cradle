@@ -17,7 +17,7 @@
      "name": "execute",
      "doc": "揃えた品番を足す。 "}],
    "kind": "command",
-   "input": "Depot.Application.PlaceOrderUseCase.Sku"}],
+   "input": "Depot.Application.PlaceOrderUseCase.Command"}],
  "types":
  [{"shape":
    {"kind": "structure",
@@ -209,7 +209,16 @@
      "kind": "pure",
      "args": {"stock": 5, "q": {"count": 5}}}]}],
  "behaviors":
- [{"subject": "Depot.Domain.Order",
+ [{"subject": "Depot.Application.PlaceOrderUseCase.Sku",
+   "module": "Depot.Application.UseCase.PlaceOrderUseCase.Command",
+   "methods":
+   [{"ret": {"k": "string"},
+     "params":
+     [{"type": {"name": "Depot.Application.PlaceOrderUseCase.Sku", "k": "ref"},
+       "name": "s"}],
+     "name": "normalized",
+     "doc": "揃えた品番の文字列。 "}]},
+  {"subject": "Depot.Domain.Order",
    "module": "Depot.Domain.Entity.Order",
    "methods":
    [{"ret": {"name": "Depot.Domain.Order", "k": "ref"},
@@ -247,17 +256,4 @@
       {"type": {"k": "nat"}, "name": "stock"}],
      "name": "shortage",
      "doc":
-     "足りない数の失敗。irreducible なので期待値は簡約で ctor 正規形にならず、合成したシリアライザのコンパイル実行で直列化する。 "}]},
-  {"subject": "Depot.Sku",
-   "module": "Depot.Domain.Entity.Order",
-   "methods":
-   [{"ret": {"k": "string"},
-     "params": [{"type": {"name": "Depot.Sku", "k": "ref"}, "name": "s"}],
-     "name": "label",
-     "doc": "品番の表示。名前空間 Depot.Domain.Sku は型ではなく、短い名前が Sku の型は VO と入力語彙の 2 つ。 "},
-    {"ret": {"k": "string"},
-     "params":
-     [{"type": {"name": "Depot.Application.PlaceOrderUseCase.Sku", "k": "ref"},
-       "name": "s"}],
-     "name": "normalized",
-     "doc": "揃えた品番の文字列。 "}]}]}
+     "足りない数の失敗。irreducible なので期待値は簡約で ctor 正規形にならず、合成したシリアライザのコンパイル実行で直列化する。 "}]}]}
