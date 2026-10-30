@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
@@ -41,10 +42,28 @@ test("Stop は差分の unslop error が多くても unslop --json を全部読�
   assert.deepEqual(stop(), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 1200 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}\n…（cradle unslop --diff で全件）` });
 });
 
+// 6000 件なら 1.4MB 余りで、spawnSync の既定の maxBuffer（1MB）を超える
+test("Stop は unslop --json が 1MB を超えても全部読んで差し戻す", (t) => {
+  const { root, stop } = fixture(t);
+  writeTree(root, { "e2e/flow.ts": Array.from({ length: 6000 }, (_, i) => `// 手 ${i + 1} は未決\n`).join("") + "export const y = 1;\n" });
+  const lines = Array.from({ length: 15 }, (_, i) => reasonLine(i + 1)).join("\n");
+  assert.deepEqual(stop(), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 6000 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}\n…（cradle unslop --diff で全件）` });
+});
+
 test("Stop は warn だけの差分や違反の無い差分では差し戻さない", (t) => {
   const { root, stop } = fixture(t);
   writeTree(root, { "e2e/flow.ts": "// たぶん動く\nexport const y = 1;\n" });
   assert.equal(stop(), null);
   writeTree(root, { "e2e/flow.ts": "export const y = 2;\n" });
   assert.equal(stop(), null);
+});
+
+// 読み取りの上限を超えたときだけが失敗での差し戻し。git の外で unslop --diff が差分を読めなくても、hook は止めずに通す
+test("Stop は git の外では違反のあるファイルがあっても差し戻さない", (t) => {
+  const root = tempProject(t, "cradle-hook-stop-nogit-");
+  writeTree(root, { "e2e/flow.ts": "// 手 1 は未決\nexport const y = 1;\n" });
+  const r = runNode(hook, ["stop"], { cwd: root, env: cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) }), input: JSON.stringify({ cwd: root }) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.equal(r.stdout, "");
 });

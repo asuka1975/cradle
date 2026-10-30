@@ -148,6 +148,10 @@ export function ensureLeanBinary(cfg, build = "auto") {
   if (build === "always" || !existsSync(cfg.lean.bin)) lakeBuild(cfg);
 }
 
+/** 大きさの決まらない子の出力（--json の一覧・lake や git の出力）を読む上限。spawnSync / execFile の既定（1MB）では超えたところで子を止めて途中で切る
+    （spawnSync は error.code が ENOBUFS）。256MB は V8 の文字列の上限（約 512MB）の内側。 */
+export const CHILD_OUTPUT_MAX = 256 * 1024 * 1024;
+
 export function lakeBuild(cfg) {
   const r = spawnSync("lake", ["build"], { cwd: cfg.lean.rootDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (r.status !== 0) {

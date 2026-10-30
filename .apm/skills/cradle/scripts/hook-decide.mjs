@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { matchesAny, rel, git, leanGitStatus, cradleScript, aiNoteProblems } from "./lib.mjs";
+import { matchesAny, rel, git, leanGitStatus, cradleScript, aiNoteProblems, CHILD_OUTPUT_MAX } from "./lib.mjs";
 import { unslopErrorSummary } from "./unslop-report.mjs";
 
 /** 編集対象のパス。Claude Code は file_path、Codex の apply_patch は tool_input.command にパッチ本文（Add / Update / Delete File 行）が入る。 */
@@ -16,13 +16,13 @@ export function targetPaths(payload) {
   return [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm), ...patch.matchAll(/^\*\*\* Move to: (.+)$/gm)].map(m => m[1].trim());
 }
 
-/** mode の判定。先に当たった応答だけを返す（後ろの検査は走らせない）。readText は読めなければ投げる。 */
+/** mode の判定。先に当たった応答だけを返す（後ろの検査は走らせない）。readText は読めなければ投げる。runUnslop は spawnSync の結果（stdout と error）を返す。 */
 export function decide(mode, payload, {
   cfg, isClaude,
   exists = existsSync,
   gitStatus = (dir) => git(cfg.root, ["status", "--porcelain", "--", dir]),
   leanStatus = () => leanGitStatus(cfg),
-  runUnslop = () => spawnSync(process.execPath, [cradleScript("unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).stdout,
+  runUnslop = () => spawnSync(process.execPath, [cradleScript("unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "pipe"] }),
   readText = (p) => readFileSync(p, "utf8"),
 }) {
   const base = payload.cwd ?? cfg.root;
@@ -122,7 +122,10 @@ export function decide(mode, payload, {
 
   if (mode === "stop") {
     if (payload.stop_hook_active) return null;
-    const stdout = runUnslop();
+    const { stdout, error } = runUnslop();
+    // 読み取りの上限（CHILD_OUTPUT_MAX）を超えた出力は途中で切れて読めない。違反が多すぎるので黙って通さず、全件の出し方を示して差し戻す。
+    // ほかの失敗（起動できない・git の外・読めない出力）は通す
+    if (error?.code === "ENOBUFS") return { decision: "block", reason: "作業ツリーの差分の unslop の結果が大きすぎて読み切れません。止まる前に cradle unslop --diff で違反を確かめて直すこと（規約は unslop と comments）。" };
     let result = null;
     try { result = JSON.parse(stdout || "null"); } catch { return null; }
     if (!result || !result.findings?.length) return null;

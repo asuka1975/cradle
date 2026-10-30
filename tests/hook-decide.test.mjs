@@ -202,7 +202,7 @@ test("post-edit は ai-notes の .md のファイル名と冒頭 800 字の断�
 test("stop は再入なら unslop を走らせず、unslop の JSON に error があるときだけ差し戻す", (t) => {
   const { cfg } = setup(t);
   let runs = 0;
-  const d = (stdout, payload = {}) => decide("stop", payload, { cfg, isClaude: false, runUnslop: () => { runs++; return stdout; } });
+  const d = (stdout, payload = {}) => decide("stop", payload, { cfg, isClaude: false, runUnslop: () => { runs++; return { stdout }; } });
   const warn = { file: "e2e/a.ts", line: 1, rule: "hedge", severity: "warn", message: "逃げ言葉" };
   const error = { file: "e2e/a.ts", line: 3, rule: "empty-catch", severity: "error", message: "空の catch" };
   assert.equal(d(JSON.stringify({ findings: [error] }), { stop_hook_active: true }), null);
@@ -210,6 +210,22 @@ test("stop は再入なら unslop を走らせず、unslop の JSON に error �
   for (const stdout of [undefined, null, "", "null", "not json", "{}", JSON.stringify({ findings: [] }), JSON.stringify({ findings: [warn] })]) assert.equal(d(stdout), null, String(stdout));
   assert.deepEqual(d(JSON.stringify({ findings: [warn, error] })),
     { decision: "block", reason: "作業ツリーの差分に unslop 違反（error）が 1 件あります。止まる前に直すこと（規約は unslop と comments）:\n- e2e/a.ts:3 [empty-catch] 空の catch" });
+});
+
+test("stop は unslop の出力が読み取りの上限を超えた（ENOBUFS）ときだけ失敗で差し戻し、ほかの失敗は通す", (t) => {
+  const { cfg } = setup(t);
+  const d = (r) => decide("stop", {}, { cfg, isClaude: false, runUnslop: () => r });
+  const error = { file: "e2e/a.ts", line: 3, rule: "empty-catch", severity: "error", message: "空の catch" };
+  const cut = JSON.stringify({ findings: [error, error] }).slice(0, 40);
+  assert.deepEqual(d({ stdout: cut, status: null, signal: "SIGTERM", error: Object.assign(new Error("spawnSync node ENOBUFS"), { code: "ENOBUFS" }) }),
+    { decision: "block", reason: "作業ツリーの差分の unslop の結果が大きすぎて読み切れません。止まる前に cradle unslop --diff で違反を確かめて直すこと（規約は unslop と comments）。" });
+  // 起動できない・git の外で 0 以外に終わる・読めない出力で 0 以外に終わる: どれも通す（hook は失敗で止めない）
+  for (const r of [
+    { stdout: undefined, status: null, error: Object.assign(new Error("spawnSync node ENOENT"), { code: "ENOENT" }) },
+    { stdout: "", status: 2 },
+    { stdout: "cradle: git の外です\n", status: 1 },
+    { stdout: cut, status: 1 },
+  ]) assert.equal(d(r), null, JSON.stringify(r));
 });
 
 test("decide は設定の型の誤りで投げる（黙って通すのは hook.mjs）", (t) => {
