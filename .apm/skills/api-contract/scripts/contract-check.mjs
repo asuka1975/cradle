@@ -8,7 +8,7 @@
 //   - 観測は操作が無くてよい（worker だけの受信）。操作があれば公開受信。複数は NG
 //   - 画面の口には GET がある（cradle.json の api.outletsWithoutEndpoint に挙げた口は除く）
 // --meta を渡せば spec-query を起動せずその meta を使う（検査の再現用）。
-// meta が Lean を評価しきれていなければ（evalErrors の commands / observations、views.error）照合せず 2 で終わる。
+// meta が Lean を評価しきれていなければ（evalErrors の commands / observations、views.error）照合せず 2 で終わる。spec-query meta が lake build の失敗（2）で止まったときも 2。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -27,7 +27,8 @@ const yaml = readFileSync(spec, "utf8");
 
 function queryMeta() {
   const r = spawnSync(process.execPath, [cradleScript("spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
-  if (!r.stdout?.trim()) fail(`spec-query meta が何も返しませんでした: ${(r.stderr ?? "").trim().slice(0, 400)}`);
+  // spec-query の 2（lake build の失敗）はそのまま 2 で返す — 1 は NG と同じ終了コード
+  if (!r.stdout?.trim()) fail(`spec-query meta が何も返しませんでした: ${(r.stderr ?? "").trim().slice(0, 400)}`, r.status === 2 ? 2 : 1);
   return JSON.parse(r.stdout);
 }
 

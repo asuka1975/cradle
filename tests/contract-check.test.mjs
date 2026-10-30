@@ -148,3 +148,19 @@ test("meta が Lean を評価しきれていなければ（commands / observatio
   const errorsOnly = run(t, covered, { metaOverride: { ...meta, evalErrors: { errors: "spawnSync lake ENOENT" } } });
   assert.equal(errorsOnly.status, 0, JSON.stringify(errorsOnly.result));
 });
+
+test("--meta 無しで spec-query meta が lake build の失敗（2）で止まれば、NG の 1 にせず 2 で終わる", (t) => {
+  const root = tempProject(t, "cradle-contract-check-");
+  mkdirSync(join(root, "documents/codebase"), { recursive: true });
+  writeFileSync(join(root, "documents/codebase/openapi.yaml"), `openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths:\n${paths(covered)}\n`);
+  // Lean CLI のバイナリが無く PATH に lake も無い: spec-query meta は lake build を走らせて失敗する
+  mkdirSync(join(root, "lean"));
+  const noTools = join(root, "no-tools");
+  mkdirSync(noTools);
+  for (const args of [["--json"], []]) {
+    const r = runNode(contractCheck, args, { cwd: root, env: cleanEnv({ PATH: noTools }) });
+    assert.equal(r.status, 2, `${args}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /^cradle: spec-query meta が何も返しませんでした: cradle: lake build が失敗しました/);
+  }
+});
