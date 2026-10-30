@@ -117,10 +117,12 @@ switch (cmd) {
     // 開始時点の記録（.session）は検査が通るまで残す — 残骸を消して end をやり直すときも同じ基準で比べる。記録の無い印（start を経ていない）は先に消し、検査は HEAD と比べる
     const baseline = s?.lean ? ["--baseline", marker] : [];
     for (const f of [qfile, nfile, ...(baseline.length ? [] : [marker])]) if (existsSync(f)) unlinkSync(f);
-    const r = spawnSync(process.execPath, [cradleScript("ddd-clean-check.mjs"), ...(opts["no-build"] ? [] : ["--build"]), ...baseline], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    process.stdout.write(r.stdout ?? ""); process.stderr.write(r.stderr ?? "");
+    // 検査の出力は読まずに写すだけなので、子に stdout / stderr を渡す（パイプで受けると読み取りの上限で行の途中から先を落とす）
+    const r = spawnSync(process.execPath, [cradleScript("ddd-clean-check.mjs"), ...(opts["no-build"] ? [] : ["--build"]), ...baseline], { cwd: cfg.root, stdio: ["ignore", "inherit", "inherit"] });
+    // 起動できなければ検査の結果は無い。.session を残し、2（検査できなかった）で終わる
+    if (r.error) { process.stderr.write(`cradle: ddd-clean-check を走らせられませんでした: ${r.error.message}\n`); process.exitCode = 2; break; }
     if (r.status === 0 && baseline.length) unlinkSync(marker);
-    // process.exit はパイプにまだ書いていない stdout（ddd-clean-check の出力の写し）を捨てる。終了コードだけを置いて書き切らせる
+    // 終了コードは検査のもの（signal で止まれば status は null なので 1）
     process.exitCode = r.status ?? 1;
     break;
   }

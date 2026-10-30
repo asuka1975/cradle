@@ -8,11 +8,11 @@
 //   - 観測は操作が無くてよい（worker だけの受信）。操作があれば公開受信。複数は NG
 //   - 画面の口には GET がある（cradle.json の api.outletsWithoutEndpoint に挙げた口は除く）
 // --meta を渡せば spec-query を起動せずその meta を使う（検査の再現用）。
-// meta が Lean を評価しきれていなければ（evalErrors の commands / observations、views.error）照合せず 2 で終わる。spec-query meta が lake build の失敗（2）で止まったときも 2。
+// meta が Lean を評価しきれていなければ（evalErrors の commands / observations、views.error）照合せず 2 で終わる。spec-query meta が lake build の失敗（2）で止まったときと、その出力を読み切れなかったときも 2。
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, jsonArg, fail, cradleScript } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, cradleScript, CHILD_OUTPUT_MAX } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfigOrFail();
@@ -26,7 +26,9 @@ if (unevaluated.length) fail(`spec-query meta が Lean を評価しきれてい�
 const yaml = readFileSync(spec, "utf8");
 
 function queryMeta() {
-  const r = spawnSync(process.execPath, [cradleScript("spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [cradleScript("spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
+  // 読み切れなかった meta（上限を超えた・起動できない）とは照合しない。2 は lake build の失敗と同じ「検査できなかった」
+  if (r.error) fail(`spec-query meta の出力を読めませんでした: ${r.error.message}`, 2);
   // spec-query の 2（lake build の失敗）はそのまま 2 で返す — 1 は NG と同じ終了コード
   if (!r.stdout?.trim()) fail(`spec-query meta が何も返しませんでした: ${(r.stderr ?? "").trim().slice(0, 400)}`, r.status === 2 ? 2 : 1);
   return JSON.parse(r.stdout);

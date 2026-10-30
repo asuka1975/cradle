@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { CHILD_OUTPUT_MAX } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 /** テストごとの一時ディレクトリ。テストの終わりに消す。 */
 export function tempDir(t, prefix) {
@@ -36,8 +37,9 @@ export function gitConfigEnv(config) {
     ...Object.entries(config).map(([k, v], i) => ({ [`GIT_CONFIG_KEY_${i}`]: k, [`GIT_CONFIG_VALUE_${i}`]: v })));
 }
 
+/** 子の出力は道具と同じ上限（lib の CHILD_OUTPUT_MAX）まで読む。spawnSync の既定の 1MB では、1MB を超える出力を道具が全部出したかを確かめられない */
 export function runNode(script, args, { cwd, env, input, timeout = 20_000 } = {}) {
-  return spawnSync(process.execPath, [script, ...args], { cwd, env, encoding: "utf8", timeout, input });
+  return spawnSync(process.execPath, [script, ...args], { cwd, env, encoding: "utf8", timeout, input, maxBuffer: CHILD_OUTPUT_MAX });
 }
 
 /** { "相対パス": "中身" } を root の下に書く（親ディレクトリも作る）。 */

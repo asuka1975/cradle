@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
 // 大きな出力をパイプ越しに読む: process.exit で終える道具は、パイプにまだ書いていない stdout を捨てて 64KB 前後で切れる。
-// 出力はパイプの容量を大きく超え、spawnSync の maxBuffer（1MB）より小さく組む。
+// 出力はパイプの容量を大きく超え、1MB より小さく組む（1MB を超える出力は末尾の組: 道具が子の出力を読む上限の確かめ）。
 // 1 回の大きな書き込み（--json）は runNode（spawnSync。hook や regen-impact と同じ読み方）でも切れる。行ごとの書き込みは読み手が速いと
 // 書くそばから読まれて切れないので、slowRead で読み始めを遅らせ、子が書き終える前にパイプを埋める（| less などの遅い読み手）
 const scripts = new URL("../.apm/skills/", import.meta.url);
@@ -20,6 +20,7 @@ const specQuery = script("cradle/scripts/spec-query.mjs");
 const contractCheck = script("api-contract/scripts/contract-check.mjs");
 const flowsFromGolden = script("e2e-parity/scripts/flows-from-golden.mjs");
 const ddd = script("ddd/scripts/ddd.mjs");
+const dddCleanCheck = script("cradle/scripts/ddd-clean-check.mjs");
 
 const big = (r) => assert.ok(r.stdout.length > 256 * 1024, `パイプ越しに読めたのが ${r.stdout.length} バイト（途中で切れたか、組んだ出力がパイプの容量を超えない）`);
 /** 読み始めを 500ms 遅らせて子を走らせる。data は先に受けて pause で止める（子が先に終われば、パイプに残った分はそのとき読める）。 */
@@ -144,7 +145,8 @@ test("spec-query run の ok でない応答は応答だけを出して 1 で終�
   assert.deepEqual(JSON.parse(r.stdout), response);
 });
 
-test("ddd end は ddd-clean-check の大きな出力をパイプ越しに全部写し、その終了コードで終わる", (t) => {
+// ddd start の後に n 本のファイルを lean/ に足して ddd end を走らせる。足したファイルは 1 つずつ ` A lean/<path>` の行になる
+function dddEnd(t, n) {
   const root = tempProject(t, "cradle-large-ddd-");
   writeTree(root, {
     ...Object.fromEntries(["hotspots.md", "ux-review.md", "model-review.md"].map(f => [`documents/ddd/${f}`, `# ${f}\n`])),
@@ -155,11 +157,132 @@ test("ddd end は ddd-clean-check の大きな出力をパイプ越しに全部�
   commitAll(root);
   const run = (...args) => runNode(ddd, args, { cwd: root, env: cleanEnv() });
   assert.equal(run("start").status, 0);
-  // start の後に足したファイルは 1 つずつ ` A lean/<path>` の行になる
-  writeTree(root, Object.fromEntries(Array.from({ length: 1500 }, (_, i) => [`lean/${long(i)}.lean`, "def x := 1\n"])));
-  const r = run("end", "--no-build");
+  writeTree(root, Object.fromEntries(Array.from({ length: n }, (_, i) => [`lean/${long(i)}.lean`, "def x := 1\n"])));
+  return run("end", "--no-build");
+}
+
+test("ddd end は ddd-clean-check の大きな出力をパイプ越しに全部写し、その終了コードで終わる", (t) => {
+  const r = dddEnd(t, 1500);
   big(r);
   assert.equal(r.status, 1, r.stderr);
   assert.equal(r.stdout.split("\n").filter(l => / A lean\/N/.test(l)).length, 1500);
   assert.match(r.stdout, /\n後片付けが残っています\n$/);
+});
+
+// 1MB を超える出力: 道具が子（ddd-clean-check・golden-check・spec-query meta・lake・git・再生成）の出力を spawnSync / execFileSync で読むと、
+// 既定の maxBuffer（1MB）を超えたところで子が止まって途中で切れる。lib の CHILD_OUTPUT_MAX まで読んで、全部を出すか判定に使う
+const huge = (r) => assert.ok(r.stdout.length > 1024 * 1024, `読めたのが ${r.stdout.length} バイト（1MB を超える出力を組めていないか、途中で切れた）`);
+
+test("ddd end は ddd-clean-check の 1MB を超える出力を行の途中で切らずに全部出し、締めの行と検査の終了コード 1 で終わる", (t) => {
+  const r = dddEnd(t, 7000);
+  huge(r);
+  assert.equal(r.status, 1, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.equal(r.stdout.split("\n").filter(l => / A lean\/N/.test(l)).length, 7000);
+  assert.match(r.stdout, /\n後片付けが残っています\n$/);
+});
+
+test("ベースライン無しの ddd-clean-check は HEAD との差分（git status）が 1MB を超えても OK と言わず、全部の行を出して 1 で終わる", (t) => {
+  const root = tempProject(t, "cradle-large-clean-");
+  writeTree(root, { "lean/README.md": "# lean\n" });
+  commitAll(root);
+  writeTree(root, Object.fromEntries(Array.from({ length: 7000 }, (_, i) => [`lean/${long(i)}.lean`, "def x := 1\n"])));
+  const r = runNode(dddCleanCheck, [], { cwd: root, env: cleanEnv() });
+  huge(r);
+  assert.equal(r.status, 1, r.stderr);
+  assert.equal(r.stdout.split("\n").filter(l => /^\?\? lean\/N/.test(l)).length, 7000);
+  assert.match(r.stdout, /\n後片付けが残っています\n$/);
+});
+
+test("regen-impact は golden-check --json が 1MB を超えても golden 回帰を読む", (t) => {
+  const root = tempProject(t, "cradle-large-regen-golden-");
+  writeTree(root, Object.fromEntries(Array.from({ length: 1500 }, (_, i) => [`lean/golden/${long(i)}-flow.json`, JSON.stringify({ ok: { trace: [] } })])));
+  commitAll(root);
+  const r = runNode(regenImpact, ["--no-regen", "--json"], { cwd: root, env: cleanEnv() });
+  huge(r);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  const { golden } = JSON.parse(r.stdout);
+  assert.equal(golden.error, undefined);
+  assert.equal(golden.failed, 1500);
+  assert.equal(new Set(golden.report.map(x => x.name)).size, 1500);
+});
+
+test("regen-impact は再生成の出力が 1MB を超えても再生成を止めず、失敗と言わない", (t) => {
+  const root = tempProject(t, "cradle-large-regen-out-", { project: "Example", backend: { regenerate: "yes y | head -c 2000000" } });
+  writeTree(root, { "backend/README.md": "# backend\n" });
+  commitAll(root);
+  const r = runNode(regenImpact, ["--no-golden", "--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.deepEqual(JSON.parse(r.stdout).changedGeneratedFiles, []);
+});
+
+test("contract-check は spec-query meta が 1MB を超えても読み切って照合する", (t) => {
+  const root = tempProject(t, "cradle-large-contract-meta-");
+  writeTree(root, {
+    "documents/codebase/openapi.yaml": "openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths: {}\n",
+    "lean/Example/Runtime/Scenarios.lean": "namespace Example.Runtime\ndef scenarioByName : String → Option Snapshot\n  | \"basic\" => some Scenario.basic\n  | _       => none\nend Example.Runtime\n",
+    "lean/Example/Runtime/Json.lean": "",
+  });
+  const bin = join(root, "lean/.lake/build/bin");
+  mkdirSync(bin, { recursive: true });
+  // 偽の Lean CLI: init には空の state と views、ほかの cmd は知らない cmd と断る
+  writeFileSync(join(bin, "example"), `#!${process.execPath}\nconst req = JSON.parse(require("fs").readFileSync(0, "utf8"));\nprocess.stdout.write(JSON.stringify(req.cmd === "init" ? { ok: { state: {}, views: {} } } : { error: "unknown cmd: " + req.cmd }));\n`);
+  chmodSync(join(bin, "example"), 0o755);
+  const tools = join(root, "tools");
+  mkdirSync(tools);
+  // 偽の lake（`lake env lean <file>`）: Command の #print は長い名前の構成子を 6000 個、ほかの #print は構成子 1 つの inductive を出す
+  const commands = Array.from({ length: 6000 }, (_, i) => long(i));
+  writeFileSync(join(tools, "lake"), `#!${process.execPath}
+const commands = ${JSON.stringify(commands)};
+for (const [, n] of require("fs").readFileSync(process.argv[4], "utf8").matchAll(/^#print (\\S+)$/gm)) {
+  const ctors = n === "Example.Runtime.Command" ? commands : ["only"];
+  process.stdout.write(\`inductive \${n} : Type\\nnumber of parameters: 0\\nconstructors:\\n\` + ctors.map(c => \`\${n}.\${c} : \${n}\\n\`).join(""));
+}
+`);
+  chmodSync(join(tools, "lake"), 0o755);
+  const r = runNode(contractCheck, ["--json"], { cwd: root, env: cleanEnv({ PATH: tools }) });
+  huge(r);
+  assert.equal(r.status, 1, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.deepEqual(JSON.parse(r.stdout).commandsWithoutOp, commands);
+});
+
+test("lean-check --build は lake build の出力が 1MB を超えても、通ったビルドを失敗と言わない", (t) => {
+  const root = tempProject(t, "cradle-large-lake-build-");
+  writeTree(root, { "lean/Example/Domain/A.lean": "theorem t : True := trivial\n" });
+  const tools = join(root, "tools");
+  mkdirSync(tools);
+  // 偽の lake（`lake build`）: 長い行を 7000 行出して 0 で終わる
+  writeFileSync(join(tools, "lake"), `#!${process.execPath}\nfor (let i = 0; i < 7000; i++) process.stdout.write("${"y".repeat(180)}" + i + "\\n");\n`);
+  chmodSync(join(tools, "lake"), 0o755);
+  const r = runNode(leanCheck, ["--build", "--json"], { cwd: root, env: cleanEnv({ PATH: tools }) });
+  assert.equal(r.stderr, "");
+  assert.equal(JSON.parse(r.stdout).build, "ok");
+});
+
+test("spec-query print は #print の出力が 1MB を超えても全部を出し、0 で終わる", (t) => {
+  const root = tempProject(t, "cradle-large-print-huge-");
+  mkdirSync(join(root, "lean"));
+  const tools = join(root, "tools");
+  mkdirSync(tools);
+  writeFileSync(join(tools, "lake"), `#!${process.execPath}\nfor (let i = 0; i < 7000; i++) process.stdout.write("${"y".repeat(180)}" + i + "\\n");\n`);
+  chmodSync(join(tools, "lake"), 0o755);
+  const r = runNode(specQuery, ["print", "Example.Runtime.Command", "--build", "never"], { cwd: root, env: cleanEnv({ PATH: tools }) });
+  huge(r);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.equal(r.stdout.split("\n").filter(Boolean).length, 7000);
+});
+
+test("refs は git grep の一致が 1MB を超えても全行と結びの行を出し、0 で終わる", (t) => {
+  const root = tempProject(t, "cradle-large-refs-huge-");
+  writeTree(root, { "documents/ddd/hotspots.md": Array.from({ length: 7000 }, (_, i) => `| HS-001 | ${long(i)} |\n`).join("") });
+  commitAll(root);
+  const r = runNode(refs, ["HS-001"], { cwd: root, env: cleanEnv() });
+  huge(r);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.split("\n")[0], "HS-001: 7000 箇所");
+  assert.match(r.stdout, /洗い直すこと。\n$/);
 });

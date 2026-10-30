@@ -153,7 +153,7 @@ export function ensureLeanBinary(cfg, build = "auto") {
 export const CHILD_OUTPUT_MAX = 256 * 1024 * 1024;
 
 export function lakeBuild(cfg) {
-  const r = spawnSync("lake", ["build"], { cwd: cfg.lean.rootDir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync("lake", ["build"], { cwd: cfg.lean.rootDir, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "pipe"] });
   if (r.status !== 0) {
     const err = new Error(`lake build が失敗しました:\n${(r.stdout ?? "").slice(-4000)}\n${(r.stderr ?? "").slice(-4000)}`);
     err.exitCode = 2;
@@ -168,13 +168,13 @@ export function leanEval(cfg, source, { timeoutMs = 120000 } = {}) {
   const tmp = join(process.env.TMPDIR ?? "/tmp", `cradle-query-${process.pid}-${Date.now()}.lean`);
   writeFileSync(tmp, source);
   try {
-    const r = spawnSync("lake", ["env", "lean", tmp], { cwd: cfg.lean.rootDir, encoding: "utf8", timeout: timeoutMs, stdio: ["ignore", "pipe", "pipe"] });
+    const r = spawnSync("lake", ["env", "lean", tmp], { cwd: cfg.lean.rootDir, encoding: "utf8", timeout: timeoutMs, maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "pipe"] });
     return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", error: r.error?.message ?? (r.signal ? `killed by ${r.signal}` : undefined) };
   } finally { try { unlinkSync(tmp); } catch {} }
 }
 
 export function git(root, args, opts = {}) {
-  return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], ...opts }).trimEnd();
+  return execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX, stdio: ["ignore", "pipe", "ignore"], ...opts }).trimEnd();
 }
 
 export function readJson(file) { return JSON.parse(readFileSync(file, "utf8")); }

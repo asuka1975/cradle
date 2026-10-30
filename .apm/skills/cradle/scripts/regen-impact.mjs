@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines, CHILD_OUTPUT_MAX } from "./lib.mjs";
 import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
@@ -41,7 +41,7 @@ function restoreGenerated() {
 
 let regenOut = null;
 if (!opts["no-regen"]) {
-  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
   if (r.status !== 0) {
     // 作りかけの出力を残さない。戻せなければ再生成の失敗の後ろに添える
@@ -84,8 +84,14 @@ let golden = null;
 if (!opts["no-golden"]) {
   const args = [cradleScript("golden-check.mjs"), "--json"];
   if (opts.manifest) args.push("--manifest", opts.manifest);
-  const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
-  try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+  const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
+  // 読み切れなかった出力（上限を超えた・起動できない）は判定にしない。golden 回帰は「実行できず」で出す
+  if (r.error) {
+    golden = { error: `golden-check の出力を読めませんでした: ${r.error.message}` };
+    process.stderr.write(`cradle: ${golden.error}\n`);
+  } else {
+    try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+  }
 }
 
 // 戻せなければ結果を出さない（--json の restored: true が嘘になる）。再生成の失敗と同じく途中で止まった 2
