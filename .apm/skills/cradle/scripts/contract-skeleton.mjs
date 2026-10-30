@@ -7,7 +7,9 @@ const opts = parseArgs(process.argv.slice(2));
 const file = opts._[0];
 if (!file) { console.error("usage: cradle contract-skeleton backend/src/generated/kotlin-test/.../XxxContractTest.kt"); process.exit(1); }
 if (!existsSync(file)) { console.error(`cradle contract-skeleton: ${file} が無い`); process.exit(1); }
-const text = readFileSync(file, "utf8");
+// 在っても読めないパス（ディレクトリ・権限の無いファイル）もスタックトレースでなく 1 行で止める
+let text;
+try { text = readFileSync(file, "utf8"); } catch (e) { console.error(`cradle contract-skeleton: ${file} を読めません: ${e.message}`); process.exit(1); }
 const pkg = (text.match(/^package\s+(\S+)/m) ?? [])[1] ?? "";
 const cls = (text.match(/abstract\s+class\s+(\w+)/) ?? [])[1];
 if (!cls) { console.error("abstract class が見つかりません"); process.exit(1); }

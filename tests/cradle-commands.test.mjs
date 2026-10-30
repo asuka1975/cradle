@@ -69,7 +69,7 @@ test("contract-skeleton は抽象メソッドごとに TODO の override を並�
   }
 });
 
-test("contract-skeleton は引数が無ければ使い方、無いファイルと abstract class の無いファイルはその旨を stderr に 1 行出して 1 で終わる", (t) => {
+test("contract-skeleton は引数が無ければ使い方、無いファイル・読めないパス（ディレクトリ）と abstract class の無いファイルはその旨を stderr に 1 行出して 1 で終わる", (t) => {
   const root = tempProject(t, "cradle-skeleton-");
   const run = (...args) => runNode(cradle, ["contract-skeleton", ...args], { cwd: root, env: cleanEnv() });
   const usage = run();
@@ -78,6 +78,11 @@ test("contract-skeleton は引数が無ければ使い方、無いファイル�
   assert.deepEqual([notAbstract.status, notAbstract.stdout, notAbstract.stderr], [1, "", "abstract class が見つかりません\n"]);
   const missing = run("Missing.kt");
   assert.deepEqual([missing.status, missing.stdout, missing.stderr], [1, "", "cradle contract-skeleton: Missing.kt が無い\n"]);
+  // ディレクトリは在っても読めない。スタックトレースでなく、パスと理由の 1 行
+  writeTree(root, { "generated/.keep": "" });
+  const dir = run("generated");
+  assert.deepEqual([dir.status, dir.stdout], [1, ""]);
+  assert.match(dir.stderr, /^cradle contract-skeleton: generated を読めません: EISDIR\b[^\n]*\n$/);
   // ファイルより前の --package も値を取る。ファイルが無ければ使い方
   const flagOnly = run("--package", "com.example.notes.wiring");
   assert.deepEqual([flagOnly.status, flagOnly.stdout, flagOnly.stderr], [1, "", usage.stderr]);
