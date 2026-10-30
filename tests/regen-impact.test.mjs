@@ -41,7 +41,8 @@ function fixture(t, regenerate = "cp -R ../regen/. src/generated/ && rm src/gene
   writeTree(root, { ...before, ...hand });
   writeTree(join(root, "regen"), Object.fromEntries(Object.entries(after).map(([rel, text]) => [rel.replace("backend/src/generated/", ""), text])));
   commitAll(root);
-  const env = cleanEnv();
+  // git status の未追跡の出し方（ディレクトリにまとめる）や diff の出力を利用者の git 設定に左右させない
+  const env = cleanEnv({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
   return { root, run: (...args) => runNode(regenImpact, args, { cwd: root, env }) };
 }
 
