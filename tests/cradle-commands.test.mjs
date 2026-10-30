@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { appendFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, gitConfigEnv } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, git, gitConfigEnv } from "./helpers.mjs";
 
 const cradle = fileURLToPath(new URL("../.apm/skills/cradle/scripts/cradle.mjs", import.meta.url));
 const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs", import.meta.url));
@@ -163,6 +163,23 @@ test("refs は git の外や git が無いとき 0 箇所と言わず、git grep
   assert.match(noRepo.stderr, /^cradle refs: git grep が失敗しました: \S.*\n$/);
   const noGit = runNode(cradle, ["refs", "イベント#1"], { cwd: outside, env: { ...env, PATH: tempDir(t, "cradle-no-tools-") } });
   assert.deepEqual([noGit.status, noGit.stdout, noGit.stderr], [1, "", "cradle refs: git grep が失敗しました: spawnSync git ENOENT\n"]);
+});
+
+// core.quotePath の既定（true）の git grep は非 ASCII のパスを引用符と 8 進（"documents/ai-notes/\346…"）で出す。refs の行のパスは洗い直す場所そのもの
+test("refs は非 ASCII の名前のファイルも、引用符と 8 進にせずそのままのパスで出す", (t) => {
+  const { root, run } = refsFixture(t);
+  writeTree(root, { "documents/ai-notes/20261030-01-検討.md": "イベント#1 の後の貸出\n" });
+  git(root, "add", "documents/ai-notes");
+  const r = run(root, "イベント#1");
+  assert.deepEqual([r.status, r.stderr], [0, ""]);
+  assert.equal(r.stdout, [
+    "イベント#1: 5 箇所",
+    "  README.md:3:形式化の出典はイベント#1.",
+    "  documents/ai-notes/20261030-01-検討.md:1:イベント#1 の後の貸出",
+    "  documents/ddd/hotspots.md:1:| HS-001 | イベント#1 の後に貸出できるか | open |",
+    "  documents/ddd/model-review.md:3:| MQ-003 | イベント#10 と イベント#1 は同じ本か | open |",
+    "  lean/Example/Domain/Book.lean:1:/-- 本。出典: イベント#1 -/",
+  ].join("\n") + "\n" + refsTail);
 });
 
 // init した直後の doctor の全行。owned は骨格の持ち物（モックアップのサーバーと CLI の Main.lean）の行。
