@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -222,4 +222,42 @@ test("生成ディレクトリがまだ無ければ、--dry-run の後始末は�
   assert.equal(failed.status, 2);
   assert.equal(failed.stderr, `cradle: 再生成に失敗しました（${writeA} && echo boom && exit 3）:\nboom\n\n`);
   assert.equal(brokenPorcelain(), untrackedHand);
+});
+
+// 偽の Lean CLI（lean/.lake/build/bin/<project 小文字>）: リクエストの cmd で canned.json の応答を返す
+const fakeCli = `#!${process.execPath}
+const fs = require("fs"); const path = require("path");
+const req = JSON.parse(fs.readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(path.join(__dirname, "canned.json"), "utf8"))[req.cmd]));
+`;
+
+test("golden 回帰は golden-check の changed/error の数を言い、ok 以外の行を golden-check と同じ言い方（先頭の行）で並べる", (t) => {
+  const { root, run } = fixture(t);
+  const init = { ok: { state: { n: 0 } } };
+  const trace = (n) => ({ ok: { trace: [{ observation: { tick: {} }, state: { n } }] } });
+  writeTree(root, {
+    // half は init が無い（error）うえに再生のリクエストも無い（skipped）。moved は内部入力の手で食い違う（changed）
+    "lean/golden/half-flow.json": JSON.stringify({ ok: {} }),
+    "lean/golden/moved-init.json": JSON.stringify(init),
+    "lean/golden/moved-flow.json": JSON.stringify(trace(1)),
+    "lean/golden/moved.request.json": JSON.stringify({ init: { cmd: "init" }, flow: { cmd: "flow", commands: [] } }),
+    "lean/.lake/build/bin/example": fakeCli,
+    "lean/.lake/build/bin/canned.json": JSON.stringify({ init, flow: trace(2) }),
+  });
+  chmodSync(join(root, "lean/.lake/build/bin/example"), 0o755);
+  const text = run();
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(text.stdout, [
+    expectedText,
+    "golden 回帰: 2 件が changed/error（意図した変更か確かめる）",
+    "  error    half-init: half-init.json が無い（golden は init / flow の 2 本 1 組）",
+    "  skipped  half: half.request.json が無い（再生できない golden）— モックアップで採り直すか --manifest で補う",
+    "  CHANGED  moved-flow: first divergence at /ok/trace/0/state/n (step #1 observation tick)",
+  ].join("\n") + "\n");
+  // --json の golden は golden-check --json をそのまま載せる
+  const json = run("--no-regen", "--json");
+  assert.equal(json.status, 0, json.stderr);
+  const golden = JSON.parse(json.stdout).golden;
+  assert.equal(golden.failed, 2);
+  assert.deepEqual(golden.report.map(r => [r.name, r.kind, r.status]), [["half", "init", "error"], ["half", undefined, "skipped"], ["moved", "init", "ok"], ["moved", "flow", "changed"]]);
 });

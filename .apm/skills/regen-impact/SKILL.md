@@ -19,7 +19,7 @@ cradle regen-impact --no-regen # 作業ツリーの生成物の差分だけを�
 2. **影響を受ける手書きコード**: 変わったシンボルを参照する `src/main` / `src/test`。ここが追随の対象。
 3. **参照元の無い生成シンボル**: 新しい interface・契約テスト。これから実装する。
 4. **未配線の契約テスト**: 抽象契約テストに具象サブクラスが無いもの（契約テストは `src/test`、Adapter の適合テストは `src/adapterTest` に探す）。配線するまで「テストは無い」。
-5. **golden 回帰**: 変えるつもりのなかった流れが変わっていないか。CHANGED は意図した変更かを 1 件ずつ判断する。
+5. **golden 回帰**: 変えるつもりのなかった流れが変わっていないか。ok 以外の行を golden-check と同じ言い方で並べる。CHANGED は意図した変更かを 1 件ずつ判断し、error・skipped（再生できなかった golden）は `cradle golden-check` で理由を読む。
 
 ## 決めごと
 

@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript, contractTestWiring } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines } from "./lib.mjs";
 import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
@@ -93,8 +93,9 @@ else {
   if (unwired.length) console.log(`\n未配線の契約テスト: ${unwired.join(", ")}`);
   if (golden) {
     if (golden.error) console.log(`\ngolden 回帰: 実行できず — ${golden.error}`);
-    else console.log(`\ngolden 回帰: ${golden.failed ? `${golden.failed} 件が変わった（意図した変更か確かめる）` : "全一致"}`);
-    for (const r of (golden.report ?? []).filter(r => r.status === "changed")) console.log(`  CHANGED ${r.name}-${r.kind} at ${r.firstDivergence}${r.step ? ` (step #${r.step} ${r.command})` : ""}`);
+    else console.log(`\ngolden 回帰: ${golden.failed ? `${golden.failed} 件が changed/error（意図した変更か確かめる）` : "全一致"}`);
+    // ok 以外の行を golden-check と同じ言い方で（食い違いの詳しい行は golden-check に任せ、先頭の行だけ）
+    for (const r of (golden.report ?? []).filter(r => r.status !== "ok")) console.log(`  ${goldenRowLines(r)[0]}`);
   }
   if (opts["dry-run"]) console.log("\n（--dry-run: 生成ディレクトリは元に戻した）");
 }

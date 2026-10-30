@@ -21,7 +21,7 @@
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, parseArgs, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf } from "./lib.mjs";
+import { loadConfigOrFail, buildMode, callLean, parseArgs, diffJson, fail, readSidecar, isExternalGolden, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool", name: "list" });
 if (opts.name?.some(n => n === true || n === "")) fail("--name には golden の名前が要ります（--name N を繰り返せば複数）");
@@ -163,16 +163,7 @@ for (const name of wanted) {
 
 if (opts.json) console.log(JSON.stringify({ failed, report }, null, 2));
 else {
-  for (const r of report) {
-    if (r.status === "ok") console.log(`ok       ${r.name}-${r.kind}`);
-    else if (r.status === "updated") console.log(`updated  ${r.name}-${r.kind} (${r.diffs} diffs)`);
-    else if (r.status === "skipped") console.log(`skipped  ${r.name}: ${r.reason}`);
-    else if (r.status === "error") console.log(`error    ${r.name}${r.kind ? `-${r.kind}` : ""}: ${r.reason}`);
-    else {
-      console.log(`CHANGED  ${r.name}-${r.kind}: first divergence at ${r.firstDivergence}${r.step ? ` (step #${r.step} ${r.inputKind === "observation" ? "observation " : ""}${r.command})` : ""}`);
-      for (const d of r.diffs) console.log(`           ${d.path}: expected ${JSON.stringify(d.expected)} / actual ${JSON.stringify(d.actual)}`);
-    }
-  }
+  for (const r of report) for (const line of goldenRowLines(r)) console.log(line);
   console.log(`\n${report.filter(r => r.status === "ok").length} ok, ${failed} changed/error, ${report.filter(r => r.status === "skipped").length} skipped`);
   if (failed) console.log("変更が意図したものなら --update で golden を更新し、golden の差分を変更理由とともにコミットすること。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。chain の食い違いは実行器（flow と step）の不整合で、--update では直らない。");
 }

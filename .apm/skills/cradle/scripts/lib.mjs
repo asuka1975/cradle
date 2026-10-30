@@ -461,6 +461,17 @@ export function traceInputOf(t) {
   return { kind, name, payload: input && typeof input === "object" ? input[name] : undefined };
 }
 
+/** golden-check の report の 1 行分の文章: 先頭が状態と名前の行、changed にはその後に食い違い（diffs）を 1 つ 1 行で続ける。
+    golden-check の文字の出力と、golden-check --json を読む regen-impact の一覧（先頭の行だけ）が同じ言い方になるよう 1 か所に置く。 */
+export function goldenRowLines(r) {
+  if (r.status === "ok") return [`ok       ${r.name}-${r.kind}`];
+  if (r.status === "updated") return [`updated  ${r.name}-${r.kind} (${r.diffs} diffs)`];
+  if (r.status === "skipped") return [`skipped  ${r.name}: ${r.reason}`];
+  if (r.status === "error") return [`error    ${r.name}${r.kind ? `-${r.kind}` : ""}: ${r.reason}`];
+  return [`CHANGED  ${r.name}-${r.kind}: first divergence at ${r.firstDivergence}${r.step ? ` (step #${r.step} ${r.inputKind === "observation" ? "observation " : ""}${r.command})` : ""}`,
+    ...r.diffs.map(d => `           ${d.path}: expected ${JSON.stringify(d.expected)} / actual ${JSON.stringify(d.actual)}`)];
+}
+
 /** golden の流れ: `<golden>/<name>-flow.json` の trace を手の列に写す。
     手は { kind: command | observation, command か observation（構成子名）, actor（observation では null）, payload, outcome, fault? }。
     outcome は外部能力の経路の応答なら要素の result（applied / refused / fault）、旧経路なら outcomeOf の判定（applied / refused / protocol-error）。

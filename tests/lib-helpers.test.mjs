@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval, contractTestWiring } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval, contractTestWiring, goldenRowLines } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -176,4 +176,21 @@ test("contractTestWiring は `: <名前>(` の継承を、Adapter の適合テ�
     ["MailAdapterContractTest", true, false], ["DirectoryAdapterContractTest", true, true], ["CartContractTest", false, false], ["MainOnlyContractTest", false, false],
   ]);
   assert.deepEqual(contractTestWiring(cfg, []), []);
+});
+
+test("goldenRowLines は golden-check の report の 1 行を状態ごとの言い方にし、changed は食い違いを 1 つ 1 行で続け、observation の手には接頭辞を付ける", () => {
+  assert.deepEqual(goldenRowLines({ name: "a", kind: "init", status: "ok" }), ["ok       a-init"]);
+  assert.deepEqual(goldenRowLines({ name: "a", kind: "flow", status: "updated", diffs: 3 }), ["updated  a-flow (3 diffs)"]);
+  assert.deepEqual(goldenRowLines({ name: "b", status: "skipped", reason: "r" }), ["skipped  b: r"]);
+  assert.deepEqual(goldenRowLines({ name: "c", kind: "chain", status: "error", reason: "boom" }), ["error    c-chain: boom"]);
+  assert.deepEqual(goldenRowLines({ name: "c", status: "error", reason: "boom" }), ["error    c: boom"]);
+  const diffs = [{ path: "/ok/trace/1/state", expected: { n: 1 }, actual: "x" }, { path: "/ok/env", expected: null, actual: [1] }];
+  assert.deepEqual(goldenRowLines({ name: "d", kind: "flow", status: "changed", firstDivergence: "/ok/trace/1/state", step: 2, command: "tick", inputKind: "observation", diffs }), [
+    "CHANGED  d-flow: first divergence at /ok/trace/1/state (step #2 observation tick)",
+    '           /ok/trace/1/state: expected {"n":1} / actual "x"',
+    "           /ok/env: expected null / actual [1]",
+  ]);
+  // 手でない食い違い（step 無し）は括弧を付けず、command の手には接頭辞を付けない
+  assert.deepEqual(goldenRowLines({ name: "e", kind: "init", status: "changed", firstDivergence: "/ok/views", diffs: [] }), ["CHANGED  e-init: first divergence at /ok/views"]);
+  assert.deepEqual(goldenRowLines({ name: "e", kind: "chain", status: "changed", firstDivergence: "/ok/trace/0", step: 1, command: "post", inputKind: "command", diffs: [] }), ["CHANGED  e-chain: first divergence at /ok/trace/0 (step #1 post)"]);
 });
