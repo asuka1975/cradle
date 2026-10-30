@@ -28,7 +28,7 @@ description: Use when you need the current position in the Lean spec-driven pipe
 - `golden-check` で CHANGED が出たら、意図した変更だけを `--update` し、golden の差分を変更理由とともにコミットする。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。
 - `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。`--dry-run` はクリーンでなければ断る（元に戻すと未コミットの差分も消える）。
 - どの道具も `CRADLE_PROJECT_DIR` でルートを指定できる（hook は Claude Code の `CLAUDE_PROJECT_DIR`、無ければ stdin の `cwd` から `cradle.json` を持つ祖先を探す）。
-- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。`meta` の末尾に `evalErrors` があれば、その鍵の一覧は Lean を評価できていない（無いとは言えない）— 理由を示し、ビルドを直して引き直すか `print` で確かめる（`print` は評価できなければ理由と 1 で終わる）。
+- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。`meta` の末尾に `evalErrors` があれば、その鍵の一覧は Lean を評価できていない（無いとは言えない）— 理由を示し、ビルドを直して引き直すか `print` で確かめる。`print` は評価できなければ理由と 1 で終わり、その前に走る lake build（既定の `--build auto` ではバイナリが無いとき、`always` では毎回。`never` は走らせない）が落ちれば `lake build が失敗しました:` と lake の出力（lake を起動できなければその理由）と 2 で終わる。
 
 ## 道具が落ちたとき
 
