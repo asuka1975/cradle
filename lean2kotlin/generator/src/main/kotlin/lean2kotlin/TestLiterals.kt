@@ -48,30 +48,20 @@ internal fun EmitTests.inputRefLiteral(td: IrTypeDef, j: JsonElement): String = 
 		else {
 			val o = j.jsonObject
 			val args = shape.fields.joinToString(", ") { f ->
-				"${ident(f.name)} = ${inputLiteral(f.type, o.getValue(f.name))}"
+				"${ident(f.name)} = ${inputLiteral(f.type, k.fieldJson(td, o, f))}"
 			}
 			"${k.name(td.lean)}($args)"
 		}
 	is IrShape.Sealed -> {
 		// 入力位置は**本番語彙**で構築する(橋渡し型でも fixture に写さない —
 		// entity-like の葉だけ実体化フック経由。refLiteral は fixture 語彙なので使わない)
-		if (j is JsonPrimitive) {
-			val ctor = shape.ctors.find { it.name == j.content }
-				?: error("${td.lean}: 不明なコンストラクタ ${j.content}")
-			"${k.name(td.lean)}.${k.ctorClassName(ctor.name)}"
-		} else {
-			val o = j.jsonObject
-			val (name, body) = o.entries.single()
-			val ctor = shape.ctors.find { it.name == name }
-				?: error("${td.lean}: 不明なコンストラクタ $name")
-			if (ctor.fields.isEmpty()) "${k.name(td.lean)}.${k.ctorClassName(name)}"
-			else {
-				val bo = body.jsonObject
-				val args = ctor.fields.joinToString(", ") { f ->
-					"${ident(f.name)} = ${inputLiteral(f.type, bo.getValue(f.name))}"
-				}
-				"${k.name(td.lean)}.${k.ctorClassName(name)}($args)"
+		val (ctor, bo) = k.sealedCtorOf(td, shape, j)
+		if (bo == null) "${k.name(td.lean)}.${k.ctorClassName(ctor.name)}"
+		else {
+			val args = ctor.fields.joinToString(", ") { f ->
+				"${ident(f.name)} = ${inputLiteral(f.type, k.fieldJson(td, bo, f))}"
 			}
+			"${k.name(td.lean)}.${k.ctorClassName(ctor.name)}($args)"
 		}
 	}
 	else -> k.refLiteral(td, j)

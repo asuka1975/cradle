@@ -555,14 +555,14 @@ class Kotlinize(private val ir: Ir) {
 			if (bo == null) "$base.${ctorClassName(ctor.name)}"
 			else {
 				val args = ctor.fields.joinToString(", ") { f ->
-					"${ident(f.name)} = ${literal(f.type, bo.getValue(f.name))}"
+					"${ident(f.name)} = ${literal(f.type, fieldJson(td, bo, f))}"
 				}
 				"$base.${ctorClassName(ctor.name)}($args)"
 			}
 		}
 	}
 
-	/** 構造体 td の値の JSON o から、フィールド f の値を取り出す(無ければ生成を止める)。 */
+	/** td の値(構造体、または sealed の構成子の引数)の JSON o から、フィールド f の値を取り出す(無ければ生成を止める)。 */
 	fun fieldJson(td: IrTypeDef, o: JsonObject, f: IrField): JsonElement {
 		require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
 		return o.getValue(f.name)
