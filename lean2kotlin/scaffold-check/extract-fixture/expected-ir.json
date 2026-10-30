@@ -99,6 +99,11 @@
    [{"ret": {"k": "nat"},
      "params":
      [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
+     "name": "instantQuote",
+     "doc": "その場の返金の見積り。名前の成分が inst で始まる。 "},
+    {"ret": {"k": "nat"},
+     "params":
+     [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
      "name": "quote",
      "doc": "急ぎの返金の見積り（1 つ少ない）。 "},
     {"ret": {"k": "nat"},
@@ -121,10 +126,6 @@
     "kind": "contract"},
    {"reason":
     "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
-    "name": "Depot.Domain.Order.instantRefund_refunded",
-    "kind": "contract"},
-   {"reason":
-    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
     "name": "Depot.Laws.count_le_succ",
     "kind": "contract"},
    {"reason":
@@ -144,7 +145,30 @@
     "name": "Depot.Laws.afterCrash",
     "kind": "faultContract"}]},
  "contracts":
- [{"useCase": "Depot.Quantity",
+ [{"useCase": "Depot.Domain.Order",
+   "theorem": "instantRefund_refunded",
+   "target": "behaviors",
+   "method": "instantRefund",
+   "doc": "即時返金したら返金済み。 ",
+   "cases":
+   [{"ok": {"refunded": true, "quantity": {"count": 4}, "id": {"value": 91}},
+     "kind": "pure",
+     "args":
+     {"o": {"refunded": false, "quantity": {"count": 4}, "id": {"value": 91}}}},
+    {"ok": {"refunded": true, "quantity": {"count": 5}, "id": {"value": 92}},
+     "kind": "pure",
+     "args":
+     {"o": {"refunded": true, "quantity": {"count": 5}, "id": {"value": 92}}}},
+    {"ok": {"refunded": true, "quantity": {"count": 6}, "id": {"value": 93}},
+     "kind": "pure",
+     "args":
+     {"o": {"refunded": true, "quantity": {"count": 6}, "id": {"value": 93}}}},
+    {"ok": {"refunded": true, "quantity": {"count": 7}, "id": {"value": 91}},
+     "kind": "pure",
+     "args":
+     {"o":
+      {"refunded": true, "quantity": {"count": 7}, "id": {"value": 91}}}}]},
+  {"useCase": "Depot.Quantity",
    "theorem": "reserve_short",
    "target": "behaviors",
    "method": "reserve",
@@ -167,6 +191,11 @@
    "module": "Depot.Domain.Entity.Order",
    "methods":
    [{"ret": {"name": "Depot.Domain.Order", "k": "ref"},
+     "params":
+     [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
+     "name": "instantRefund",
+     "doc": "その場で返金する。 "},
+    {"ret": {"name": "Depot.Domain.Order", "k": "ref"},
      "params":
      [{"type": {"name": "Depot.Domain.Order", "k": "ref"}, "name": "o"}],
      "name": "refund",

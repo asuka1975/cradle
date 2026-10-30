@@ -277,7 +277,13 @@ def isInterfaceCandidate (env : Environment) (n : Name) : MetaM Bool := do
   if auxiliaryLeafNames.contains (n.components.getLast!) then return false
   if (env.getProjectionFnInfo? n).isSome then return false
   if (← Meta.isInstance n) then return false
-  if n.components.any (fun c => (toString c).startsWith "inst") then return false
+  -- インスタンス名(Lean の自動命名は inst の次が大文字: instToJsonNote)の下も除く — isInstance に載らない
+  -- 局所インスタンスやインスタンスの補助 def のため。instantRefund のように小文字が続くのはドメインの def
+  let instanceComponent (c : Name) : Bool :=
+    match (toString c).toList with
+    | 'i' :: 'n' :: 's' :: 't' :: d :: _ => d.isUpper
+    | _ => false
+  if n.components.any instanceComponent then return false
   return true
 
 /-- 節の中のメソッドを葉名順に並べる。環境の走査順は import 全体の定数の数で変わるので IR に持ち込まない。
