@@ -71,7 +71,7 @@ lean2kotlin {
 ```
 
 外部能力の Port（`application/port/<port>/` の生成 interface）は Adapter（`infrastructure/<port>/`）を手書きして実装し、契約テストの具象クラスはフックで渡される `<Port>Mock` をそのまま UseCase に配線する（規則は backend-kotlin）。
-Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返す）。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。source set とタスクは Port の有無に依らず作られ、この 2 つの名前は plugin の持ち物 — プロジェクト側で同名を定義しない。
+Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返す）。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。source set とタスクは `org.jetbrains.kotlin.jvm` を適用し `wireSourceSets` が true（既定）のとき、Port の有無に依らず作られ、この 2 つの名前は plugin の持ち物 — プロジェクト側で同名を定義しない。`wireSourceSets = false` でも compile タスクは `generateKotlinFromLean` に依存する。
 
 `compileKotlin` は毎回 `extractLeanIr`（`lake build`）に依存する。Lean を触らないタスクで IR が既にあるなら `-x extractLeanIr` で飛ばしてよい。
 抽出器は対象ドメインの `lean-toolchain` でビルドされる（`apm_modules/…/lean2kotlin/lean/.lake` に落ちる。`apm install` のたびに作り直し）。
@@ -82,7 +82,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 - 参照系で execute 面でない定理に `@[contract]` を付けると note「参照系の検証面ではないため読み飛ばし」が出て、そのファミリは生成されない → モデル側で指名を外す。
 - 印だけの主体（フィールド 0 の `@[actorContext]`）は作らない（`cradle lean-check` が止める）。
 - Runtime 在住の参照専用 ID VO は `runtime` パッケージに出る → 同一性の VO は Entity の持ち物にするか、`Domain/ValueObject.lean` に置く。
-- golden は `<name>-init.json` / `<name>-flow.json` の 2 本組でなければ無視される（note が出る）。note は失敗として読む。
+- `<name>-flow.json` は対の `<name>-init.json` が無ければ無視される（note が出る）。note は失敗として読む。init だけの golden は初期状態 1 件のスナップショットとして読まれる。
 
 ## 抽出が失敗したとき（多くは Lean 側を直す）
 
@@ -93,9 +93,9 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
 | フィクスチャ / 期待値を構成できません | `Repr` / `DecidableEq` の deriving、契約定理の前提が Decidable か、量化変数が生成可能な型か |
 | 参照系の execute 面でない定理の契約 | `@[contract]` を外す（execute 面の系） |
-| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`Port … interface 化された語彙` は要求・観測を閉じたデータ型にする、`signature …` は固定形の署名の型を契約面の語彙にする |
+| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`Port … interface 化された語彙` / `Port … 関数型を運ぶ` は要求・観測を閉じたデータ型にする（外部を呼ぶ関数は UseCase に渡さない）、`内部入力 … 名義` は Observation から名義を外す、`泉の状態 … Id 型 … がありません` は `Runtime/Ids.lean` に `structure <X>Id` を置く、`signature …` は固定形の署名の型を契約面の語彙にする |
 | UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
-| golden が無視された | `<name>-init.json` / `<name>-flow.json` の 2 本組か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
+| golden が無視された | flow に対の `<name>-init.json` があるか、名前が `<name>-init.json` / `<name>-flow.json` か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
 | `Key <field> is missing in the map` | 読み取りの golden 回帰テストで、Row のフィールドが状態の要素に無い。同梱の生成器は合成できない Row を入れ子まで note で飛ばす（この例外は古い生成器の文言） |
 | `<型>.<field>: JSON に無い` | fixture・入力リテラルの経路で JSON に無いフィールド → golden か fixture を採り直す |
 

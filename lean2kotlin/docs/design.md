@@ -120,7 +120,7 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 `generator/` を composite build で解決する（`generator/src/main/kotlin/lean2kotlin/gradle/Lean2KotlinPlugin.kt`。利用側の断片は gradle-wiring.md）。タスクは 2 つ:
 
 - `extractLeanIr`（`leanRootNamespace` があるときだけ）: `build/lean2kotlin/workspace` に lakefile（対象と抽出器を require）と `Driver.lean` を合成 → `lake build <Root> Lean2Kotlin` → `lake env lean Driver.lean`。up-to-date の入力は両パッケージの `*.lean` / `lakefile.toml` / `lake-manifest.json` と対象の `lean-toolchain`（ワークスペースには対象の `lean-toolchain` を写し、抽出器もそれでビルドする）。
-- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。`compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存し、生成ディレクトリは sourceSets に配線される。source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
+- `generateKotlinFromLean`（`@CacheableTask`）: IR と goldenDir から生成。配線は `org.jetbrains.kotlin.jvm` を適用したプロジェクトだけ: `compileKotlin` / `compileTestKotlin` / `compileAdapterTestKotlin` が依存する（`wireSourceSets` に依らない）。`wireSourceSets` が true（既定）なら、生成ディレクトリを sourceSets に配線し、source set `adapterTest`（生成物 + `src/adapterTest/kotlin` の手書き配線。classpath は main と test を継ぐ）とタスク `adapterContractTest`（JUnit）を Port の有無に依らず作る（IR は生成タスクの成果物で、設定時には読めない。この 2 つの名前は plugin の持ち物で、プロジェクト側で同名を定義しない）。`check` / `build` には繋がない。
 
 拡張 `lean2kotlin { }`:
 
@@ -165,7 +165,10 @@ Arb（Repository PBT）: `Long` は 0..4096、`String` は短い英数、`List` 
 - 脇書きの `version` があって 1 でない（外部能力かに依らない）。
 - 外部能力の golden の init / flow 応答がトップに `ok` を持たない（`error` / `harnessError` — 採り直す）。
 - golden の fault のエントリが指名した障害契約（`faultContract` の `<UseCase>.<def>` と `portCalls`）が IR の障害契約に無い、または `portCalls` が Lean の署名と違う。
+- Port の要求・観測が関数型を運ぶ（構成子の引数・`Option` などの入れ子の中も含む。直接の関数フィールドは抽出の失敗 — 上）。
 - Port の要求・観測が interface 化された語彙（Entity・ふるまい持ちの VO）を運ぶ（要求はモックが値で比較する）。
+- 内部入力（Observation）の型が名義（`@[actorContext]`）を運ぶ（入れ子の中も含む。通知・worker からの入力に利用者の名義は無い）。
+- 泉の状態 `<X>IdGeneratorState` に対になる Id 型 `<X>Id` が無い（泉ポートが導出されず、採番が注入されない）。
 
 生成が失敗する（衝突の手前まで書いた生成物は残り、次の再生成で消える）: 同じ出力ファイルを 2 回書こうとした（interface 名の衝突。先の生成物を黙って上書きしない）。
 
