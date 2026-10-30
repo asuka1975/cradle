@@ -4,7 +4,7 @@ import { existsSync, readFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, gitConfigEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, gitConfigEnv, runNode, writeTree, commitAll, git } from "./helpers.mjs";
 
 const regenImpact = fileURLToPath(new URL("../.apm/skills/cradle/scripts/regen-impact.mjs", import.meta.url));
 
@@ -371,4 +371,33 @@ test("golden 回帰は golden-check の changed/error の数を言い、ok 以�
   const golden = JSON.parse(json.stdout).golden;
   assert.equal(golden.failed, 2);
   assert.deepEqual(golden.report.map(r => [r.name, r.kind, r.status]), [["half", "init", "error"], ["half", undefined, "skipped"], ["moved", "init", "ok"], ["moved", "flow", "changed"]]);
+});
+
+// core.quotePath の既定（true）の git は非 ASCII のパスを引用符と 8 進（"…/\346\211\213….kt"）で返す。Lean の名前から作る生成物のファイル名は日本語にもなる
+test("生成物の差分は非 ASCII の名前のファイルも同じパスで出し、HEAD と作業ツリーの中身から変わったシンボルを読む（改名は新しいパスで出す）", (t) => {
+  const proc = `${main}/domain/entity/手続き.kt`, fresh = `${main}/domain/entity/新規.kt`, old = `${main}/domain/entity/Old.kt`, renamed = `${main}/domain/entity/改名.kt`;
+  const root = tempProject(t, "cradle-regen-impact-ja-", { project: "Example", backend: { regenerate: "true" } });
+  writeTree(root, { [proc]: `${GEN}data class Procedure(val id: Int)\n`, [old]: `${GEN}data class Kept(val id: Int)\n` });
+  commitAll(root);
+  writeTree(root, { [proc]: `${GEN}data class Procedure(val id: Int, val done: Boolean)\n`, [fresh]: `${GEN}data class Fresh(val id: Int)\n` });
+  git(root, "mv", old, renamed);
+  const r = runNode(regenImpact, ["--no-regen", "--no-golden", "--json"], { cwd: root, env });
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.changedGeneratedFiles, [{ status: "M", path: proc }, { status: "R", path: renamed }, { status: "A", path: fresh }]);
+  assert.deepEqual(out.symbols, [sym("Fresh", "added", fresh), sym("Kept", "added", renamed), sym("Procedure", "changed", proc)]);
+});
+
+// diff は git のルートからのパスを出し、ls-files は cwd（cfg.root）からのパスを出す
+test("cradle.json が git のルートより下にあっても、生成物の差分を cfg.root からの相対で出し、作業ツリーの中身を読んで変わったシンボルを出す", (t) => {
+  const top = tempDir(t, "cradle-regen-impact-sub-");
+  writeTree(top, { "app/cradle.json": JSON.stringify({ project: "Example", backend: { regenerate: "true" } }) });
+  writeTree(join(top, "app"), before);
+  commitAll(top);
+  writeTree(join(top, "app"), { [files.note]: after[files.note], [files.port]: after[files.port] });
+  const r = runNode(regenImpact, ["--no-regen", "--no-golden", "--json"], { cwd: join(top, "app"), env });
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.changedGeneratedFiles, [{ status: "M", path: files.note }, { status: "A", path: files.port }]);
+  assert.deepEqual(out.symbols, [sym("Directory", "added", files.port), sym("Directory.find", "added", files.port), sym("Note", "changed", files.note)]);
 });

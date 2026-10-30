@@ -51,12 +51,21 @@ if (!opts["no-regen"]) {
   }
 }
 
-const nameStatus = git(cfg.root, ["diff", "--name-status", "HEAD", "--", ...gens]).split("\n").filter(Boolean).map(l => { const [st, ...p] = l.split("\t"); return { status: st[0], path: p[p.length - 1] }; });
-const untracked = git(cfg.root, ["ls-files", "--others", "--exclude-standard", "--", ...gens]).split("\n").filter(Boolean).map(path => ({ status: "A", path }));
+// -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、cfg.root に繋いでも git show に渡しても読めない。
+// --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対にする。
+// -z の --name-status は状態とパスを NUL で区切り、改名・複写（R / C）だけ元と先の 2 つのパスが続く。出すのは先のパス
+const nameStatus = [];
+for (let f = git(cfg.root, ["diff", "--name-status", "-z", "--relative", "HEAD", "--", ...gens]).split("\0"), i = 0; f[i];) {
+  const status = f[i][0], paths = "RC".includes(status) ? 2 : 1;
+  nameStatus.push({ status, path: f[i + paths] });
+  i += 1 + paths;
+}
+const untracked = git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard", "--", ...gens]).split("\0").filter(Boolean).map(path => ({ status: "A", path }));
 const changed = [...nameStatus, ...untracked];
 
 function textAt(path, which) {
-  if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:${path}`]); } catch { return ""; } }
+  // HEAD:<path> は git のルートから引くので、cfg.root からの相対のパスは ./ を付けて cwd から引く
+  if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:./${path}`]); } catch { return ""; } }
   return readText(join(cfg.root, path));
 }
 // 同じシンボルが複数のファイルで変わり、その変わり方がファイルごとに違えば「変更」
