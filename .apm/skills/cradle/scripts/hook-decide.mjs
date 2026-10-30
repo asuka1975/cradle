@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { matchesAny, rel, git, cradleScript, aiNoteProblems } from "./lib.mjs";
+import { matchesAny, rel, git, leanGitStatus, cradleScript, aiNoteProblems } from "./lib.mjs";
 import { unslopErrorSummary } from "./unslop-report.mjs";
 
 /** 編集対象のパス。Claude Code は file_path、Codex の apply_patch は tool_input.command にパッチ本文（Add / Update / Delete File 行）が入る。 */
@@ -21,6 +21,7 @@ export function decide(mode, payload, {
   cfg, isClaude,
   exists = existsSync,
   gitStatus = (dir) => git(cfg.root, ["status", "--porcelain", "--", dir]),
+  leanStatus = () => leanGitStatus(cfg),
   runUnslop = () => spawnSync(process.execPath, [cradleScript("unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).stdout,
   readText = (p) => readFileSync(p, "utf8"),
 }) {
@@ -64,10 +65,11 @@ export function decide(mode, payload, {
         if (!exists(join(cfg.root, ddd, ".session"))) return deny(`${path} は探索の正式ドキュメントです。更新は ddd スキル（探索セッション）経由だけで、直接編集しません。セッションが動いている間だけ ${ddd}/.session が置かれ、編集できます。`);
       }
     }
-    // 開発の順序: Lean に未コミットの差分があるまま backend の本番コードを触るのは先回りの疑い（止めずに確かめる）
+    // 開発の順序: Lean に未コミットの差分があるまま backend の本番コードを触るのは先回りの疑い（止めずに確かめる）。
+    // lake build が書く lake-manifest.json だけの差分は数えない
     if (paths.some(path => path.startsWith(`${cfg.backend.dir}/src/main/`))) {
       let leanDirty = "";
-      try { leanDirty = gitStatus(cfg.lean.dir); } catch {}
+      try { leanDirty = leanStatus(); } catch {}
       if (leanDirty) return ask(`${cfg.lean.dir}/ に未コミットの差分があります。順序は Lean → 画面で人間が確認 → バックエンド。モデルの変更が確定（コミット）してから backend に追随するのが規約です。先回りではないなら続けてください。`);
     }
     return null;

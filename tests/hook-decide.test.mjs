@@ -35,7 +35,7 @@ test("targetPaths は file_path → notebook_path → path の 1 つを取り、
 test("pre-guard の Agent / spawn_agent と Bash はパスを見ずに決める", (t) => {
   const { cfg } = setup(t);
   const calls = [];
-  const d = (payload) => decide("pre-guard", payload, { cfg, isClaude: false, exists: forbidden(calls, "exists"), gitStatus: forbidden(calls, "gitStatus") });
+  const d = (payload) => decide("pre-guard", payload, { cfg, isClaude: false, exists: forbidden(calls, "exists"), gitStatus: forbidden(calls, "gitStatus"), leanStatus: forbidden(calls, "leanStatus") });
   assert.match(reasonOf(d({ tool_name: "Agent", tool_input: { subagent_type: "ddd-domain-explorer", run_in_background: true } })), /フォアグラウンド/);
   assert.match(reasonOf(d({ tool_name: "spawn_agent", tool_input: { subagent_type: "ddd-domain-explorer", run_in_background: true } })), /フォアグラウンド/);
   assert.equal(d({ tool_name: "Agent", tool_input: { subagent_type: "ddd-domain-explorer", file_path: "documents/developer/x.md" } }), null);
@@ -81,23 +81,25 @@ test("pre-guard は相対パスを payload の cwd に繋いでルートから�
 
 test("pre-guard は全パスの拒否を見てから、Lean に未コミットの差分があるまま触る backend の本番コードを確かめる（Claude Code は ask、Codex は文脈）", (t) => {
   const { cfg } = setup(t);
-  const asked = [];
-  const dirty = (dir) => { asked.push(dir); return " M lean/A.lean\n"; };
-  const d = (tool_input, ctx) => decide("pre-guard", { tool_name: "apply_patch", tool_input }, { cfg, isClaude: false, exists: () => false, ...ctx });
-  assert.match(reasonOf(d(patch("backend/src/main/A.kt", "documents/developer/x.md"), { gitStatus: dirty })), /^documents\/developer\/x\.md は保護領域です/);
+  const asked = [], calls = [];
+  const dirty = () => { asked.push("lean"); return " M lean/A.lean\n"; };
+  // Lean の差分は leanStatus（lake-manifest.json を外した lean/ の git status）で見て、frontend 用の gitStatus は呼ばない
+  const d = (tool_input, ctx) => decide("pre-guard", { tool_name: "apply_patch", tool_input }, { cfg, isClaude: false, exists: () => false, gitStatus: forbidden(calls, "gitStatus"), ...ctx });
+  assert.match(reasonOf(d(patch("backend/src/main/A.kt", "documents/developer/x.md"), { leanStatus: dirty })), /^documents\/developer\/x\.md は保護領域です/);
   assert.deepEqual(asked, []);
-  const claude = decide("pre-guard", { tool_name: "Edit", tool_input: { file_path: "backend/src/main/A.kt" } }, { cfg, isClaude: true, gitStatus: dirty });
+  const claude = decide("pre-guard", { tool_name: "Edit", tool_input: { file_path: "backend/src/main/A.kt" } }, { cfg, isClaude: true, gitStatus: forbidden(calls, "gitStatus"), leanStatus: dirty });
   assert.equal(claude.hookSpecificOutput.hookEventName, "PreToolUse");
   assert.equal(claude.hookSpecificOutput.permissionDecision, "ask");
   assert.match(claude.hookSpecificOutput.permissionDecisionReason, /^lean\/ に未コミットの差分があります/);
-  assert.deepEqual(d(patch("frontend/src/a.ts", "backend/src/main/A.kt"), { gitStatus: dirty }),
+  assert.deepEqual(d(patch("frontend/src/a.ts", "backend/src/main/A.kt"), { leanStatus: dirty }),
     { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: claude.hookSpecificOutput.permissionDecisionReason } });
   assert.deepEqual(asked, ["lean", "lean"]);
   // 差分が無い・git が使えないなら黙って通す。backend の本番コード以外は git を見ない
-  assert.equal(d({ file_path: "backend/src/main/A.kt" }, { gitStatus: () => "" }), null);
-  assert.equal(d({ file_path: "backend/src/main/A.kt" }, { gitStatus: () => { throw new Error("git が無い"); } }), null);
-  assert.equal(d({ file_path: "backend/src/test/A.kt" }, { gitStatus: dirty }), null);
+  assert.equal(d({ file_path: "backend/src/main/A.kt" }, { leanStatus: () => "" }), null);
+  assert.equal(d({ file_path: "backend/src/main/A.kt" }, { leanStatus: () => { throw new Error("git が無い"); } }), null);
+  assert.equal(d({ file_path: "backend/src/test/A.kt" }, { leanStatus: dirty }), null);
   assert.deepEqual(asked, ["lean", "lean"]);
+  assert.deepEqual(calls, []);
 });
 
 test("post-bash は gradle の build / test / check を区切りの後ろでも拾い、BUILD SUCCESSFUL のときだけレビューを促す", (t) => {
@@ -221,7 +223,7 @@ test("decide は設定の型の誤りで投げる（黙って通すのは hook.m
 test("知らない mode は何も見ずに通す", (t) => {
   const { cfg } = setup(t);
   const calls = [];
-  const ctx = { cfg, isClaude: true, exists: forbidden(calls, "exists"), gitStatus: forbidden(calls, "gitStatus"), runUnslop: forbidden(calls, "runUnslop"), readText: forbidden(calls, "readText") };
+  const ctx = { cfg, isClaude: true, exists: forbidden(calls, "exists"), gitStatus: forbidden(calls, "gitStatus"), leanStatus: forbidden(calls, "leanStatus"), runUnslop: forbidden(calls, "runUnslop"), readText: forbidden(calls, "readText") };
   for (const mode of ["bogus", undefined, ""]) assert.equal(decide(mode, { tool_name: "Write", tool_input: { file_path: "documents/developer/x.md" } }, ctx), null);
   assert.deepEqual(calls, []);
 });

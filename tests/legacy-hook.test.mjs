@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
+import { tempProject, cleanEnv, runNode, commitAll } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
 
@@ -116,4 +116,17 @@ test("骨格が置く ai-notes の TEMPLATE.md と README.md の編集には促�
   copyFileSync(scaffold("TEMPLATE.md"), join(root, "documents/ai-notes/memo.md"));
   assert.equal(invoke("post-edit", "Write", { file_path: "documents/ai-notes/memo.md" }).hookSpecificOutput.additionalContext,
     "ai-notes の規約: ファイル名は YYYYMMDD-NN-<topic>.md（いまは memo.md）。ai-notes は規約ではない — ユーザーが承認したものだけが規約になる。");
+});
+
+test("pre-guard は lake build が書いた lean/lake-manifest.json だけの差分では backend の本番コードの編集を確かめず、追跡している Lean の変更では確かめる", (t) => {
+  const { root, invoke } = fixture(t);
+  mkdirSync(join(root, "lean"), { recursive: true });
+  writeFileSync(join(root, "lean/Example.lean"), "def x := 1\n");
+  commitAll(root);
+  writeFileSync(join(root, "lean/lake-manifest.json"), "{}\n");
+  for (const claude of [true, false]) assert.equal(invoke("pre-guard", "Edit", { file_path: "backend/src/main/kotlin/A.kt" }, {}, claude), null);
+  writeFileSync(join(root, "lean/Example.lean"), "def x := 2\n");
+  const asked = invoke("pre-guard", "Edit", { file_path: "backend/src/main/kotlin/A.kt" }, {}, true);
+  assert.equal(asked?.hookSpecificOutput?.permissionDecision, "ask");
+  assert.match(asked.hookSpecificOutput.permissionDecisionReason, /^lean\/ に未コミットの差分があります/);
 });

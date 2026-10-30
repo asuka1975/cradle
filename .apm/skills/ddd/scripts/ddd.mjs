@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, leanGitStatus, sha256, readText, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -49,7 +49,8 @@ switch (cmd) {
     writeSession({ theme: opts.theme ?? null, scaffold, lean: leanSnapshot(cfg) });
     console.log(`セッション開始（${cfg.documents.ddd}/.session）。終わりに ddd.mjs end を必ず実行する。`);
     let uncommitted = "";
-    try { uncommitted = git(cfg.root, ["status", "--porcelain", "--", cfg.lean.dir]); } catch {}
+    // lake build が書く lake-manifest.json は数えない（初回のビルドの後に毎回「前回の形式化？」と言わない）
+    try { uncommitted = leanGitStatus(cfg); } catch {}
     if (uncommitted) console.log(`${cfg.lean.dir}/ に未コミットの差分がある（前回の形式化？）。end はこの時点と比べるので探索の邪魔にはならないが、プローブの戻しに git checkout / stash を使うとこの差分ごと消える — 戻すのは編集を手で。`);
     if (scaffold) console.log(`${cfg.lean.dir}/ は骨格のサンプルドメイン（メモ）のまま。実ドメインではないので探索の根拠にせず、この巡はプローブもモックアップも使わない（questions.md にモックアップ欄は出ない）。`);
     else {

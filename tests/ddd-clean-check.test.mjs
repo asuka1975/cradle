@@ -47,6 +47,18 @@ test("HEAD と違っても start の時点と同じなら end は通る", (t) =>
   assert.equal(existsSync(marker), false);
 });
 
+test("start は lake build が書いた lean/lake-manifest.json だけなら未コミットの差分と言わず、追跡している Lean の変更なら言う", (t) => {
+  const { run, lean } = fixture(t);
+  writeFileSync(lean("lake-manifest.json"), "{}\n");
+  const start = run(ddd, "start");
+  assert.equal(start.status, 0, start.stderr);
+  assert.doesNotMatch(start.stdout, /未コミットの差分/);
+  const end = run(ddd, "end", "--no-build");
+  assert.equal(end.status, 0, end.stdout + end.stderr);
+  writeFileSync(lean("Example/Runtime/Command.lean"), COMMAND + "  | bar\n");
+  assert.match(run(ddd, "start").stdout, /未コミットの差分/);
+});
+
 test("start の後の変更・追加・削除は end で出て、手で戻すまで .session が残る", (t) => {
   const { run, lean, marker } = fixture(t);
   assert.equal(run(ddd, "start").status, 0);
