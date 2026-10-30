@@ -90,7 +90,7 @@ test("nominatedFault は trace の文字列、無ければ入力の文字列を�
 
 test("cradleScript は lib と同じ置き場（cradle/scripts）の道具を指す", () => {
   const scripts = dirname(fileURLToPath(new URL("../.apm/skills/cradle/scripts/lib.mjs", import.meta.url)));
-  for (const name of ["unslop-lint.mjs", "golden-check.mjs", "ddd-clean-check.mjs", "spec-query.mjs", "hook.mjs"]) {
+  for (const name of ["unslop-lint.mjs", "golden-check.mjs", "ddd-clean-check.mjs", "spec-query.mjs", "hook.mjs", "doctor.mjs", "refs.mjs", "contract-skeleton.mjs"]) {
     assert.equal(cradleScript(name), join(scripts, name));
     assert.ok(existsSync(cradleScript(name)), name);
   }
