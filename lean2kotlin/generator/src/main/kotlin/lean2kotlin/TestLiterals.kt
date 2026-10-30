@@ -83,7 +83,7 @@ internal fun EmitTests.defaultLiteral(t: IrType): String? = when (t) {
 		val td = ir.typeDef(t.lean)
 		val shape = td.shape
 		when {
-			shape is IrShape.Enum -> "${k.name(t.lean)}.${shape.ctors.first().replaceFirstChar { it.uppercase() }}"
+			shape is IrShape.Enum -> "${k.name(t.lean)}.${k.ctorClassName(shape.ctors.first())}"
 			shape is IrShape.Structure -> {
 				val ctor = if (k.isFixtureVocab(td)) k.fixtureName(td) else k.name(t.lean)
 				// 0 フィールドは data object(呼び出し形にしない)

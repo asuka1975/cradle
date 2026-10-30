@@ -122,7 +122,7 @@ internal fun planGoldenTargets(ir: Ir, snapshots: List<GoldenSnapshot>): Map<Str
 				}
 				// 対象 2(画面): golden views のキー = UseCase 名(UseCase 接尾辞を
 				// 剥いで先頭小文字)で、成功側が View DTO を運ぶ
-				val key = s.module.removeSuffix("UseCase").replaceFirstChar { it.lowercase() }
+				val key = decapitalizeFirst(s.module.removeSuffix("UseCase"))
 				if (v0.containsKey(key) && okT.leafRefs().any {
 						ir.typeDef(it).role == "viewDto" })
 					plan[s.name] = GoldenTarget(m, key)
