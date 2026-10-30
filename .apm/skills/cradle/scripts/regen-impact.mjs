@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, walk, rel, git, fail, readText } from "./lib.mjs";
+import { loadConfig, parseArgs, walk, rel, git, fail, readText, cradleScript } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
 const cfg = loadConfig();
@@ -89,7 +89,7 @@ const unwired = abstractTests.filter(n => !handTexts.some(h => new RegExp(`:\\s*
 
 let golden = null;
 if (!opts["no-golden"]) {
-  const args = [join(import.meta.dirname, "golden-check.mjs"), "--json"];
+  const args = [cradleScript("golden-check.mjs"), "--json"];
   if (opts.manifest) args.push("--manifest", opts.manifest);
   const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
   try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }

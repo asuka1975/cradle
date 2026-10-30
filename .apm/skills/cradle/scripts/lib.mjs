@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkS
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, resolve, relative, sep } from "node:path";
-
+import { fileURLToPath } from "node:url";
 /** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd */
 export function findProjectRoot(start = process.cwd()) {
   for (const env of ["CRADLE_PROJECT_DIR", "CLAUDE_PROJECT_DIR"]) {
@@ -534,3 +534,6 @@ export function stepOutcome(t) { return typeof t.result === "string" ? t.result 
 
 /** 入力が指名した障害契約の名前: trace の写し、無ければ sidecar の入力（input）のもの。どちらも文字列でなければ undefined。 */
 export function nominatedFault(t, input) { return typeof t.fault === "string" ? t.fault : typeof input?.fault === "string" ? input.fault : undefined; }
+
+/** 道具のスクリプト（cradle/scripts/<name>）の絶対パス。他のスキルの道具も lib の置き場から引く — スキルの並び（../../cradle）を推し量らない。 */
+export function cradleScript(name) { return fileURLToPath(new URL(name, import.meta.url)); }

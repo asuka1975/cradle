@@ -117,5 +117,6 @@ if (!map[cmd]) {
   console.log("usage: cradle <command> [args]\n  " + Object.keys(map).join("\n  "));
   process.exit(cmd ? 1 : 0);
 }
-const r = spawnSync(process.execPath, [join(import.meta.dirname, map[cmd]), ...args], { stdio: "inherit" });
+const { cradleScript } = await import("./lib.mjs");
+const r = spawnSync(process.execPath, [cradleScript(map[cmd]), ...args], { stdio: "inherit" });
 process.exit(r.status ?? 1);

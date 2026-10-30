@@ -11,7 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail } from "../../cradle/scripts/lib.mjs";
+import { loadConfig, parseArgs, jsonArg, fail, cradleScript } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool" });
 const cfg = loadConfig();
@@ -21,7 +21,7 @@ const meta = jsonArg(opts.meta) ?? queryMeta();
 const yaml = readFileSync(spec, "utf8");
 
 function queryMeta() {
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "..", "..", "cradle", "scripts", "spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [cradleScript("spec-query.mjs"), "meta"], { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
   if (!r.stdout?.trim()) fail(`spec-query meta が何も返しませんでした: ${(r.stderr ?? "").trim().slice(0, 400)}`);
   return JSON.parse(r.stdout);
 }

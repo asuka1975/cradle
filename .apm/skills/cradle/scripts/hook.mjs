@@ -8,7 +8,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, findProjectRoot, matchesAny, rel, git } from "./lib.mjs";
+import { loadConfig, findProjectRoot, matchesAny, rel, git, cradleScript } from "./lib.mjs";
 
 const mode = process.argv[2];
 let payload = {};
@@ -123,7 +123,7 @@ if (mode === "post-edit") {
 
 if (mode === "stop") {
   if (payload.stop_hook_active) allow();
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const r = spawnSync(process.execPath, [cradleScript("unslop-lint.mjs"), "--json"], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let result = null;
   try { result = JSON.parse(r.stdout || "null"); } catch { allow(); }
   if (!result || !result.findings?.length) allow();
