@@ -33,6 +33,14 @@ test("Stop は差分の unslop error を先頭 15 件だけ並べ、16 件目か
   assert.equal(stop({ stop_hook_active: true }), null);
 });
 
+// unslop --json の出力はパイプ（hook-decide の spawnSync）越しに読む。error が 1200 件なら 280KB 余りで、パイプの容量を超える
+test("Stop は差分の unslop error が多くても unslop --json を全部読んで差し戻す", (t) => {
+  const { root, stop } = fixture(t);
+  writeTree(root, { "e2e/flow.ts": Array.from({ length: 1200 }, (_, i) => `// 手 ${i + 1} は未決\n`).join("") + "export const y = 1;\n" });
+  const lines = Array.from({ length: 15 }, (_, i) => reasonLine(i + 1)).join("\n");
+  assert.deepEqual(stop(), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 1200 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}\n…（cradle unslop --diff で全件）` });
+});
+
 test("Stop は warn だけの差分や違反の無い差分では差し戻さない", (t) => {
   const { root, stop } = fixture(t);
   writeTree(root, { "e2e/flow.ts": "// たぶん動く\nexport const y = 1;\n" });

@@ -42,4 +42,5 @@ if (baseline) {
 if (opts.build) { try { lakeBuild(cfg); } catch (e) { problems.push(e.message); } }
 if (opts.json) console.log(JSON.stringify({ ok: !problems.length, problems }, null, 2));
 else { for (const p of problems) console.log(`NG ${p}`); console.log(problems.length ? "後片付けが残っています" : "OK 後片付け済み"); }
-process.exit(problems.length ? 1 : 0);
+// process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置いて書き切らせる
+process.exitCode = problems.length ? 1 : 0;

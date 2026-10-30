@@ -36,42 +36,43 @@ if (opts.check) {
       for (const [i, s] of fl.steps.entries()) console.log(`    ${i + 1}. ${stepLine(s)}`);
     }
   }
-  process.exit(c.uncovered.length ? 1 : 0);
-}
+  // process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置き、台本を起こす側には進まない
+  process.exitCode = c.uncovered.length ? 1 : 0;
+} else {
+  const flows = [];
+  for (const f of goldenFlowFiles(goldenDir)) {
+    const name = f.replace(/-flow\.json$/, "");
+    const trace = orFail(() => readGoldenTrace(goldenDir, f));
+    let req = null, external = false;
+    try { req = readSidecar(goldenDir, name); external = isExternalGolden(goldenDir, name); } catch (e) { fail(e.message); }
+    // 人物は利用者の操作の当事者だけ — 内部入力に当事者は無い
+    const personas = [...new Set(trace.filter(t => traceInputOf(t).kind === "command" && t.actor !== undefined).map(t => JSON.stringify(t.actor)))].map(s => JSON.parse(s));
+    const steps = trace.map((t, i) => {
+      const { kind, name: input, payload } = traceInputOf(t);
+      const base = { n: i + 1, kind, [kind]: input, ...(kind === "command" ? { actor: t.actor } : {}), payload, outcome: stepOutcome(t) };
+      if (external) base.interactions = t.interactions ?? [];
+      // 指名した障害契約の名前は trace の写し（無ければ sidecar の入力から）
+      const nominated = nominatedFault(t, req?.flow?.inputs?.[i]);
+      if (nominated !== undefined) base.fault = nominated;
+      if (t.domainError !== undefined) return { ...base, refusal: t.domainError };
+      if (t.error !== undefined) return { ...base, error: t.error };
+      const observe = {};
+      for (const [k, v] of Object.entries(t.views ?? {})) observe[k] = v === null ? "absent" : Array.isArray(v) ? `${v.length} rows` : typeof v;
+      if (t.result === "fault") return { ...base, contract: t.faultContract?.name ?? null, observe };
+      return { ...base, observe };
+    });
+    flows.push({ id: name, external, environment: orFail(() => goldenEnvironment(goldenDir, name, req)), scenario: req?.init?.scenario ?? req?.flow?.scenario ?? null, viewer: req?.flow?.viewer ?? null, today: req?.flow?.today ?? null, personas, steps });
+  }
 
-const flows = [];
-for (const f of goldenFlowFiles(goldenDir)) {
-  const name = f.replace(/-flow\.json$/, "");
-  const trace = orFail(() => readGoldenTrace(goldenDir, f));
-  let req = null, external = false;
-  try { req = readSidecar(goldenDir, name); external = isExternalGolden(goldenDir, name); } catch (e) { fail(e.message); }
-  // 人物は利用者の操作の当事者だけ — 内部入力に当事者は無い
-  const personas = [...new Set(trace.filter(t => traceInputOf(t).kind === "command" && t.actor !== undefined).map(t => JSON.stringify(t.actor)))].map(s => JSON.parse(s));
-  const steps = trace.map((t, i) => {
-    const { kind, name: input, payload } = traceInputOf(t);
-    const base = { n: i + 1, kind, [kind]: input, ...(kind === "command" ? { actor: t.actor } : {}), payload, outcome: stepOutcome(t) };
-    if (external) base.interactions = t.interactions ?? [];
-    // 指名した障害契約の名前は trace の写し（無ければ sidecar の入力から）
-    const nominated = nominatedFault(t, req?.flow?.inputs?.[i]);
-    if (nominated !== undefined) base.fault = nominated;
-    if (t.domainError !== undefined) return { ...base, refusal: t.domainError };
-    if (t.error !== undefined) return { ...base, error: t.error };
-    const observe = {};
-    for (const [k, v] of Object.entries(t.views ?? {})) observe[k] = v === null ? "absent" : Array.isArray(v) ? `${v.length} rows` : typeof v;
-    if (t.result === "fault") return { ...base, contract: t.faultContract?.name ?? null, observe };
-    return { ...base, observe };
-  });
-  flows.push({ id: name, external, environment: orFail(() => goldenEnvironment(goldenDir, name, req)), scenario: req?.init?.scenario ?? req?.flow?.scenario ?? null, viewer: req?.flow?.viewer ?? null, today: req?.flow?.today ?? null, personas, steps });
-}
-
-const out = { generatedFrom: cfg.lean.golden, flows };
-// 空の --out=（空の変数を渡した --out "" も）を値の無い --out と同じに止める — 黙って一覧を出し、書いたつもりの台本を書かずに 0 で終わらない
-if (blankArg(opts.out)) fail("--out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）");
-// 相対パスはプロジェクトルートから、絶対パスはそのまま（--check の置き場と同じ読み方）
-const outFile = opts.out ? resolve(cfg.root, opts.out) : null;
-if (outFile) { mkdirSync(dirname(outFile), { recursive: true }); writeFileSync(outFile, JSON.stringify(out, null, 2) + "\n"); console.log(`wrote ${opts.out} (${flows.length} flows)`); }
-else if (opts.json) console.log(JSON.stringify(out, null, 2));
-else for (const fl of flows) {
-  console.log(`# ${fl.id}  scenario=${fl.scenario} viewer=${JSON.stringify(fl.viewer)} today=${fl.today}${fl.external ? ` external environment=${environmentLabel(fl.environment)}` : ""}`);
-  for (const s of fl.steps) console.log(`  ${s.n}. ${stepLine(s)}${s.refusal !== undefined ? ` (${JSON.stringify(s.refusal)})` : ""}${s.contract ? ` (${s.contract})` : ""}${s.observe ? "  " + Object.entries(s.observe).map(([k, v]) => `${k}:${v}`).join(" ") : ""}`);
+  const out = { generatedFrom: cfg.lean.golden, flows };
+  // 空の --out=（空の変数を渡した --out "" も）を値の無い --out と同じに止める — 黙って一覧を出し、書いたつもりの台本を書かずに 0 で終わらない
+  if (blankArg(opts.out)) fail("--out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）");
+  // 相対パスはプロジェクトルートから、絶対パスはそのまま（--check の置き場と同じ読み方）
+  const outFile = opts.out ? resolve(cfg.root, opts.out) : null;
+  if (outFile) { mkdirSync(dirname(outFile), { recursive: true }); writeFileSync(outFile, JSON.stringify(out, null, 2) + "\n"); console.log(`wrote ${opts.out} (${flows.length} flows)`); }
+  else if (opts.json) console.log(JSON.stringify(out, null, 2));
+  else for (const fl of flows) {
+    console.log(`# ${fl.id}  scenario=${fl.scenario} viewer=${JSON.stringify(fl.viewer)} today=${fl.today}${fl.external ? ` external environment=${environmentLabel(fl.environment)}` : ""}`);
+    for (const s of fl.steps) console.log(`  ${s.n}. ${stepLine(s)}${s.refusal !== undefined ? ` (${JSON.stringify(s.refusal)})` : ""}${s.contract ? ` (${s.contract})` : ""}${s.observe ? "  " + Object.entries(s.observe).map(([k, v]) => `${k}:${v}`).join(" ") : ""}`);
+  }
 }

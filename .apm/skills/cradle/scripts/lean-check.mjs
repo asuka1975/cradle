@@ -68,4 +68,5 @@ else {
   if (smokeResult !== null) console.log(`CLI smoke: ${smokeResult}`);
   console.log(ok ? "OK" : "NG");
 }
-process.exit(ok ? 0 : 1);
+// process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置いて書き切らせる
+process.exitCode = ok ? 0 : 1;

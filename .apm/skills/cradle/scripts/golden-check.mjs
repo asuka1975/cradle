@@ -169,4 +169,5 @@ else {
   console.log(`\n${report.filter(r => r.status === "ok").length} ok, ${failed} changed/error, ${report.filter(r => r.status === "skipped").length} skipped`);
   if (failed) console.log("変更が意図したものなら --update で golden を更新し、golden の差分を変更理由とともにコミットすること。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。chain の食い違いは実行器（flow と step）の不整合で、--update では直らない。");
 }
-process.exit(failed ? 1 : 0);
+// process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置いて書き切らせる
+process.exitCode = failed ? 1 : 0;

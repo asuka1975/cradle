@@ -266,4 +266,5 @@ else {
   const e = findings.filter(f => f.severity === "error").length;
   console.log(`\n${findings.length} findings (${e} error, ${findings.length - e} warn)`);
 }
-process.exit(findings.some(f => f.severity === "error") ? 1 : 0);
+// process.exit はパイプにまだ書いていない stdout を捨てる（Stop hook が読む --json が 64KB 前後で切れ、差し戻さずに通す）。終了コードだけを置いて書き切らせる
+process.exitCode = findings.some(f => f.severity === "error") ? 1 : 0;

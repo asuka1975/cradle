@@ -101,4 +101,5 @@ else {
   if (outletsWithoutGet.length) console.log(`GET の無い画面の口: ${outletsWithoutGet.join(", ")}`);
   console.log(ok ? "OK 契約とモデルは 1 対 1" : "NG");
 }
-process.exit(ok ? 0 : 1);
+// process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置いて書き切らせる
+process.exitCode = ok ? 0 : 1;

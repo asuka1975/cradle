@@ -184,6 +184,7 @@ function externalRequest(action) {
   return req;
 }
 
+// 腕は終了コードだけを置いて break する — process.exit はパイプにまだ書いていない stdout を捨てる（大きな応答や #print が 64KB 前後で切れる）
 try {
   switch (cmd) {
     case "scenarios": printJson(scenarioNames(cfg)); break;
@@ -221,7 +222,7 @@ try {
       if (!EXTERNAL_ACTIONS.includes(action)) fail(`external には ${EXTERNAL_ACTIONS.join(" | ")} のどれかが要ります`);
       const req = externalRequest(action);
       const res = await callLean(cfg, req, { build });
-      if (!res.ok) { printJson(res); process.exit(1); }
+      if (!res.ok) { printJson(res); process.exitCode = 1; break; }
       if (opts.full || opts.json || action === "init" || action === "views") { printJson(res); break; }
       if (action === "step") {
         // step の応答は入力の写しを持たないので、名前と当事者はリクエスト（入力の actor が無ければ既定の actor）から補う
@@ -244,7 +245,8 @@ try {
       if (r.stderr.trim()) process.stderr.write(r.stderr);
       // lake を起動できない・時間切れなら出力は空なので、理由を出して 0 で終えない
       if (r.error !== undefined) process.stderr.write(`cradle: \`lake env lean\` で評価できない: ${r.error}\n`);
-      process.exit(r.status ?? 1);
+      process.exitCode = r.status ?? 1;
+      break;
     }
     case "init": {
       if (!opts.scenario) fail("--scenario が要ります");
@@ -255,7 +257,7 @@ try {
       const commandsArg = jsonArg(opts.commands);
       if (!Array.isArray(commandsArg)) fail("--commands は配列（JSON か @file）");
       const res = await callLean(cfg, { cmd: "flow", scenario: opts.scenario, commands: commandsArg, ...commonFields() }, { build });
-      if (!res.ok) { printJson(res); process.exit(1); }
+      if (!res.ok) { printJson(res); process.exitCode = 1; break; }
       const trace = res.ok.trace;
       if (opts.full || opts.json) { printJson(res); break; }
       for (const line of summarizeTrace(trace)) console.log(line);

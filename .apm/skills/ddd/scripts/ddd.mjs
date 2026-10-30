@@ -120,7 +120,9 @@ switch (cmd) {
     const r = spawnSync(process.execPath, [cradleScript("ddd-clean-check.mjs"), ...(opts["no-build"] ? [] : ["--build"]), ...baseline], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     process.stdout.write(r.stdout ?? ""); process.stderr.write(r.stderr ?? "");
     if (r.status === 0 && baseline.length) unlinkSync(marker);
-    process.exit(r.status ?? 1);
+    // process.exit はパイプにまだ書いていない stdout（ddd-clean-check の出力の写し）を捨てる。終了コードだけを置いて書き切らせる
+    process.exitCode = r.status ?? 1;
+    break;
   }
   case "status": {
     const read = (f) => readText(join(ddd, f));

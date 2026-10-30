@@ -110,4 +110,3 @@ else {
   }
   if (opts["dry-run"]) console.log("\n（--dry-run: 生成ディレクトリは元に戻した）");
 }
-process.exit(0);

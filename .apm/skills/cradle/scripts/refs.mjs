@@ -18,4 +18,3 @@ const lines = (r.stdout || "").split("\n").filter(Boolean).filter(l => exact.tes
 console.log(`${id}: ${lines.length} 箇所`);
 for (const l of lines) console.log("  " + l);
 console.log("documents 側で撤回・訂正したら、ここに出た派生（Lean の出典・openapi・infra-design・README）を洗い直すこと。");
-process.exit(0);
