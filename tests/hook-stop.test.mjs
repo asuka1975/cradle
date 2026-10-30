@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
+import { tempProject, cleanEnv, runNode, writeTree, commitAll, git } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
+const unslop = fileURLToPath(new URL("../.apm/skills/cradle/scripts/unslop-lint.mjs", import.meta.url));
 
 // 一時プロジェクト（git 管理）: unslop の --diff は HEAD との差分を見るので、空の e2e/flow.ts をコミットしてから各テストが書き換える
 function fixture(t) {
@@ -58,12 +59,24 @@ test("Stop は warn だけの差分や違反の無い差分では差し戻さな
   assert.equal(stop(), null);
 });
 
-// 読み取りの上限を超えたときだけが失敗での差し戻し。git の外で unslop --diff が差分を読めなくても、hook は止めずに通す
+// 読み取りの上限を超えたときだけが失敗での差し戻し。git の外で unslop --diff が差分を読めず 2 で止まっても、hook は止めずに通す
 test("Stop は git の外では違反のあるファイルがあっても差し戻さない", (t) => {
   const root = tempProject(t, "cradle-hook-stop-nogit-");
   writeTree(root, { "e2e/flow.ts": "// 手 1 は未決\nexport const y = 1;\n" });
-  const r = runNode(hook, ["stop"], { cwd: root, env: cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) }), input: JSON.stringify({ cwd: root }) });
+  const env = cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) });
+  assert.equal(runNode(unslop, ["--json"], { cwd: root, env }).status, 2);
+  const r = runNode(hook, ["stop"], { cwd: root, env, input: JSON.stringify({ cwd: root }) });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr, "");
   assert.equal(r.stdout, "");
+});
+
+// コミットの無いリポジトリの差分は空の HEAD とのもの（追跡中と未追跡のファイル全部）
+test("Stop はコミットの無いリポジトリでも新しいファイルの unslop error で差し戻す", (t) => {
+  const root = tempProject(t, "cradle-hook-stop-unborn-");
+  writeTree(root, { "e2e/flow.ts": "// 手 1 は未決\nexport const y = 1;\n" });
+  git(root, "init", "-q");
+  const r = runNode(hook, ["stop"], { cwd: root, env: cleanEnv(), input: JSON.stringify({ cwd: root }) });
+  assert.deepEqual([r.status, r.stderr], [0, ""]);
+  assert.deepEqual(JSON.parse(r.stdout), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 1 件あります。止まる前に直すこと（規約は unslop と comments）:\n${reasonLine(1)}` });
 });
