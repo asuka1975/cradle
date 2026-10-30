@@ -48,9 +48,9 @@ internal fun docLine(doc: String): String? =
 /** メンバ 1 つ分の 1 行 KDoc。doc が空なら何も出さない。 */
 internal fun kdocLine(doc: String): String = docLine(doc)?.let { "\t/** $it */\n" } ?: ""
 
-/** doc の全文を KDoc の本文(行ごとに ` * `)にする。 */
+/** doc の全文を KDoc の本文(行ごとに ` * `)にする。空の行は ` *` だけにして行末に空白を残さない。 */
 internal fun kdocBody(doc: String): String = doc.trim().lineSequence()
-	.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+	.joinToString("\n") { l -> l.trim().let { if (it.isEmpty()) " *" else " * $it" } }
 
 /** 定理由来のケースのテスト名。利用者のテストレポートに出る名前なので文言を変えない。 */
 internal fun theoremTestName(method: String, theorem: String, i: Int): String =

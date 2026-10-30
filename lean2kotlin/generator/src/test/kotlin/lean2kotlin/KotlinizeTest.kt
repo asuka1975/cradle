@@ -41,6 +41,13 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `kdocBody は doc の行ごとに KDoc の行を作り、空の doc と段落の間の空行は行末に空白を残さない`() {
+		assertEquals(" * いま操作している利用者。", kdocBody("いま操作している利用者。 "))
+		assertEquals(" * 一段落目。\n *\n * 二段落目。", kdocBody("一段落目。\n\n  二段落目。\n"))
+		assertEquals(" *", kdocBody(""))
+	}
+
+	@Test
 	fun `typeRef は IR の型を Kotlin の型に写す`() {
 		assertEquals("Long", k.typeRef(IrType.Nat))
 		assertEquals("String", k.typeRef(IrType.Str))
