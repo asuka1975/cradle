@@ -292,6 +292,9 @@ export function fail(msg, code = 1) {
     正規表現を 2 回かける読み方では、`/--` の `--` を行コメントとして消すと docstring の続きの行がコードに残り、行コメントの中の `/-` からブロックを開くと次の `-/` までのコードが消える。
     コードの文字列リテラル（`\"` `\\` のエスケープを越えて次の `"` まで。閉じなければ最後まで）と文字リテラルはそのまま写す。Lean の字句と同じく中の `--` `/-` でコメントを開かない（`".../-/issues"` からファイルの残りを消さない）。
     文字リテラルは `'<1 文字>'` と `'\<1 文字>'` の形だけ（`x'` `h'` の `'` は名前の一部）。ブロックの中の `"` は Lean と同じく数えない。
+    生文字列 `r"…"` / `r#"…"#`（`#` は幾つでも）は開きと同じ数の `#` が続く `"` までをそのまま写す（`\` は逃がしでなく、`r"C:\"` は `\` の後の `"` で閉じる）。
+    `r` の直前が名前の文字なら `r` は名前の終わりで、続く `"` は普通の文字列（`throwError"…"`）。名前の文字は Lean の isIdRest より広く、Unicode の文字・数字と `_'!?.`（`X.r` は 1 つの名前）で、直前の 2 単位を見てサロゲート対（`𝒜`）も 1 文字に読む。
+    `«…»` の名前も次の `»` までをそのまま写す（Lean は中の `"` `--` `/-` と改行を名前に含める）。
     `s!"…{…}…"` の `{}` の中の文字列は追わない（引用符の対がずれても、その文字列が `--` `/-` を持たなければ写す文字は同じ）。 */
 export function stripLeanComments(text) {
   let out = "", depth = 0;
@@ -300,6 +303,19 @@ export function stripLeanComments(text) {
     if (depth === 0) {
       if (c === "-" && n === "-") { const e = text.indexOf("\n", i); if (e < 0) break; i = e - 1; continue; }
       if (c === "/" && n === "-") { depth = 1; i++; continue; }
+      if (c === "r" && !/[\p{L}\p{N}_'!?.]$/u.test(text.slice(Math.max(0, i - 2), i))) {
+        let h = 0;
+        while (text[i + 1 + h] === "#") h++;
+        if (text[i + 1 + h] === '"') {
+          const close = '"' + "#".repeat(h), e = text.indexOf(close, i + 2 + h);
+          const end = e < 0 ? text.length : e + close.length;
+          out += text.slice(i, end); i = end - 1; continue;
+        }
+      }
+      if (c === "«") {
+        const e = text.indexOf("»", i + 1), end = e < 0 ? text.length : e + 1;
+        out += text.slice(i, end); i = end - 1; continue;
+      }
       if (c === '"') {
         let e = i + 1;
         while (e < text.length && text[e] !== '"') e += text[e] === "\\" ? 2 : 1;

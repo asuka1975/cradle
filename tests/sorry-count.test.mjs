@@ -70,3 +70,22 @@ test("lean-check と status は文字列リテラルの中の /- でコメント
   assert.equal(s.status, 0, s.stderr);
   assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 1"), s.stdout);
 });
+
+// 生文字列（\ は逃がしでなく、r#"…"# は中の " で閉じない）の対を取り違えると、次の文字列の /-/ からファイルの残りが消える
+const rawModel = (line) => ["namespace Example", line, 'def issueTracker : String := "https://gitlab.example.com/team/app/-/issues"', "theorem t : True := sorry", "axiom bad : False", "end Example", ""].join("\n");
+
+test("lean-check と status は生文字列 r\"C:\\\" と r#\"say \"hi\"# の後の sorry と axiom を数える", (t) => {
+  const files = { "lean/Example/Domain/A.lean": rawModel('def winRoot : String := r"C:\\"'), "lean/Example/Domain/B.lean": rawModel('def quoteOnly : String := r#"say "hi"#') };
+  for (const text of Object.values(files)) assert.equal(leanSorryLines(text), 1);
+  const root = tempProject(t, "cradle-sorry-raw-");
+  writeTree(root, files);
+  const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(r.status, 1, r.stdout);
+  const j = JSON.parse(r.stdout);
+  assert.deepEqual(j.findings.filter(f => ["sorry", "axiom"].includes(f.rule)).map(f => `${f.rule} ${f.file}:${f.line}`).sort(),
+    ["axiom lean/Example/Domain/A.lean:5", "axiom lean/Example/Domain/B.lean:5", "sorry lean/Example/Domain/A.lean:4", "sorry lean/Example/Domain/B.lean:4"]);
+  assert.equal(j.sorry, 2);
+  const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(s.status, 0, s.stderr);
+  assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 2"), s.stdout);
+});

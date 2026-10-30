@@ -39,6 +39,26 @@ test("stripLeanComments はコードの文字列リテラルと文字リテラ�
   assert.equal(stripLeanComments('def n := "閉じない -- /-\naxiom bad : False\n'), 'def n := "閉じない -- /-\naxiom bad : False\n');
 });
 
+// 生文字列の \ は逃がしでなく、r#"…"# は中の " で閉じない。対を取り違えると次の文字列の /-/ からファイルの残りが消える
+const rawProbe = (line) => ["namespace Example", line, 'def issueTracker : String := "https://gitlab.example.com/team/app/-/issues"', "theorem t : True := sorry", "axiom bad : False", "end Example", ""].join("\n");
+const rawA = rawProbe('def winRoot : String := r"C:\\"'), rawB = rawProbe('def quoteOnly : String := r#"say "hi"#');
+
+test("stripLeanComments は生文字列 r\"…\" / r#\"…\"# と «…» の名前をそのまま写し、中の \\ \" -- /- で対を取り違えない", () => {
+  assert.equal(stripLeanComments(rawA), rawA);
+  assert.equal(stripLeanComments(rawB), rawB);
+  // 閉じるのは開きと同じ数の # が続く " で、生文字列の後のコメントは消す
+  assert.equal(stripLeanComments('def x := r##"a"#b"## /- c -/y -- d\n'), 'def x := r##"a"#b"## y \n');
+  // 中の改行もそのまま（行番号が動かない）。閉じない生文字列は最後まで写す
+  assert.equal(stripLeanComments('def m := r#"1 行目\n-- 2 行目 /- C:\\"#\naxiom bad : False -- 消す\n'), 'def m := r#"1 行目\n-- 2 行目 /- C:\\"#\naxiom bad : False \n');
+  assert.equal(stripLeanComments('def n := r#"閉じない "\n/- -/\naxiom bad : False\n'), 'def n := r#"閉じない "\n/- -/\naxiom bad : False\n');
+  // 記号の直後の r からは生文字列。名前の終わりの r（throwError"…"）の後は普通の文字列で、\" では閉じない
+  assert.equal(stripLeanComments('def p := ⟨r"C:\\", "/-/"⟩\naxiom bad : False\n'), 'def p := ⟨r"C:\\", "/-/"⟩\naxiom bad : False\n');
+  assert.equal(stripLeanComments('def g := throwError"a\\"b /- c"\ntheorem t : True := sorry\n'), 'def g := throwError"a\\"b /- c"\ntheorem t : True := sorry\n');
+  // «…» の名前の中の " -- /- と改行もそのまま
+  for (const name of ['«a"b»', "«x--y»", "«p/-q»", "«m\n-- n»"])
+    assert.equal(stripLeanComments(`def ${name} : True := sorry\n/- 消す -/axiom bad : False\n`), `def ${name} : True := sorry\naxiom bad : False\n`);
+});
+
 test("leanVocabulary は行コメントの中の /- でブロックを開かない", (t) => {
   const root = tempDir(t, "cradle-lean-vocab-");
   writeTree(root, { "Example/Runtime/Command.lean": "inductive Command where\n  -- see https://gitlab.com/x/-/issues/1\n  | post\n  /-- 閉じる。 -/\n  | close\nderiving Repr\n" });
@@ -52,6 +72,14 @@ function check(t, files) {
   const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
   return JSON.parse(r.stdout).findings;
 }
+
+test("lean-check は生文字列と «…» の名前の後の sorry と axiom を数える", (t) => {
+  const findings = check(t, { "Domain/A.lean": rawA, "Domain/B.lean": rawB, "Domain/C.lean": "def «x--y» : True := sorry\naxiom «bad/-» : False\n" });
+  assert.deepEqual(findings.filter(f => ["sorry", "axiom"].includes(f.rule)).map(f => `${f.rule} ${f.file}:${f.line}`).sort(), [
+    "axiom lean/Example/Domain/A.lean:5", "axiom lean/Example/Domain/B.lean:5", "axiom lean/Example/Domain/C.lean:2",
+    "sorry lean/Example/Domain/A.lean:4", "sorry lean/Example/Domain/B.lean:4", "sorry lean/Example/Domain/C.lean:1",
+  ]);
+});
 
 test("lean-check は内部入力の UseCase の複数行の docstring に書いた名義を、受けているとは数えない", (t) => {
   const findings = check(t, {
