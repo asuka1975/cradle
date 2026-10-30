@@ -18,6 +18,7 @@
 // — flow は連続する step の定義そのものなので、ずれれば実行器の不整合。
 // 応答に現れる外部能力の往復（init の env の script・trace の interactions の port / operation）は Lean の Port の一覧
 // （Application/Port/<Port>/<操作>.lean、Domain/Port も同じ）に要り、無ければ error。
+// 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない。
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -52,12 +53,22 @@ function manifestRequests(name, flow) {
 }
 
 const isOk = (res) => !!res && typeof res === "object" && "ok" in res;
+const isObject = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** 応答に現れる外部能力の往復のうち Lean の Port に無いもの（"<Port>.<operation>"、重複無し）。flow は readGoldenTrace で形を確かめた trace から読む。 */
-function unknownPortCalls(kind, top, trace) {
-  const calls = kind === "init" ? top.ok.env?.script ?? [] : trace.flatMap(t => t.interactions ?? []);
-  return [...new Set(calls.filter(c => c && !hasPortOperation(portList, c.port, c.operation)).map(c => `${c.port}.${c.operation}`))];
+/** 保存した ok の応答に現れる外部能力の往復（init は env の script、flow は trace の interactions）。ok がオブジェクトでない・init の ok.env.script が
+    配列でなければファイル名を添えて投げ、flow の trace の形は readGoldenTrace が status の事実と同じ理由で投げる。
+    CLI の応答（再生・連鎖）は isOk だけで判定する — 形を締めるのは保存した golden だけ。 */
+function storedPortCalls(kind, name, top) {
+  const file = `${name}-${kind}.json`;
+  if (!isObject(top.ok)) throw new Error(`${file} の ok がオブジェクトではない`);
+  if (kind === "flow") return readGoldenTrace(goldenDir, file).flatMap(t => t.interactions ?? []);
+  const script = top.ok.env?.script ?? [];
+  if (!Array.isArray(script)) throw new Error(`${file} の ok.env.script が配列ではない`);
+  return script;
 }
+
+/** 外部能力の往復のうち Lean の Port に無いもの（"<Port>.<operation>"、重複無し）。 */
+const unknownPortCalls = (calls) => [...new Set(calls.filter(c => c && !hasPortOperation(portList, c.port, c.operation)).map(c => `${c.port}.${c.operation}`))];
 
 const CHAIN_KEYS = ["result", "state", "views", "env", "interactions", "domainError", "faultContract"];
 const pickFields = (src, keys) => Object.fromEntries(keys.filter(k => src?.[k] !== undefined).map(k => [k, src[k]]));
@@ -109,11 +120,11 @@ for (const name of wanted) {
     let top; try { top = JSON.parse(readFileSync(file, "utf8")); } catch (e) { error(name, `JSON として読めない: ${e.message}`, kind); stop = true; continue; }
     if (!isOk(top)) error(name, "トップレベルが {\"ok\": …} ではない（CLI の応答そのものを置く）", kind);
     else {
-      // flow の trace が配列でない・手がオブジェクトでなければ status の事実と同じ理由（ファイル名つき）の error にして再生しない
-      // — 投げると stack trace だけで、残りの golden の行も出ない
-      let trace;
-      if (kind === "flow") try { trace = readGoldenTrace(goldenDir, `${name}-flow.json`); } catch (e) { error(name, e.message, kind); stop = true; continue; }
-      const unknown = unknownPortCalls(kind, top, trace);
+      // 形の違う golden（storedPortCalls が投げる）はファイル名つきの error にして再生しない — 投げると stack trace だけで、残りの golden の行も出ない。
+      // この後の障害契約の照合と manifest の復元は、ok がオブジェクトの応答だけを読む
+      let calls;
+      try { calls = storedPortCalls(kind, name, top); } catch (e) { error(name, e.message, kind); stop = true; continue; }
+      const unknown = unknownPortCalls(calls);
       if (unknown.length) { error(name, `外部能力の往復 ${unknown.join(", ")} が Lean の Port（Application/Port/<Port>/<操作>.lean）に無い`, kind); stop = true; }
     }
     stored[kind] = top;

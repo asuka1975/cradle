@@ -1,5 +1,7 @@
 // 読めない golden（壊れた -flow.json / -init.json と、JSON としては読めても形の違う -flow.json）: status は E2E のフェーズにそれを出して後のフェーズも出し、
 // flows-from-golden は既定の出力でも --check（門）でもファイル名つきの 1 行で 1 で終わる。
+// golden-check は形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script が配列でない・手がオブジェクトでない）をファイル名つきの error の行にして再生せず、
+// 残りの golden の行も出す（--manifest でも、golden-check を呼ぶ regen-impact でも stack trace にしない）。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
@@ -162,6 +164,42 @@ test("golden-check は ok.trace が配列でない・手がオブジェクトで
   }
 });
 
+// ok がオブジェクトでない -init.json / -flow.json と ok.env.script が配列でない -init.json も同じ: ファイル名つきの error の行にして再生しない。
+// flow の {"ok":null} は external の sidecar で障害契約の照合まで進むので、その sidecar で確かめる
+const externalSidecar = JSON.stringify({ version: 1, init: { cmd: "external", version: 1, action: "init", scenario: "basic" }, flow: { cmd: "external", version: 1, action: "flow", scenario: "basic", inputs: [] } });
+const okShapes = [
+  [{ "a-init.json": JSON.stringify({ ok: null }), "a-flow.json": flow, "a.request.json": sidecar }, "init", "a-init.json の ok がオブジェクトではない"],
+  [{ "a-init.json": JSON.stringify({ ok: null }), "a-flow.json": flow, "a.request.json": externalSidecar }, "init", "a-init.json の ok がオブジェクトではない"],
+  [{ "a-init.json": JSON.stringify({ ok: 5 }), "a-flow.json": flow, "a.request.json": sidecar }, "init", "a-init.json の ok がオブジェクトではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: 5 } } }), "a-flow.json": flow, "a.request.json": externalSidecar }, "init", "a-init.json の ok.env.script が配列ではない"],
+  [{ "a-init.json": JSON.stringify({ ok: { env: { script: "abc" } } }), "a-flow.json": flow, "a.request.json": externalSidecar }, "init", "a-init.json の ok.env.script が配列ではない"],
+  [{ "a-init.json": init, "a-flow.json": JSON.stringify({ ok: null }), "a.request.json": externalSidecar }, "flow", "a-flow.json の ok がオブジェクトではない"],
+  [{ "a-init.json": init, "a-flow.json": JSON.stringify({ ok: [] }), "a.request.json": externalSidecar }, "flow", "a-flow.json の ok がオブジェクトではない"],
+];
+
+test("golden-check は ok がオブジェクトでない・ok.env.script が配列でない golden をファイル名つきの error の行にし、stack trace を出さずに残りの golden も出す", (t) => {
+  for (const [golden, kind, reason] of okShapes) {
+    const label = JSON.stringify(golden);
+    const { run } = fixture(t, golden);
+    const json = run(goldenCheck, "--json", "--build", "never");
+    assert.equal(json.status, 1, label + "\n" + json.stderr);
+    assert.equal(json.stderr, "", label);
+    assert.deepEqual(JSON.parse(json.stdout), { failed: 1, report: [{ name: "a", kind, status: "error", reason }, okSkipped] }, label);
+    const text = run(goldenCheck, "--build", "never");
+    assert.equal(text.status, 1, label + "\n" + text.stderr);
+    assert.equal(text.stderr, "", label);
+    assert.ok(text.stdout.startsWith(`error    a-${kind}: ${reason}\nskipped  ok: ${okSkipped.reason}\n\n0 ok, 1 changed/error, 1 skipped\n`), label + "\n" + text.stdout);
+  }
+});
+
+// ok.env.script が null の -init.json は外部能力の往復の無い応答で、形の error にせず再生へ進む（Lean CLI が無いので init / flow とも CLI の error）
+test("golden-check は ok.env.script が null の -init.json を形の error にせず再生する", (t) => {
+  const { run } = fixture(t, { "a-init.json": JSON.stringify({ ok: { env: { script: null } } }), "a-flow.json": flow, "a.request.json": sidecar });
+  const { report } = JSON.parse(run(goldenCheck, "--json", "--build", "never").stdout);
+  assert.deepEqual(report.map(r => [r.name, r.kind, r.status, r.reason?.startsWith("Lean CLI がありません")]),
+    [["a", "init", "error", true], ["a", "flow", "error", true], ["ok", undefined, "skipped", false]], JSON.stringify(report));
+});
+
 test("golden-check --manifest は sidecar の無い golden の -flow.json が null でも手が null でも stack trace を出さず、error の行にする", (t) => {
   const top = { name: "a", kind: "flow", status: "error", reason: "トップレベルが {\"ok\": …} ではない（CLI の応答そのものを置く）" };
   const step = { name: "a", kind: "flow", status: "error", reason: "a-flow.json の ok.trace の 1 手目がオブジェクトではない" };
@@ -181,6 +219,23 @@ test("golden-check --manifest は sidecar の無い golden の -flow.json が nu
   assert.deepEqual(JSON.parse(run(goldenCheck, "--json", "--build", "never", "--manifest", "m.json").stdout).report, [step, okSkipped]);
 });
 
+test("golden-check --manifest は sidecar の無い golden の ok がオブジェクトでなくても ok.env.script が配列でなくても stack trace を出さず、error の行にして再生しない", (t) => {
+  const row = (kind, reason) => ({ name: "a", kind, status: "error", reason });
+  for (const [golden, expected] of [
+    [{ "a-init.json": JSON.stringify({ ok: null }), "a-flow.json": flow }, row("init", "a-init.json の ok がオブジェクトではない")],
+    [{ "a-init.json": JSON.stringify({ ok: { env: { script: 5 } } }), "a-flow.json": flow }, row("init", "a-init.json の ok.env.script が配列ではない")],
+    [{ "a-init.json": init, "a-flow.json": JSON.stringify({ ok: null }) }, row("flow", "a-flow.json の ok がオブジェクトではない")],
+  ]) {
+    const label = JSON.stringify(golden);
+    const { root, run } = fixture(t, golden);
+    writeTree(root, { "m.json": JSON.stringify({ a: { scenario: "basic" } }) });
+    const r = run(goldenCheck, "--json", "--build", "never", "--manifest", "m.json");
+    assert.equal(r.status, 1, label + "\n" + r.stderr);
+    assert.equal(r.stderr, "", label);
+    assert.deepEqual(JSON.parse(r.stdout).report, [expected, okSkipped], label);
+  }
+});
+
 test("regen-impact は ok.trace が配列でない golden を golden-check の error の行で golden 回帰に出し、stack trace を載せない", (t) => {
   const { root, run } = fixture(t, { "a-flow.json": JSON.stringify({ ok: { trace: 5 } }), "a-init.json": init, "a.request.json": sidecar });
   commitAll(root);
@@ -188,4 +243,13 @@ test("regen-impact は ok.trace が配列でない golden を golden-check の e
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stderr, "");
   assert.ok(r.stdout.endsWith(`\ngolden 回帰: 1 件が changed/error（意図した変更か確かめる）\n  error    a-flow: a-flow.json の ok.trace が配列ではない\n  skipped  ok: ${okSkipped.reason}\n`), r.stdout);
+});
+
+test("regen-impact は ok がオブジェクトでない -init.json を golden-check の error の行で golden 回帰に出し、stack trace を載せない", (t) => {
+  const { root, run } = fixture(t, { "a-flow.json": flow, "a-init.json": JSON.stringify({ ok: null }), "a.request.json": sidecar });
+  commitAll(root);
+  const r = run(regenImpact, "--no-regen");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+  assert.ok(r.stdout.endsWith(`\ngolden 回帰: 1 件が changed/error（意図した変更か確かめる）\n  error    a-init: a-init.json の ok がオブジェクトではない\n  skipped  ok: ${okSkipped.reason}\n`), r.stdout);
 });
