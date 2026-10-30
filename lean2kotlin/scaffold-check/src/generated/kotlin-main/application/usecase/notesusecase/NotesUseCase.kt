@@ -16,6 +16,7 @@ import dev.cradle.scaffold.application.QueryError
  * 実装は AI が別ファイルに書く。default 禁止。
  */
 interface NotesUseCase {
+	fun execute(q: NotesQuery): DomainResult<QueryError, List<NoteView>>
 	/**
 	 * 検証対象が無いので常に成功（型の形が表明）。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
@@ -23,5 +24,4 @@ interface NotesUseCase {
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。
 	 */
 	fun validate(`_q`: NotesQuery): DomainResult<QueryError, Unit>
-	fun execute(q: NotesQuery): DomainResult<QueryError, List<NoteView>>
 }

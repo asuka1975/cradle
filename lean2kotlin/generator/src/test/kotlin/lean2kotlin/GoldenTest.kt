@@ -326,6 +326,36 @@ class GoldenTest {
 	}
 
 	@Test
+	fun `テスト名にすると同じになる golden の組は error にして読まず、ほかの golden は読む`(@TempDir dir: Path) {
+		copy(dir, "basic-init.json", "basic-flow.json")
+		for (prefix in listOf("basic.v2", "basic_v2")) Files.copy(sproutGolden.resolve("basic-init.json"), dir.resolve("$prefix-init.json"))
+		val g = Golden.load(dir)
+		assertEquals(listOf("basic-init", "basic-flow #0", "basic-flow #1"), g.snapshots.map { it.source })
+		assertTrue(g.notes.isEmpty())
+		assertEquals(listOf("golden basic.v2・basic_v2 はテスト名にすると同じ basic_v2 になる（`. ; [ ] / < > : \\` は _ にする）— どれかを改名する"), g.errors)
+	}
+
+	@Test
+	fun `初期状態の無い flow はテスト名にならないので、写すと同じになる golden と組にせず note に出す`(@TempDir dir: Path) {
+		Files.copy(sproutGolden.resolve("basic-init.json"), dir.resolve("basic_v2-init.json"))
+		Files.copy(sproutGolden.resolve("basic-flow.json"), dir.resolve("basic.v2-flow.json"))
+		val g = Golden.load(dir)
+		assertEquals(emptyList(), g.errors)
+		assertEquals(listOf("basic_v2-init"), g.snapshots.map { it.source })
+		assertEquals(listOf("golden basic.v2-flow: 初期状態(basic.v2-init.json)がないため無視"), g.notes)
+	}
+
+	@Test
+	fun `state の無い init(CLI の error 応答)はテスト名にならないので、写すと同じになる golden と組にせず note に出す`(@TempDir dir: Path) {
+		Files.copy(sproutGolden.resolve("basic-init.json"), dir.resolve("basic_v2-init.json"))
+		dir.resolve("basic.v2-init.json").writeText("""{"error":"unknown scenario: basic.v2"}""")
+		val g = Golden.load(dir)
+		assertEquals(emptyList(), g.errors)
+		assertEquals(listOf("basic_v2-init"), g.snapshots.map { it.source })
+		assertEquals(listOf("golden basic.v2-init.json: init/flow のどちらでもないため無視"), g.notes)
+	}
+
+	@Test
 	fun `golden の error は生成の失敗に集まる(生成は続き、最後に止まる)`(@TempDir out: Path) {
 		val notes = mutableListOf<String>()
 		val message = "外部能力を使う golden visit は visit.request.json（版・環境・入力列）が無いと再生できない"

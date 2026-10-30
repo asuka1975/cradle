@@ -25,7 +25,9 @@ import kotlin.io.path.readText
  *
  * 再生できない golden は error(生成の失敗)に集める: 外部能力の golden に版 1 の外部能力の脇書きが無い、
  * 脇書きの版が読めない、外部能力の golden の init / flow 応答がトップに `ok` を持たない(`error` / `harnessError`)、
- * fault のエントリが障害契約を指名していない、指名した障害契約が IR に無い・portCalls が違う。
+ * fault のエントリが障害契約を指名していない、指名した障害契約が IR に無い・portCalls が違う、
+ * スナップショットを出す golden の名前(prefix)をテスト名にすると、スナップショットを出す別の golden と同じになる([testNameSafe]。
+ * init の無い flow・state の無い init はテスト名にならないので組に数えず、note のまま)。
  */
 
 /** fault のエントリが指名した障害契約(trace の `faultContract`)。 */
@@ -133,7 +135,7 @@ object Golden {
 		}
 
 		// スナップショットは init の列、次に flow の列(どちらもファイル名順)
-		val snapshots = mutableListOf<GoldenSnapshot>()
+		val snapshots = mutableListOf<Pair<String, GoldenSnapshot>>()   // (prefix, スナップショット)
 		val states = mutableMapOf<String, JsonObject>()   // prefix -> 初期状態
 		for ((prefix, init) in inits) {
 			if (prefix !in readable) continue
@@ -145,7 +147,7 @@ object Golden {
 			}
 			states[prefix] = state
 			val vws = ok["views"] as? JsonObject ?: continue
-			snapshots += GoldenSnapshot("$prefix-init", state, vws, env = ok["env"])
+			snapshots += prefix to GoldenSnapshot("$prefix-init", state, vws, env = ok["env"])
 		}
 		for ((prefix, flow) in flows) {
 			if (prefix !in readable) continue
@@ -173,15 +175,29 @@ object Golden {
 					errors += "外部能力を使う golden $prefix-flow #$i は fault のエントリなのに障害契約の指名 faultContract（name と portCalls）を持たない — 再生できない"
 					return@forEachIndexed
 				}
-				snapshots += GoldenSnapshot("$prefix-flow #$i", next, vws,
+				snapshots += prefix to GoldenSnapshot("$prefix-flow #$i", next, vws,
 					result = result,
 					env = o["env"],
 					interactions = (o["interactions"] as? JsonArray)?.toList() ?: emptyList(),
 					faultContract = fault.takeIf { result == "fault" })
 			}
 		}
-		return GoldenLoad(snapshots, notes, errors)
+
+		// テスト名はスナップショットの出どころから作る。スナップショットを出す prefix のうち
+		// テスト名にすると同じになる組は、生成するテストの名前が衝突するので組ごと読まない
+		val colliding = mutableSetOf<String>()
+		for ((safe, group) in snapshots.map { it.first }.distinct().groupBy(::testNameSafe)) {
+			if (group.size < 2) continue
+			errors += "golden ${group.sorted().joinToString("・")} はテスト名にすると同じ $safe になる（`. ; [ ] / < > : \\` は _ にする）— どれかを改名する"
+			colliding += group
+		}
+		return GoldenLoad(snapshots.filter { it.first !in colliding }.map { it.second }, notes, errors)
 	}
+
+	/** golden を読まないときの読み込み結果: スナップショットは無く、指定なし(dir が null)か指定先にディレクトリが無いかを note に残す。 */
+	fun absent(dir: Path?): GoldenLoad = GoldenLoad(emptyList(),
+		listOf(if (dir == null) "golden の指定なし — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"
+			else "golden ディレクトリがありません: $dir — golden 由来のケース(参照系の golden 回帰・Retrieve)は生成しません"))
 
 	/**
 	 * fault のエントリが指名した障害契約を IR の障害契約(`<UseCase>.<def>` と Lean の署名から導いた portCalls)と突き合わせる。

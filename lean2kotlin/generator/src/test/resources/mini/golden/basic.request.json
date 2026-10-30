@@ -1,0 +1,6 @@
+{
+  "init": {
+    "cmd": "init",
+    "scenario": "basic"
+  }
+}

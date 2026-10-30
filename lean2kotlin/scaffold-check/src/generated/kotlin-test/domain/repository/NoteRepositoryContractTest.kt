@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
 /**
- * NoteRepository の契約テスト(v1 規約: save は id による upsert)。
+ * NoteRepository の契約テスト(v1 規約: add は末尾への追加・update は id で既存個体を書き換えて並びを保つ・findById は id で引いて未知なら null)。
  * 個体の列は `Sprout.Application.NoteRepositoryState` の制約を満たすように引く(arbNoteRepository)。
  * repository() は**呼び出しごとに空のリポジトリ**を返すこと。
  */

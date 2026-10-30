@@ -16,6 +16,7 @@ import dev.cradle.lobby.domain.entity.PaymentAttempt
  * 実装は AI が別ファイルに書く。default 禁止。
  */
 interface ConfirmPaymentUseCase {
+	fun execute(o: ConfirmPaymentObservation): DomainResult<DomainError, Unit>
 	/**
 	 * 始まる前の拒否: 試みが無い（無関係な通知）/ まだ送っていない試みへの通知（無関係な結果）/ 確定した結果と矛盾する通知。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
@@ -23,5 +24,4 @@ interface ConfirmPaymentUseCase {
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。
 	 */
 	fun validate(o: ConfirmPaymentObservation): DomainResult<DomainError, PaymentAttempt>
-	fun execute(o: ConfirmPaymentObservation): DomainResult<DomainError, Unit>
 }

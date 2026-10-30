@@ -15,6 +15,8 @@ import dev.cradle.scaffold.domain.DomainError
  * 実装は AI が別ファイルに書く。default 禁止。
  */
 interface PostNoteUseCase {
+	/** execute は validate を呼ぶ定義（入り口の一致は定義の系）。 */
+	fun execute(c: PostNoteCommand): DomainResult<DomainError, Unit>
 	/**
 	 * 始まる前の拒否: 題が空なら書けない、同じ題がもうあるなら書けない。成功なら題になれて空いている証拠を返す。
 	 * 本番では execute の内部第一段として呼ばれる(実装は「execute は
@@ -22,6 +24,4 @@ interface PostNoteUseCase {
 	 * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。
 	 */
 	fun validate(c: PostNoteCommand): DomainResult<DomainError, PostNoteFreeTitle>
-	/** execute は validate を呼ぶ定義（入り口の一致は定義の系）。 */
-	fun execute(c: PostNoteCommand): DomainResult<DomainError, Unit>
 }

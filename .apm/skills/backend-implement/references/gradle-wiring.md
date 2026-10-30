@@ -71,7 +71,7 @@ lean2kotlin {
 ```
 
 外部能力の Port（`application/port/<port>/` の生成 interface）は Adapter（`infrastructure/<port>/`）を手書きして実装し、契約テストの具象クラスはフックで渡される `<Port>Mock` をそのまま UseCase に配線する（規則は backend-kotlin）。
-Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返す）。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。source set とタスクは Port の有無に依らず作られ、この 2 つの名前は plugin の持ち物 — プロジェクト側で同名を定義しない。
+Adapter の検査は plugin が作る source set `adapterTest`（生成された `<Port>AdapterContractTest` + `src/adapterTest/kotlin` の手書き配線）とタスク `adapterContractTest` に置く。具象クラスは `adapter()` に stub / sandbox 相手の Adapter を返し、`arrange<操作><構成子>()` で stub をその観測を返す状態にしてから要求を返す（観測が構成子を持たない structure なら `arrange<操作>()` が要求と期待する観測の組を返す）。`./gradlew adapterContractTest` で回す（`build` の門に入れない規則は backend-kotlin）。source set とタスクは `org.jetbrains.kotlin.jvm` を適用し `wireSourceSets` が true（既定）のとき、Port の有無に依らず作られ、この 2 つの名前は plugin の持ち物 — プロジェクト側で同名を定義しない。`wireSourceSets = false` でも compile タスクは `generateKotlinFromLean` に依存する。
 
 `compileKotlin` は毎回 `extractLeanIr`（`lake build`）に依存する。Lean を触らないタスクで IR が既にあるなら `-x extractLeanIr` で飛ばしてよい。
 抽出器は対象ドメインの `lean-toolchain` でビルドされる（`apm_modules/…/lean2kotlin/lean/.lake` に落ちる。`apm install` のたびに作り直し）。
@@ -79,10 +79,10 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 
 ## 生成器の既知の癖
 
-- 参照系で execute 面でない定理に `@[contract]` を付けると note「参照系の検証面ではないため読み飛ばし」が出て、そのファミリは生成されない → モデル側で指名を外す。
+- 参照系で execute 面でない定理に `@[contract]` を付けると note「対象 <面> は参照系の検証面(execute)ではないため読み飛ばし」が出て、その定理の生成テストは 0 件になり、生成は `契約定理 … 生成テストが 0 件` で失敗する → モデル側で指名を外す。
 - 印だけの主体（フィールド 0 の `@[actorContext]`）は作らない（`cradle lean-check` が止める）。
 - Runtime 在住の参照専用 ID VO は `runtime` パッケージに出る → 同一性の VO は Entity の持ち物にするか、`Domain/ValueObject.lean` に置く。
-- golden は `<name>-init.json` / `<name>-flow.json` の 2 本組でなければ無視される（note が出る）。note は失敗として読む。
+- `<name>-flow.json` は対の `<name>-init.json` が無ければ無視される（note が出る）。note は失敗として読む。init だけの golden は初期状態 1 件のスナップショットとして読まれる。
 
 ## 抽出が失敗したとき（多くは Lean 側を直す）
 
@@ -92,10 +92,9 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | 型引数 G に対応する `<Root>.Runtime.G` がありません | binder 名を Runtime の型名に合わせるか、`binderOverrides` で対応づける |
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
 | フィクスチャ / 期待値を構成できません | `Repr` / `DecidableEq` の deriving、契約定理の前提が Decidable か、量化変数が生成可能な型か |
-| 参照系の execute 面でない定理の契約 | `@[contract]` を外す（execute 面の系） |
-| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`Port … interface 化された語彙` は要求・観測を閉じたデータ型にする、`signature …` は固定形の署名の型を契約面の語彙にする |
+| 宣言した契約・Port が検査に至らない診断 N 件で生成を失敗にしました | error 行ごとに直す: `契約定理 … 生成テストが 0 件` / `contract … 主対象に触れない` は指名を外すか定理の形を直す（Lean）、`contract … 主対象の候補 … の署名を写像できない` はその def の署名の型を契約面の語彙にする（Lean）、`contract … 主対象の候補 … は主対象の型を決められない` は def を分類済みの型そのものの namespace に置く（Lean。名前空間の型に区分が無ければ区分を与える。理由が `区分 … でふるまいの主対象にならない`（error・clockPort・actorPort の型の def）なら指名を外すか、def をふるまいの主対象の型の namespace に置く）、`Port … interface 化された語彙` / `Port … 関数型を運ぶ` は要求・観測を閉じたデータ型にする（外部を呼ぶ関数は UseCase に渡さない）、`内部入力 … 名義` は Observation から名義を外す、`泉の状態 … Id 型 … がありません` は `Runtime/Ids.lean` に `structure <X>Id` を置く、`signature …` は固定形の署名の型を契約面の語彙にする |
 | UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
-| golden が無視された | `<name>-init.json` / `<name>-flow.json` の 2 本組か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
+| golden が無視された | flow に対の `<name>-init.json` があるか、名前が `<name>-init.json` / `<name>-flow.json` か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
 | `Key <field> is missing in the map` | 読み取りの golden 回帰テストで、Row のフィールドが状態の要素に無い。同梱の生成器は合成できない Row を入れ子まで note で飛ばす（この例外は古い生成器の文言） |
 | `<型>.<field>: JSON に無い` | fixture・入力リテラルの経路で JSON に無いフィールド → golden か fixture を採り直す |
 
@@ -104,11 +103,15 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | note | 意味 | 戻り先 |
 |---|---|---|
 | golden … 無視 | 命名か形が規約と違う | golden を採り直す |
-| View→Row の壁 / View→ドメイン語彙の壁 | View が Row やふるまい持ちの VO を運んでいる | View 自身の語彙を導入（Lean） |
+| View→Row の壁 / View→ドメイン語彙の壁 | View が Row を、View かエラーの型がふるまい持ちの VO・Entity を運んでいる | View・エラー自身の語彙を導入（Lean） |
+| View→ドメイン語彙の壁の破れ(入力 … が interface 化された語彙を運ぶ) | 参照系の execute の入力（Query の DTO 等）がふるまい持ちの VO・Entity に届いている。参照系ケースは出ない | 入力の語彙を閉じたデータ型にする（Lean）。その UseCase に指名した契約定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
 | 署名を写像できない | 契約面に写像できない型（関数・依存型・`Int` など） | 型の語彙を見直す（Lean） |
+| ふるまい … 主対象を決められない | def の名前空間が型でなく、その短い名前の型が複数ある（VO と UseCase の入力語彙が同名など） | def を型そのものの namespace に置く（Lean） |
+| UseCase … input を書かない | UseCase の置き場に固定名の型が無く、同じ役割の型が複数ある | 置き場に固定名の `Command` / `Observation` 型を置く（Lean） |
 | 契約定理を翻訳できません / 有効なケースを演繹できませんでした | 前提が Decidable でない・fixture から期待値を計算できない・仮定が常に偽 | 定理の形を見直す（Lean）。この note は診断にも残り、生成は失敗する |
 | … は読める制約の形ではない | `<Root>RepositoryState` の Prop フィールドが `(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`（lean-conventions §9）でない | 制約をその形に書き直す（Lean）。書けない制約は Repository 契約テストの個体の列が満たすとは限らない |
 | … の制約を満たすサンプルを組めません | VO などの Prop フィールドが、小さな値の候補（lean-conventions §9）のどれでも満たせない | 制約の形を見直す（Lean）。その型の Arb が要る生成は失敗する |
-| 参照系 … 読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean） |
-| interface のみ生成（テストなし） | fixture / golden が無い | fixture か golden を足す |
+| 対象 … は参照系の検証面(execute)ではないため読み飛ばし | execute 面でない定理に `@[contract]` | 指名を外す（Lean）。この定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
+| 配線 … は参照系の契約テストに写せません | 参照系の execute が配線の無い配管（State・外部能力の観測・precise な入力）を受けている。参照系ケースは出ない | 参照系の execute からその配管を外す（Lean）。その UseCase に指名した契約定理は生成テスト 0 件の契約として診断に残り、生成は失敗する |
+| golden の指定なし / golden ディレクトリがありません | `goldenDir` が未指定か、指した先にディレクトリが無い。契約定理のテストは出て、golden 由来のケース（参照系の golden 回帰・Retrieve）だけが出ない | 未指定は設計どおりの除外。ディレクトリが無いなら `goldenDir` のパスを直すか golden を採る |
 | … の要素に無いフィールド … 合成できません | 計算する読み取りモデル（集約横断の集計・別集約からの引き） | 無し（読み取りの回帰は `cradle golden-check` と E2E が担う） |
