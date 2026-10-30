@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { matchesAny, rel, git, cradleScript } from "./lib.mjs";
+import { matchesAny, rel, git, cradleScript, aiNoteProblems } from "./lib.mjs";
 import { unslopErrorSummary } from "./unslop-report.mjs";
 
 /** 編集対象のパス。Claude Code は file_path、Codex の apply_patch は tool_input.command にパッチ本文（Add / Update / Delete File 行）が入る。 */
@@ -104,11 +104,14 @@ export function decide(mode, payload, {
     for (const path of targetPaths(payload).map(toRel)) {
       if (path === cfg.documents.openapi) return ctx(`契約を変えました。backend は generateApi（compileKotlin が依存）、frontend は ${cfg.frontend.genApi} で生成し直し、写し漏れをコンパイルエラーで出すこと。契約に書かないもの（ID・経緯・存在しない操作・申し送り）が混ざっていないか見直す。`);
       if (path.startsWith(cfg.lean.dir + "/") && path.endsWith(".lean")) return ctx("Lean を変えました。`cd lean && lake build` → `cradle lean-check` → `cradle golden-check` の順に確かめる。変わった golden は意図した変更だけ --update。");
-      if (path.startsWith(cfg.documents.aiNotes + "/") && path.endsWith(".md") && !path.endsWith("README.md")) {
-        const name = path.slice(cfg.documents.aiNotes.length + 1);
+      // 外すファイル・名前・断りを探す範囲は unslop と同じ aiNoteProblems。ここで ai-notes の下に絞るのは、ほかの .md を読まないため
+      if (path.startsWith(cfg.documents.aiNotes + "/") && path.endsWith(".md")) {
+        let text = null;
+        try { text = readText(join(cfg.root, path)); } catch {}
+        const note = aiNoteProblems(cfg.documents.aiNotes, path, text);
         const problems = [];
-        if (!/^\d{8}-\d{2}-[a-z0-9-]+\.md$/.test(name)) problems.push(`ファイル名は YYYYMMDD-NN-<topic>.md（いまは ${name}）`);
-        try { const head = readText(join(cfg.root, path)).slice(0, 600); if (!/規約ではありません/.test(head)) problems.push("冒頭に「これは規約ではありません。」の断りが無い"); } catch {}
+        if (note?.badName) problems.push(`ファイル名は YYYYMMDD-NN-<topic>.md（いまは ${note.name}）`);
+        if (note?.noHeader) problems.push("冒頭に「これは規約ではありません。」の断りが無い");
         if (problems.length) return ctx(`ai-notes の規約: ${problems.join(" / ")}。ai-notes は規約ではない — ユーザーが承認したものだけが規約になる。`);
       }
     }

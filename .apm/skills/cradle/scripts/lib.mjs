@@ -602,3 +602,12 @@ export function renameScaffold(text, { project, domain = null }) {
   return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower)
     .replace(/__DOMAIN__/g, () => domain === null ? PRODUCT_PLACEHOLDER : String(domain).trim());
 }
+
+/** ai-notes の命名と冒頭の断り（hook の post-edit と unslop の ai-note-header が同じ規則を使う）。relPath が aiNotesDir の下でないか、
+    README.md・TEMPLATE.md（骨格が置く案内とひな形）で終われば null。name は aiNotesDir からのパスで、サブディレクトリのノートは名前の規則に合わない。
+    断りは冒頭 800 字に探し、text が null（読めない）なら noHeader は false。拡張子の絞り込みは呼ぶ側（hook は .md、unslop はドキュメントの拡張子）。 */
+export function aiNoteProblems(aiNotesDir, relPath, text) {
+  if (!relPath.startsWith(`${aiNotesDir}/`) || relPath.endsWith("README.md") || relPath.endsWith("TEMPLATE.md")) return null;
+  const name = relPath.slice(aiNotesDir.length + 1);
+  return { name, badName: !/^\d{8}-\d{2}-[a-z0-9-]+\.md$/.test(name), noHeader: text !== null && !/規約ではありません/.test(text.slice(0, 800)) };
+}

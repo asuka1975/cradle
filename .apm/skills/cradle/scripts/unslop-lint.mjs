@@ -25,7 +25,7 @@
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
-import { loadConfigOrFail, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, aiNoteProblems } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
 const cfg = loadConfigOrFail();
@@ -180,11 +180,9 @@ for (const file of files) {
     }
   });
 
-  if (isDoc && relPath.startsWith(cfg.documents.aiNotes + "/") && !relPath.endsWith("README.md") && !relPath.endsWith("TEMPLATE.md")) {
-    const name = relPath.slice(cfg.documents.aiNotes.length + 1);
-    if (!/^\d{8}-\d{2}-[a-z0-9-]+\.md$/.test(name)) add("ai-note-header", "error", file, 1, `ファイル名は YYYYMMDD-NN-<topic>.md（${name}）`);
-    if (!/規約ではありません/.test(text.slice(0, 800))) add("ai-note-header", "error", file, 1, "冒頭に「これは規約ではありません。」の断りが無い");
-  }
+  const note = isDoc ? aiNoteProblems(cfg.documents.aiNotes, relPath, text) : null;
+  if (note?.badName) add("ai-note-header", "error", file, 1, `ファイル名は YYYYMMDD-NN-<topic>.md（${note.name}）`);
+  if (note?.noHeader) add("ai-note-header", "error", file, 1, "冒頭に「これは規約ではありません。」の断りが無い");
   if (isDoc) {
     // ドキュメント側は文体の規則だけ（ID・ステータスは正本の持ち物）
     if (!isDdd) lines.forEach((l, i) => { if (EMOJI.test(l) && !/^\|/.test(l.trim())) add("emoji", "warn", file, i + 1, "装飾の絵文字"); });

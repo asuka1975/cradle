@@ -169,7 +169,7 @@ test("post-edit はパスごとに契約 → Lean → ai-notes の順に見て�
   assert.match(contextOf(d({ file_path: "../shared/openapi.yaml" }, shared)), /^契約を変えました/);
 });
 
-test("post-edit は ai-notes の .md のファイル名と冒頭 600 字の断りを見て 1 つの促しにまとめ、README.md だけを外す", (t) => {
+test("post-edit は ai-notes の .md のファイル名と冒頭 800 字の断りを見て 1 つの促しにまとめ、README.md と TEMPLATE.md を外す", (t) => {
   const { root, cfg } = setup(t);
   const read = [];
   const d = (file_path, text) => contextOf(decide("post-edit", { tool_input: { file_path } }, {
@@ -190,10 +190,11 @@ test("post-edit は ai-notes の .md のファイル名と冒頭 600 字の断�
   assert.equal(d("documents/ai-notes/README.md", "# 件名\n"), null);
   assert.equal(d("documents/ai-notes/sub/X-README.md", "# 件名\n"), null);
   assert.equal(d("documents/ai-notes/notes.yaml", "# 件名\n"), null);
-  // 断りを探すのは冒頭 600 字。骨格の TEMPLATE.md も名前の規則で見る
-  assert.equal(d("documents/ai-notes/20260101-01-topic.md", "x".repeat(550) + header), null);
-  assert.match(d("documents/ai-notes/20260101-01-topic.md", "x".repeat(700) + header), /断りが無い/);
-  assert.match(d("documents/ai-notes/TEMPLATE.md", header), /（いまは TEMPLATE\.md）/);
+  // 断りを探すのは unslop と同じ冒頭 800 字。骨格のひな形 TEMPLATE.md は unslop と同じく見ない
+  assert.equal(d("documents/ai-notes/20260101-01-topic.md", "x".repeat(700) + header), null);
+  assert.match(d("documents/ai-notes/20260101-01-topic.md", "x".repeat(800) + header), /断りが無い/);
+  assert.equal(d("documents/ai-notes/TEMPLATE.md", "# 件名\n"), null);
+  assert.equal(d("documents/ai-notes/sub/TEMPLATE.md", "# 件名\n"), null);
 });
 
 test("stop は再入なら unslop を走らせず、unslop の JSON に error があるときだけ差し戻す", (t) => {

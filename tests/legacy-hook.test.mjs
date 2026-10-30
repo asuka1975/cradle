@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
@@ -95,4 +95,17 @@ test("cradle.json の型が文書と違えば（protected・backend.generated �
   const generated = fixture(t, { project: "Example", backend: { generated: "backend/src/generated" } });
   assert.equal(generated.invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }), null);
   assert.equal(generated.invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }, {}, true), null);
+});
+
+test("骨格が置く ai-notes の TEMPLATE.md と README.md の編集には促さず、同じ中身でも名前の規則に合わないノートには促す", (t) => {
+  const { root, invoke } = fixture(t);
+  const scaffold = (name) => fileURLToPath(new URL(`../.apm/skills/cradle-init/assets/documents/ai-notes/${name}`, import.meta.url));
+  mkdirSync(join(root, "documents/ai-notes"), { recursive: true });
+  for (const name of ["TEMPLATE.md", "README.md"]) {
+    copyFileSync(scaffold(name), join(root, "documents/ai-notes", name));
+    assert.equal(invoke("post-edit", "Write", { file_path: `documents/ai-notes/${name}` }), null, name);
+  }
+  copyFileSync(scaffold("TEMPLATE.md"), join(root, "documents/ai-notes/memo.md"));
+  assert.equal(invoke("post-edit", "Write", { file_path: "documents/ai-notes/memo.md" }).hookSpecificOutput.additionalContext,
+    "ai-notes の規約: ファイル名は YYYYMMDD-NN-<topic>.md（いまは memo.md）。ai-notes は規約ではない — ユーザーが承認したものだけが規約になる。");
 });

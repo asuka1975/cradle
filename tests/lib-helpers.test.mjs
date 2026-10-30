@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -112,4 +112,20 @@ test("findProjectRoot と loadConfig はルートを指す変数を渡された 
   assert.equal(findProjectRoot(start, { CRADLE_PROJECT_DIR: join(root, "a/b"), CLAUDE_PROJECT_DIR: join(root, "x") }), join(root, "a/b"));
   assert.equal(loadConfig(join(root, "a"), {}).project, "A");
   assert.equal(loadConfig(join(root, "a"), { CRADLE_CONFIG: join(root, "x/cradle.json") }).project, "X");
+});
+
+test("aiNoteProblems は ai-notes の下のノートの名前と冒頭 800 字の断りを見て、README.md・TEMPLATE.md（末尾の一致）と ai-notes の外は null を返す", () => {
+  const dir = "documents/ai-notes";
+  const header = "> **これは規約ではありません。**\n";
+  assert.deepEqual(aiNoteProblems(dir, `${dir}/20260101-01-topic.md`, header), { name: "20260101-01-topic.md", badName: false, noHeader: false });
+  assert.deepEqual(aiNoteProblems(dir, `${dir}/memo.md`, "# 件名\n"), { name: "memo.md", badName: true, noHeader: true });
+  assert.deepEqual(aiNoteProblems(dir, `${dir}/sub/20260101-01-topic.md`, header), { name: "sub/20260101-01-topic.md", badName: true, noHeader: false });
+  assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-Topic.md`, header).badName, true);
+  // 拡張子の絞り込みは呼ぶ側。ここに来た .yaml は名前の規則に合わない
+  assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-topic.yaml`, header).badName, true);
+  // 読めない（null）なら断りは問わない
+  assert.equal(aiNoteProblems(dir, `${dir}/memo.md`, null).noHeader, false);
+  assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-topic.md`, "x".repeat(791) + "規約ではありません").noHeader, false);
+  assert.equal(aiNoteProblems(dir, `${dir}/20260101-01-topic.md`, "x".repeat(792) + "規約ではありません").noHeader, true);
+  for (const p of [`${dir}/README.md`, `${dir}/TEMPLATE.md`, `${dir}/sub/X-README.md`, `${dir}-old/memo.md`, "documents/memo.md", dir]) assert.equal(aiNoteProblems(dir, p, "# 件名\n"), null, p);
 });
