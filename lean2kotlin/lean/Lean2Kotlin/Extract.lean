@@ -269,6 +269,17 @@ def decapitalize (s : String) : String :=
 def auxiliaryLeafNames : List Name :=
   [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx, `ofNat]
 
+/-- interface 面・ふるまい・判断・射影の候補になる def か。
+    コンパイラ生成物・インスタンス・射影はどの面にも写らない。 -/
+def isInterfaceCandidate (env : Environment) (n : Name) : MetaM Bool := do
+  if n.isInternalDetail then return false
+  if isAuxRecursor env n || isNoConfusion env n then return false
+  if auxiliaryLeafNames.contains (n.components.getLast!) then return false
+  if (env.getProjectionFnInfo? n).isSome then return false
+  if (← Meta.isInstance n) then return false
+  if n.components.any (fun c => (toString c).startsWith "inst") then return false
+  return true
+
 /-- 節の中のメソッドを葉名順に並べる。環境の走査順は import 全体の定数の数で変わるので IR に持ち込まない。
     同じ葉名(DomainService のファイルが別の namespace に同じ葉を持つ)は宣言の完全名で決める。 -/
 def sortMethodsByName (ms : Array (Name × Json)) : Array Json :=
@@ -1308,13 +1319,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         unless modPrefix.isPrefixOf m &&
           (anyLeaf && m != modPrefix || m.components.getLast! == leaf) do continue
         unless only.isEmpty || only.contains (n.updatePrefix Name.anonymous) do continue
-        -- コンパイラ生成物・インスタンス・射影は interface 面ではない
-        if n.isInternalDetail then continue
-        if isAuxRecursor env n || isNoConfusion env n then continue
-        if auxiliaryLeafNames.contains (n.components.getLast!) then continue
-        if (env.getProjectionFnInfo? n).isSome then continue
-        if (← Meta.isInstance n) then continue
-        if n.components.any (fun c => (toString c).startsWith "inst") then continue
+        unless (← isInterfaceCandidate env n) do continue
         -- 署名の写し: 型 binder は Runtime 規約、インスタンスは合成、明示引数がメソッド引数
         let sigResult ← try
           let mut ty := ci.type
@@ -1491,12 +1496,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let .defnInfo _ := ci | continue
       let some m := modOf n | continue
       unless isBehaviorModule m do continue
-      if n.isInternalDetail then continue
-      if isAuxRecursor env n || isNoConfusion env n then continue
-      if auxiliaryLeafNames.contains (n.components.getLast!) then continue
-      if (env.getProjectionFnInfo? n).isSome then continue
-      if (← Meta.isInstance n) then continue
-      if n.components.any (fun c => (toString c).startsWith "inst") then continue
+      unless (← isInterfaceCandidate env n) do continue
       let comps := n.components
       if comps.length < 2 then continue
       let pLast := comps[comps.length - 2]!
@@ -1566,13 +1566,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         (n.updatePrefix Name.anonymous) != `query
       let isProjection := m == appNs ++ `Projection
       unless isJudgment || isProjection do continue
-      if n.isInternalDetail then continue
-      if isAuxRecursor env n || isNoConfusion env n then continue
-      if [`noConfusionType, `ctorElimType, `ctorIdx, `toCtorIdx, `ofNat].contains
-          (n.components.getLast!) then continue
-      if (env.getProjectionFnInfo? n).isSome then continue
-      if (← Meta.isInstance n) then continue
-      if n.components.any (fun c => (toString c).startsWith "inst") then continue
+      unless (← isInterfaceCandidate env n) do continue
       let sigResult ← try
         let mut ty := ci.type
         let mut params : Array FieldIR := #[]
@@ -1711,11 +1705,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let dir := m.components.dropLast.getLast!
       let readsOutcome ← do
         let .defnInfo _ := ci | pure false
-        -- 見るのは interface 面の候補だけ(コンパイラ生成物・インスタンス・射影は除く。extractServices と同じ選別)
-        if n.isInternalDetail || isAuxRecursor env n || isNoConfusion env n ||
-            auxiliaryLeafNames.contains (n.components.getLast!) ||
-            (env.getProjectionFnInfo? n).isSome || (← Meta.isInstance n) ||
-            n.components.any (fun c => (toString c).startsWith "inst") then pure false else
+        -- 見るのは interface 面の候補だけ
+        if !(← isInterfaceCandidate env n) then pure false else
         -- 署名を写せない def は interface 面から除外される側なので、ここでは観測を受けないとみなす
         try
           (← valueBinders n).anyM fun (_, ty) => do
