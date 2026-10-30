@@ -23,3 +23,23 @@ test("commitAll は HOME の .gitconfig（除外・署名・作者の設定）�
   assert.equal(gitOut(root, "ls-files").stdout, "cradle.json\ne2e/flow.ts\n");
   assert.notEqual(gitOut(outer, "rev-parse", "--verify", "-q", "HEAD").status, 0);
 });
+
+test("commitAll は git が設定に名前が無くても読む既定の場所の除外と属性（$XDG_CONFIG_HOME/git/、XDG_CONFIG_HOME が無ければ ~/.config/git/）も読まない", (t) => {
+  const home = tempDir(t, "cradle-home-");
+  writeTree(home, { ".config/git/ignore": "*.ts\n", ".config/git/attributes": "*.ts foo=bar\n" });
+  const xdg = tempDir(t, "cradle-xdg-");
+  writeTree(xdg, { "git/ignore": "*.ts\n", "git/attributes": "*.ts foo=bar\n" });
+  const got = {};
+  for (const [label, outer] of [["~/.config/git", { HOME: home, XDG_CONFIG_HOME: undefined }], ["$XDG_CONFIG_HOME/git", { HOME: home, XDG_CONFIG_HOME: xdg }]]) {
+    const root = tempDir(t, "cradle-commit-");
+    writeTree(root, { "cradle.json": "{}\n", "e2e/flow.ts": "export {};\n" });
+    const saved = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+    for (const [k, v] of Object.entries(outer)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    let attr;
+    try { commitAll(root); attr = gitOut(root, "check-attr", "foo", "e2e/flow.ts").stdout; }
+    finally { for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    got[label] = [gitOut(root, "ls-files").stdout, attr];
+  }
+  const want = ["cradle.json\ne2e/flow.ts\n", "e2e/flow.ts: foo: unspecified\n"];
+  assert.deepEqual(got, { "~/.config/git": want, "$XDG_CONFIG_HOME/git": want });
+});
