@@ -1200,6 +1200,8 @@ structure DeriveCtx where
   ruleDefs : Std.HashMap Name String
   /-- ふるまい・判断・射影の候補のうち署名で除いた def → 理由 -/
   sigFailures : Std.HashMap Name String
+  /-- ふるまいの候補のうち主対象の型を決められずに除いた def → 理由 -/
+  subjectFailures : Std.HashMap Name String
   hasFunctionField : Name → Elab.TermElabM Bool
   valueBinders : Name → Elab.TermElabM (Array (Name × Expr))
   applyWith : Name → (Name → Expr → Elab.TermElabM (Option Expr)) →
@@ -1208,8 +1210,9 @@ structure DeriveCtx where
 /-- 契約定理 1 本の演繹の結果。診断と件数は呼び出し側が積む。 -/
 inductive ContractDerivation where
   /-- 主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない。
-      sigFailure は定理が語る def のうち署名で主対象から除いたもの(view の順で最初の 1 つ)と理由 -/
-  | untouched (sigFailure : Option (Name × String))
+      sigFailure は定理が語る def のうち署名で主対象から除いたもの、subjectFailure は主対象の型を
+      決められずに除いたもの(どちらも view の順で最初の 1 つ)と理由 -/
+  | untouched (sigFailure subjectFailure : Option (Name × String))
   /-- 有効なケースが無い。whys は組合せを試した順の理由 -/
   | noCases (whys : Array String)
   | derived (contract : Json)
@@ -1229,6 +1232,7 @@ def deriveContract (cx : DeriveCtx) (thmName : Name) : Elab.TermElabM ContractDe
   let projDefs := cx.projDefs
   let ruleDefs := cx.ruleDefs
   let sigFailures := cx.sigFailures
+  let subjectFailures := cx.subjectFailures
   let hasFunctionField := cx.hasFunctionField
   let applyWith := cx.applyWith
   let ci ← getConstInfo thmName
@@ -1278,10 +1282,11 @@ def deriveContract (cx : DeriveCtx) (thmName : Name) : Elab.TermElabM ContractDe
   let behaviorMode := !touchesExec && !projectionMode && !judgmentMode && !ruleMode &&
     viewHas isBehaviorTarget
   unless touchesExec || behaviorMode || judgmentMode || projectionMode || ruleMode do
-    -- 定理が語る def が署名で主対象の候補から除かれていれば、触れない理由ではなくその署名の理由を返す
-    return .untouched (view.findSome? fun e => do
-      let fn ← (e.find? fun x => x.constName?.any sigFailures.contains) >>= Expr.constName?
-      return (fn, ← sigFailures.get? fn))
+    -- 定理が語る def が署名か主対象の型で主対象の候補から除かれていれば、触れない理由ではなくその理由を返す
+    let firstFailure (failures : Std.HashMap Name String) := view.findSome? fun e => do
+      let fn ← (e.find? fun x => x.constName?.any failures.contains) >>= Expr.constName?
+      return (fn, ← failures.get? fn)
+    return .untouched (firstFailure sigFailures) (firstFailure subjectFailures)
   -- 先頭の型 binder は Runtime 規約、インスタンスは合成(extractServices と同じ)
   let mut core := stmt
   repeat
@@ -2345,6 +2350,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         (ucNs.isPrefixOf m && (m.components.getLast! == `Command || m.components.getLast! == `Observation))
     -- 署名で除いたふるまい・判断・射影の候補 → 理由(主対象に触れない契約の診断が引く)
     let mut sigFailures : Std.HashMap Name String := {}
+    -- 主対象の型を決められずに除いたふるまいの候補 → 理由(同じ診断が引く。直すのは署名でなく def の置き場なので別に持つ)
+    let mut subjectFailures : Std.HashMap Name String := {}
     let mut behaviorDefs : Std.HashMap Name Name := {}
     let mut behaviorByType : Std.HashMap Name (Array (Name × Json)) := {}
     let mut behaviorMods : Std.HashMap Name Name := {}
@@ -2359,19 +2366,24 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       let pLast := comps[comps.length - 2]!
       -- 主対象は親 namespace の型そのもの。型でなければ短い名前が同じ型が 1 つのときだけ —
       -- UseCase ごとの型(Command・入力語彙・State)は同じ短い名前で並ぶので、2 つ以上なら決めない
-      let subject? ← do
-        if (roles.get? n.getPrefix).any behaviorSubjectRoles.contains then pure (some n.getPrefix)
+      let subject : Except String Name ← do
+        if (roles.get? n.getPrefix).any behaviorSubjectRoles.contains then pure (.ok n.getPrefix)
         else
           let cands := roles.toList.filterMap fun (t, ro) =>
             if t.components.getLast! == pLast && behaviorSubjectRoles.contains ro then some t else none
           match cands with
-          | [t] => pure (some t)
-          | [] => pure none
+          | [t] => pure (.ok t)
+          | [] => pure (.error s!"短い名前 {pLast} の分類済みの型が無い")
           | _ =>
             let sorted := (cands.map toString).toArray.qsort (· < ·)
-            logInfo m!"lean2kotlin: ふるまい {n} は主対象を決められないため除外: 短い名前 {pLast} の型が複数({", ".intercalate sorted.toList})"
-            pure none
-      let some tyN := subject? | continue
+            let msg := s!"短い名前 {pLast} の型が複数({", ".intercalate sorted.toList})"
+            logInfo m!"lean2kotlin: ふるまい {n} は主対象を決められないため除外: {msg}"
+            pure (.error msg)
+      let tyN ← match subject with
+        | .ok t => pure t
+        | .error msg =>
+          subjectFailures := subjectFailures.insert n msg
+          continue
       let sigResult : Except String (Array FieldIR × Json) ← try
         let (params, ty) ← sigParams ci.type false
         pure (.ok (params, ← typeToIR rootNs reg (← whnf ty)))
@@ -2626,17 +2638,20 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       if ci matches .thmInfo _ then some n else none
     let cx : DeriveCtx := {
       rootNs, env, ucNs, modOf, roles, idHeads, execByDir, ucPorts,
-      behaviorDefs, judgmentDefs, projDefs, ruleDefs, sigFailures, hasFunctionField, valueBinders, applyWith }
+      behaviorDefs, judgmentDefs, projDefs, ruleDefs, sigFailures, subjectFailures, hasFunctionField,
+      valueBinders, applyWith }
     let mut contractJs : Array Json := #[]
     let mut nonUseCaseContracts : Nat := 0
     for thmName in contractNames do
       try
         match ← deriveContract cx thmName with
-        | .untouched sigFailure =>
+        | .untouched sigFailure subjectFailure =>
           nonUseCaseContracts := nonUseCaseContracts + 1
-          droppedJs := droppedJs.push (dropped "contract" (toString thmName) (match sigFailure with
-            | some (fn, msg) => s!"主対象の候補 {fn} の署名を写像できない: {msg}"
-            | none => "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する"))
+          droppedJs := droppedJs.push (dropped "contract" (toString thmName) (match sigFailure, subjectFailure with
+            | some (fn, msg), _ => s!"主対象の候補 {fn} の署名を写像できない: {msg}"
+            | none, some (fn, msg) =>
+              s!"主対象の候補 {fn} は主対象の型を決められない: {msg} — def を分類済みの型そのものの namespace に置く"
+            | none, none => "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する"))
         | .noCases whys =>
           logInfo m!"lean2kotlin: 契約定理 {thmName}: 有効なケースを演繹できませんでした({whys.toList.eraseDups})"
           droppedJs := droppedJs.push (dropped "contract" (toString thmName)

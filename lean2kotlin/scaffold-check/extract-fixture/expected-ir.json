@@ -125,8 +125,16 @@
     "name": "Depot.Application.StockUseCase.reorderPoint_zero",
     "kind": "contract"},
    {"reason":
+    "主対象の候補 Depot.Domain.Channel.label は主対象の型を決められない: 短い名前 Channel の分類済みの型が無い — def を分類済みの型そのものの namespace に置く",
+    "name": "Depot.Domain.Channel.label_web",
+    "kind": "contract"},
+   {"reason":
     "主対象の候補 Depot.Domain.Order.channel の署名を写像できない: 未分類の型を参照(#[Depot.Domain.Channel])",
     "name": "Depot.Domain.Order.channel_refunded",
+    "kind": "contract"},
+   {"reason":
+    "主対象の候補 Depot.Domain.Sku.label は主対象の型を決められない: 短い名前 Sku の型が複数(Depot.Application.PlaceOrderUseCase.Sku, Depot.Sku) — def を分類済みの型そのものの namespace に置く",
+    "name": "Depot.Domain.Sku.label_code",
     "kind": "contract"},
    {"reason":
     "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",

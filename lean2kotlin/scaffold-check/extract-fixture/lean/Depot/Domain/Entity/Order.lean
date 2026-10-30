@@ -38,7 +38,19 @@ def Order.channel (o : Order) : Channel := if o.refunded then .store else .web
 @[contract] theorem Order.channel_refunded (o : Order) (h : o.refunded = true) : o.channel = .store := by
   simp [Order.channel, h]
 
+/-- 窓口の表示。名前空間の Channel は未分類で、短い名前が Channel の分類済みの型も無い。 -/
+def Channel.label (c : Channel) : String :=
+  match c with
+  | .web   => "web"
+  | .store => "store"
+
+/-- web の表示は web。主対象の label が主対象の型を決められずに除かれたあとの指名。 -/
+@[contract] theorem Channel.label_web : Channel.label .web = "web" := rfl
+
 /-- 品番の表示。名前空間 Depot.Domain.Sku は型ではなく、短い名前が Sku の型は VO と入力語彙の 2 つ。 -/
 def Sku.label (s : Sku) : String := s.code
+
+/-- 表示は品番そのもの。主対象の label が型を 1 つに決められずに除かれたあとの指名。 -/
+@[contract] theorem Sku.label_code (s : Sku) : Sku.label s = s.code := rfl
 
 end Depot.Domain
