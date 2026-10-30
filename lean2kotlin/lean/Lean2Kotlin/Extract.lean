@@ -373,19 +373,24 @@ unsafe def evalTagAttrUnsafe (n : Name) : MetaM TagAttribute :=
 def evalTagAttr (n : Name) : MetaM TagAttribute :=
   throwError "evalTagAttr: interpreter not available"
 
-/-- 環境から名前 attrName の TagAttribute を見つけ、タグ付き宣言の判定関数を返す。 -/
-def tagChecker (attrName : Name) : MetaM (Name → Bool) := do
+/-- 環境の TagAttribute 型の定数名(env.constants の並び)。評価は tagChecker がこの並びで
+    一致するまでに限る — 先まで評価すると、届かないはずの定数の評価失敗で抽出が止まる。 -/
+def tagAttrNames (env : Environment) : List Name :=
+  env.constants.toList.filterMap fun (n, ci) =>
+    if !n.hasMacroScopes && ci.type.isConstOf ``Lean.TagAttribute then some n else none
+
+/-- tagAttrs(tagAttrNames)から名前 attrName の TagAttribute を見つけ、タグ付き宣言の判定関数を返す。 -/
+def tagChecker (tagAttrs : List Name) (attrName : Name) : MetaM (Name → Bool) := do
   let env ← getEnv
-  for (n, ci) in env.constants.toList do
-    if !n.hasMacroScopes && ci.type.isConstOf ``Lean.TagAttribute then
-      let ta ← evalTagAttr n
-      if ta.attr.name == attrName then
-        return fun d => ta.hasTag env d
+  for n in tagAttrs do
+    let ta ← evalTagAttr n
+    if ta.attr.name == attrName then
+      return fun d => ta.hasTag env d
   throwError "lean2kotlin: アノテーション @[{attrName}] の TagAttribute が見つかりません(対象プロジェクトの Annotations を import しているドライバで実行してください)"
 
 /-- 任意アノテーションの判定(未導入のプロジェクトでは常に偽 — 抽出を止めない)。 -/
-def tagCheckerOpt (attrName : Name) : MetaM (Name → Bool) := do
-  try tagChecker attrName catch _ => return fun _ => false
+def tagCheckerOpt (tagAttrs : List Name) (attrName : Name) : MetaM (Name → Bool) := do
+  try tagChecker tagAttrs attrName catch _ => return fun _ => false
 
 /-! ### 契約定理(@[contract])からのテストケース演繹
 
@@ -1166,10 +1171,11 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     let isPropSort (n : Name) : Elab.TermElabM Bool := do
       let ci ← getConstInfo n
       forallTelescopeReducing ci.type fun _ b => pure b.isProp
-    let isRootTagged ← tagChecker `aggregateRoot
-    let isVoTagged ← tagChecker `valueObject
+    let tagAttrs := tagAttrNames env
+    let isRootTagged ← tagChecker tagAttrs `aggregateRoot
+    let isVoTagged ← tagChecker tagAttrs `valueObject
     -- 主体ポート — 任意アノテーション: 未導入のプロジェクトでは常に偽
-    let isActorTagged ← tagCheckerOpt `actorContext
+    let isActorTagged ← tagCheckerOpt tagAttrs `actorContext
 
     -- 1. 生成区分(ディレクトリ/namespace 規約+アノテーション)
     let errTyName := rootNs ++ `DomainError
@@ -1282,7 +1288,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       unless roles.contains idM.head do
         roles := roles.insert idM.head .valueObject
     -- @[repositoryState] と集約ルートの対応の検査(命名規約の破れを早期検出)
-    let isRepoStateTagged ← tagChecker `repositoryState
+    let isRepoStateTagged ← tagChecker tagAttrs `repositoryState
     for (n, role) in roles.toList do
       if role == .repositoryState && isRepoStateTagged n then
         let nLast := toString n.components.getLast!
@@ -1459,7 +1465,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     -- UseCase の判断(validate / apply が呼ぶ純粋な補助 def)。@[contract] が指名したものだけを
     -- `<X>Rules` interface に出す(指名の無い補助は Lean だけの語彙)。固定名と障害契約の def は候補にしない。
     -- 署名を写せない補助は候補から外れるだけ(指名していれば契約の診断で止まる)
-    let isFaultTagged ← tagCheckerOpt `faultContract
+    let isFaultTagged ← tagCheckerOpt tagAttrs `faultContract
     let fixedUseCaseNames : List Name := [`validate, `act, `execute, `request, `mkRequest, `apply]
     let (rulesAll, _) ← extractServices ucNs `UseCase "Rules"
     let mut ruleDefs : Std.HashMap Name String := {}   -- 補助 def → `<X>Rules`
@@ -1774,7 +1780,7 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
       droppedJs := droppedJs.push (dropped "signature" ((s.splitOn ":").headD s) s)
 
     -- 6. @[contract] 契約定理 → テストケース演繹
-    let isContract ← tagChecker `contract
+    let isContract ← tagChecker tagAttrs `contract
     let idHeads : List Name := (idTypes.toList.map (·.2.head)).eraseDups
     let taggedContracts := (env.constants.toList.filterMap fun (n, ci) =>
         if rootNs.isPrefixOf n && !n.hasMacroScopes && isContract n then some (n, ci) else none)
@@ -2369,9 +2375,8 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
     -- 中断されたときに観測されるべき状態。サンプルは同じディレクトリの execute が
     -- **成功する**入力に限る — 中断すべきフェーズが実際に走る入力だけが
     -- 障害注入の対象になる(失敗枝は通常の契約定理群が固定する)
-    let isFaultContract ← tagCheckerOpt `faultContract
     let taggedFaults := (env.constants.toList.filterMap fun (n, ci) =>
-        if rootNs.isPrefixOf n && !n.hasMacroScopes && isFaultContract n then some (n, ci) else none)
+        if rootNs.isPrefixOf n && !n.hasMacroScopes && isFaultTagged n then some (n, ci) else none)
       |>.toArray.qsort (fun a b => toString a.1 < toString b.1)
     for (n, ci) in taggedFaults do
       unless ci matches .defnInfo _ do
