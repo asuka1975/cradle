@@ -126,6 +126,10 @@
     "kind": "contract"},
    {"reason":
     "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
+    "name": "Depot.Domain.Order.channel_refunded",
+    "kind": "contract"},
+   {"reason":
+    "主対象(UseCase の execute / validate・UseCase の判断・ふるまい・判断・射影)の適用に触れない — 契約面越しに観測できる定理だけを指名する",
     "name": "Depot.Laws.count_le_succ",
     "kind": "contract"},
    {"reason":
@@ -185,7 +189,25 @@
      "args": {"stock": 5, "q": {"count": 6}}},
     {"ok": {"error": {"outOfStock": {"a._@._internal._hyg.0": 7}}},
      "kind": "pure",
-     "args": {"stock": 4, "q": {"count": 7}}}]}],
+     "args": {"stock": 4, "q": {"count": 7}}}]},
+  {"useCase": "Depot.Quantity",
+   "theorem": "shortage_eq",
+   "target": "behaviors",
+   "method": "shortage",
+   "doc": "足りない数は数量から在庫を引いた数。オラクルが名前の無い引数の構成子をシリアライザ経由で運ぶ。 ",
+   "cases":
+   [{"ok": {"outOfStock": {"a._@._internal._hyg.0": 0}},
+     "kind": "pure",
+     "args": {"stock": 4, "q": {"count": 4}}},
+    {"ok": {"outOfStock": {"a._@._internal._hyg.0": 0}},
+     "kind": "pure",
+     "args": {"stock": 5, "q": {"count": 4}}},
+    {"ok": {"outOfStock": {"a._@._internal._hyg.0": 1}},
+     "kind": "pure",
+     "args": {"stock": 4, "q": {"count": 5}}},
+    {"ok": {"outOfStock": {"a._@._internal._hyg.0": 0}},
+     "kind": "pure",
+     "args": {"stock": 5, "q": {"count": 5}}}]}],
  "behaviors":
  [{"subject": "Depot.Domain.Order",
    "module": "Depot.Domain.Entity.Order",
@@ -218,11 +240,22 @@
      [{"type": {"name": "Depot.Quantity", "k": "ref"}, "name": "q"},
       {"type": {"k": "nat"}, "name": "stock"}],
      "name": "reserve",
-     "doc": "在庫 stock から引き当てる。足りなければ要った数を運ぶ失敗。 "}]},
+     "doc": "在庫 stock から引き当てる。足りなければ要った数を運ぶ失敗。 "},
+    {"ret": {"name": "Depot.DomainError", "k": "ref"},
+     "params":
+     [{"type": {"name": "Depot.Quantity", "k": "ref"}, "name": "q"},
+      {"type": {"k": "nat"}, "name": "stock"}],
+     "name": "shortage",
+     "doc":
+     "足りない数の失敗。irreducible なので期待値は簡約で ctor 正規形にならず、合成したシリアライザのコンパイル実行で直列化する。 "}]},
   {"subject": "Depot.Sku",
-   "module": "Depot.Application.UseCase.PlaceOrderUseCase.Command",
+   "module": "Depot.Domain.Entity.Order",
    "methods":
    [{"ret": {"k": "string"},
+     "params": [{"type": {"name": "Depot.Sku", "k": "ref"}, "name": "s"}],
+     "name": "label",
+     "doc": "品番の表示。名前空間 Depot.Domain.Sku は型ではなく、短い名前が Sku の型は VO と入力語彙の 2 つ。 "},
+    {"ret": {"k": "string"},
      "params":
      [{"type": {"name": "Depot.Application.PlaceOrderUseCase.Sku", "k": "ref"},
        "name": "s"}],

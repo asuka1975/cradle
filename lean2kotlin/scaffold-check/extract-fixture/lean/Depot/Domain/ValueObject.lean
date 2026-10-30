@@ -30,6 +30,15 @@ def Quantity.reserve (q : Quantity) (stock : Nat) : Except DomainError Quantity 
     q.reserve stock = .error (.outOfStock q.count) := by
   simp [Quantity.reserve, Nat.not_le.mpr h]
 
+/-- 足りない数の失敗。irreducible なので期待値は簡約で ctor 正規形にならず、合成したシリアライザのコンパイル実行で直列化する。 -/
+@[irreducible] def Quantity.shortage (q : Quantity) (stock : Nat) : DomainError :=
+  .outOfStock (q.count - stock)
+
+/-- 足りない数は数量から在庫を引いた数。オラクルが名前の無い引数の構成子をシリアライザ経由で運ぶ。 -/
+@[contract] theorem Quantity.shortage_eq (q : Quantity) (stock : Nat) :
+    q.shortage stock = .outOfStock (q.count - stock) := by
+  unfold Quantity.shortage; rfl
+
 /-- 数量のサンプル（4〜10）は仮定 100 < count を満たさない — ケースを演繹できない指名。 -/
 @[contract] theorem Quantity.reserve_huge (q : Quantity) (stock : Nat) (h : stock < q.count)
     (_ : 100 < q.count) : q.reserve stock = .error (.outOfStock q.count) :=
