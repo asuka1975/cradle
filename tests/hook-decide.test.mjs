@@ -209,6 +209,14 @@ test("stop は再入なら unslop を走らせず、unslop の JSON に error �
     { decision: "block", reason: "作業ツリーの差分に unslop 違反（error）が 1 件あります。止まる前に直すこと（規約は unslop と comments）:\n- e2e/a.ts:3 [empty-catch] 空の catch" });
 });
 
+test("decide は設定の型の誤りで投げる（黙って通すのは hook.mjs）", (t) => {
+  const { cfg } = setup(t);
+  const edit = (file_path) => ({ tool_name: "Edit", tool_input: { file_path } });
+  const bad = { ...cfg, protected: "documents/developer/**" };
+  assert.match(reasonOf(decide("pre-guard", edit("backend/src/generated/A.kt"), { cfg: bad, isClaude: false })), /は生成物です/);
+  assert.throws(() => decide("pre-guard", edit("documents/developer/x.md"), { cfg: bad, isClaude: false }), TypeError);
+});
+
 test("知らない mode は何も見ずに通す", (t) => {
   const { cfg } = setup(t);
   const calls = [];

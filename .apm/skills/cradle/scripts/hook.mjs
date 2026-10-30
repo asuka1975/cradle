@@ -19,6 +19,9 @@ const isClaude = Boolean(process.env.CLAUDE_PROJECT_DIR);
 let cfg;
 try { cfg = loadConfig(findProjectRoot(payload.cwd ?? process.cwd())); } catch { process.exit(0); }
 
-const r = decide(mode, payload, { cfg, isClaude });
+// 判定の途中の例外（文書と型の違う cradle.json など）も、設定が読めないときと同じく黙って通す。
+// stderr に書くか 0 以外で終わると、Claude Code は hook の失敗を毎回出し、Pi / OpenCode では hook-client が道具の呼び出しごとに例外を投げる
+let r = null;
+try { r = decide(mode, payload, { cfg, isClaude }); } catch {}
 if (r) process.stdout.write(JSON.stringify(r));
 process.exit(0);

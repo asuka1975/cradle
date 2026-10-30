@@ -7,8 +7,8 @@ import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
 
-function fixture(t) {
-  const root = tempProject(t, "cradle-hook-");
+function fixture(t, config) {
+  const root = tempProject(t, "cradle-hook-", config);
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
   function invoke(mode, tool_name, tool_input = {}, extra = {}, claude = false) {
     const result = runNode(hook, [mode], {
@@ -86,4 +86,13 @@ test("編集後の促しとStop再入時の許可を維持する", (t) => {
   const api = invoke("post-edit", "Write", { file_path: "documents/codebase/openapi.yaml" });
   assert.match(api.hookSpecificOutput.additionalContext, /generateApi/);
   assert.equal(invoke("stop", "", {}, { stop_hook_active: true }), null);
+});
+
+test("cradle.json の型が文書と違えば（protected・backend.generated が文字列）、投げる検査から先は黙って通し、それより前の拒否は変えない", (t) => {
+  const { invoke } = fixture(t, { project: "Example", protected: "documents/developer/**" });
+  denied(invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }));
+  assert.equal(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }), null);
+  const generated = fixture(t, { project: "Example", backend: { generated: "backend/src/generated" } });
+  assert.equal(generated.invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }), null);
+  assert.equal(generated.invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }, {}, true), null);
 });
