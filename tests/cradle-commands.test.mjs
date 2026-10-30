@@ -15,6 +15,11 @@ test("cradle は引数が無ければ使い方を 0 で、知らないコマン�
   assert.deepEqual([none.status, none.stdout, none.stderr], [0, usage, ""]);
   const unknown = runNode(cradle, ["nope"], { cwd: root, env: cleanEnv() });
   assert.deepEqual([unknown.status, unknown.stdout, unknown.stderr], [1, usage, ""]);
+  // Object.prototype の鍵もコマンドではない（入口の表に引き当てて子プロセスを起こさない）
+  for (const cmd of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    const r = runNode(cradle, [cmd], { cwd: root, env: cleanEnv() });
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, usage, ""], cmd);
+  }
 });
 
 // 生成された抽象契約テストの形: package・abstract class・protected / 無印の abstract fun（戻り値の型は = か { か行末まで）・具象のテスト
