@@ -13,6 +13,9 @@ def quote (o : Order) : Nat := o.quantity.count
 /-- その場の返金の見積り。名前の成分が inst で始まる。 -/
 def instantQuote (o : Order) : Nat := o.quantity.count
 
+/-- インスタンスの補助 def の形（成分 instToStringOrder は inst の次が大文字）。RefundService に写らない。 -/
+def instToStringOrder.label (o : Order) : Nat := o.quantity.count
+
 end Depot.Domain.DomainService.Refund
 
 namespace Depot.Domain.DomainService.Refund.Express
