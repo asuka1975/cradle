@@ -52,7 +52,7 @@ const skeleton = (pkg) => [
   "",
 ].join("\n") + "\n";
 
-test("contract-skeleton は抽象メソッドごとに TODO の override を並べた具象クラスを出し、--package は package 行だけを差し替える", (t) => {
+test("contract-skeleton は抽象メソッドごとに TODO の override を並べた具象クラスを出し、--package は package 行だけを差し替える。値の無い --package は生成ファイルの package のまま", (t) => {
   const root = tempProject(t, "cradle-skeleton-");
   writeTree(root, { "NoteRepositoryContractTest.kt": contractTest });
   const run = (...args) => runNode(cradle, ["contract-skeleton", ...args], { cwd: root, env: cleanEnv() });
@@ -60,11 +60,15 @@ test("contract-skeleton は抽象メソッドごとに TODO の override を並�
   assert.equal(plain.status, 0, plain.stderr);
   assert.equal(plain.stdout, skeleton("com.example.notes.domain.repository"));
   assert.equal(run("NoteRepositoryContractTest.kt", "--package", "com.example.notes.wiring").stdout, skeleton("com.example.notes.wiring"));
-  // 値の無い --package は次の引数（無い）を package にする
-  assert.equal(run("NoteRepositoryContractTest.kt", "--package").stdout, skeleton("undefined"));
+  assert.equal(run("NoteRepositoryContractTest.kt", "--package=com.example.notes.wiring").stdout, skeleton("com.example.notes.wiring"));
+  assert.equal(run("--package", "com.example.notes.wiring", "NoteRepositoryContractTest.kt").stdout, skeleton("com.example.notes.wiring"));
+  for (const valueless of [["--package"], ["--package", "--force"]]) {
+    const r = run("NoteRepositoryContractTest.kt", ...valueless);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [0, skeleton("com.example.notes.domain.repository"), ""], valueless.join(" "));
+  }
 });
 
-test("contract-skeleton は引数が無ければ使い方、abstract class が無ければその旨を stderr に出して 1 で終わる。無いファイルは読めずに落ちる", (t) => {
+test("contract-skeleton は引数が無ければ使い方、無いファイルと abstract class の無いファイルはその旨を stderr に 1 行出して 1 で終わる", (t) => {
   const root = tempProject(t, "cradle-skeleton-");
   const run = (...args) => runNode(cradle, ["contract-skeleton", ...args], { cwd: root, env: cleanEnv() });
   const usage = run();
@@ -72,9 +76,10 @@ test("contract-skeleton は引数が無ければ使い方、abstract class が�
   const notAbstract = run("cradle.json");
   assert.deepEqual([notAbstract.status, notAbstract.stdout, notAbstract.stderr], [1, "", "abstract class が見つかりません\n"]);
   const missing = run("Missing.kt");
-  assert.equal(missing.status, 1);
-  assert.equal(missing.stdout, "");
-  assert.match(missing.stderr, /ENOENT: no such file or directory, open 'Missing\.kt'/);
+  assert.deepEqual([missing.status, missing.stdout, missing.stderr], [1, "", "cradle contract-skeleton: Missing.kt が無い\n"]);
+  // ファイルより前の --package も値を取る。ファイルが無ければ使い方
+  const flagOnly = run("--package", "com.example.notes.wiring");
+  assert.deepEqual([flagOnly.status, flagOnly.stdout, flagOnly.stderr], [1, "", usage.stderr]);
 });
 
 // 一時プロジェクト（git 管理）: イベント#1 と、その ID を前方に含む イベント#10 を documents・lean・README に置く
