@@ -64,16 +64,19 @@ function unknownPortCalls(kind, top) {
 const CHAIN_KEYS = ["result", "state", "views", "env", "interactions", "domainError", "faultContract"];
 const pickFields = (src, keys) => Object.fromEntries(keys.filter(k => src?.[k] !== undefined).map(k => [k, src[k]]));
 
+/** changed の行。i は最初に食い違った手（0 始まり。手でなければ undefined）、input はその手の入力（traceInputOf の結果か null）—
+    入力の出どころは呼び手ごとに違う（chain は sidecar の inputs、init / flow は保存した golden の trace）。 */
+function changedEntry(name, kind, diffs, i, input) {
+  return { name, kind, status: "changed", firstDivergence: diffs[0].path, step: i === undefined ? undefined : i + 1,
+    command: input?.name, inputKind: input?.name !== undefined ? input.kind : undefined, diffs: diffs.slice(0, 12) };
+}
+
 /** external の flow を init + step の連鎖で打ち直し、再生した flow の応答（trace の各要素の射影と最後の env）と突き合わせる。
     init は sidecar の flow のリクエストの欄（scenario・環境・actor・viewer・today）から組む。 */
 async function chainReplay(name, flowReq, flowRes) {
   const inputs = flowReq.inputs ?? [];
   const trace = flowRes.ok.trace ?? [];
-  const changed = (diffs, i) => {
-    const input = i === undefined ? null : traceInputOf(inputs[i]);
-    return { name, kind: "chain", status: "changed", firstDivergence: diffs[0].path, step: i === undefined ? undefined : i + 1,
-      command: input?.name, inputKind: input?.name !== undefined ? input.kind : undefined, diffs: diffs.slice(0, 12) };
-  };
+  const changed = (diffs, i) => changedEntry(name, "chain", diffs, i, i === undefined ? null : traceInputOf(inputs[i]));
   const common = pickFields(flowReq, ["actor", "viewer", "today"]);
   const init = await callLean(cfg, { cmd: "external", version: SIDECAR_VERSION, action: "init", ...pickFields(flowReq, ["scenario", "environment", "env"]), ...common }, { build });
   if (!isOk(init)) return { name, kind: "chain", status: "error", reason: `連鎖の init の応答のトップが ok ではない: ${JSON.stringify(init).slice(0, 300)}` };
@@ -139,12 +142,10 @@ for (const name of wanted) {
     if (!diffs.length) { report.push({ name, kind, status: "ok" }); continue; }
     if (opts.update) { writeFileSync(file, JSON.stringify(actual, null, 2) + "\n"); report.push({ name, kind, status: "updated", diffs: diffs.length }); continue; }
     failed++;
-    const first = diffs[0];
-    const step = first.path.match(/^\/ok\/trace\/(\d+)/);
+    const step = diffs[0].path.match(/^\/ok\/trace\/(\d+)/);
+    const i = step ? Number(step[1]) : undefined;
     // 最初に食い違った手の入力: command の名前か observation の名前（report の鍵は command のまま。inputKind でどちらかを示す）
-    const input = step ? traceInputOf(expected.ok?.trace?.[Number(step[1])]) : null;
-    report.push({ name, kind, status: "changed", firstDivergence: first.path, step: step ? Number(step[1]) + 1 : undefined,
-      command: input?.name, inputKind: input?.name !== undefined ? input.kind : undefined, diffs: diffs.slice(0, 12) });
+    report.push(changedEntry(name, kind, diffs, i, step ? traceInputOf(expected.ok?.trace?.[i]) : null));
   }
   // 連鎖は再生した flow（保存した golden ではない）と比べる — init / flow の応答が ok で揃ったときだけ
   if (external && replayed.init && replayed.flow) {
