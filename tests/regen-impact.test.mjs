@@ -160,6 +160,15 @@ test("生成ディレクトリに未コミットの差分があれば再生成�
   assert.equal(failed.stderr, "cradle: 再生成に失敗しました（echo boom; exit 3）:\nboom\n\n");
 });
 
+test("値の無い --manifest（空の値も）は再生成する前に golden-check と同じ 1 行で止まり、生成ディレクトリに何も書かない", (t) => {
+  const { run, porcelain } = fixture(t);
+  for (const args of [["--manifest"], ["--manifest", "--json"], ["--manifest="], ["--manifest", ""], ["--no-regen", "--manifest"]]) {
+    const r = run(...args);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "cradle: --manifest には manifest のファイル（JSON）のパスが要ります\n"], args.join(" "));
+    assert.equal(porcelain(), "", args.join(" "));
+  }
+});
+
 test("--dry-run は生成ディレクトリがクリーンなら再生成して同じものを出し、生成ディレクトリだけを HEAD に戻す", (t) => {
   const { root, run, porcelain } = fixture(t);
   // 生成ディレクトリの外の未追跡（書きかけの手書き）は後始末の対象ではない

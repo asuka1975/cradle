@@ -9,10 +9,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines } from "./lib.mjs";
 import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
+// 値の無い --manifest は再生成する前に止める（golden-check に `--manifest true` を渡して、再生成の後に golden 回帰だけを落とさない）
+if (blankArg(opts.manifest)) fail("--manifest には manifest のファイル（JSON）のパスが要ります");
 const cfg = loadConfigOrFail();
 const gens = cfg.backend.generated;
 

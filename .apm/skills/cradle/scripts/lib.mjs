@@ -266,6 +266,9 @@ export function parseArgs(argv, spec = {}) {
   return opts;
 }
 
+/** 値の要る鍵の値が無いか: 値の無い `--key`（parseArgs の true）か、空か空白だけの値（`--key=`・空の変数を渡した `--key ""`）。 */
+export function blankArg(v) { return v === true || (typeof v === "string" && !v.trim()); }
+
 /** `@file` なら読み込み、`-` なら stdin、それ以外は JSON 文字列として解釈。 */
 export function jsonArg(v) {
   if (v === undefined || v === true) return undefined;

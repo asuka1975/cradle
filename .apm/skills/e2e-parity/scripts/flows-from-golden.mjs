@@ -13,7 +13,7 @@
 // 台本 1 本が対応する流れは 1 本。置き場の既定は cradle.json の e2e.scenarios。対応の無い流れがあれば 1 で終わる。
 import { existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { loadConfigOrFail, parseArgs, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenTrace, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, blankArg, fail, e2eCoverage, readSidecar, isExternalGolden, goldenEnvironment, readGoldenTrace, traceInputOf, goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { json: "bool", check: "bool" });
 const cfg = loadConfigOrFail();
@@ -65,7 +65,8 @@ for (const f of goldenFlowFiles(goldenDir)) {
 }
 
 const out = { generatedFrom: cfg.lean.golden, flows };
-if (opts.out === true) fail("--out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）");
+// 空の --out=（空の変数を渡した --out "" も）を値の無い --out と同じに止める — 黙って一覧を出し、書いたつもりの台本を書かずに 0 で終わらない
+if (blankArg(opts.out)) fail("--out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）");
 // 相対パスはプロジェクトルートから、絶対パスはそのまま（--check の置き場と同じ読み方）
 const outFile = opts.out ? resolve(cfg.root, opts.out) : null;
 if (outFile) { mkdirSync(dirname(outFile), { recursive: true }); writeFileSync(outFile, JSON.stringify(out, null, 2) + "\n"); console.log(`wrote ${opts.out} (${flows.length} flows)`); }

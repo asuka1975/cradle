@@ -1,8 +1,8 @@
-// golden-check の --name は繰り返せる（`[--name N]...`）: 指定した順に、同じ名前は 1 度だけ検査する。値の無い --name は使い方の誤り。
+// golden-check の --name は繰り返せる（`[--name N]...`）: 指定した順に、同じ名前は 1 度だけ検査する。値の無い --name・--manifest は使い方の誤り。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode, writeTree } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode, writeTree } from "./helpers.mjs";
 import { parseArgs } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 const goldenCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/golden-check.mjs", import.meta.url));
@@ -42,4 +42,18 @@ test("値の無い --name は golden の名前が要ると言って止まる", (
     assert.equal(r.stdout, "", args.join(" "));
     assert.equal(r.stderr, "cradle: --name には golden の名前が要ります（--name N を繰り返せば複数）\n", args.join(" "));
   }
+});
+
+test("値の無い --manifest（空の値も）は設定を読む前に manifest のファイルが要ると言って止まる", (t) => {
+  const run = fixture(t);
+  const usage = "cradle: --manifest には manifest のファイル（JSON）のパスが要ります\n";
+  for (const args of [["--manifest"], ["--manifest", "--update"], ["--manifest="], ["--manifest", ""], ["--manifest", " "]]) {
+    const r = run(...args);
+    assert.equal(r.status, 1, args.join(" "));
+    assert.equal(r.stdout, "", args.join(" "));
+    assert.equal(r.stderr, usage, args.join(" "));
+  }
+  // cradle.json の無い置き場でも cradle.json の誤りでなく同じ 1 行
+  const outside = runNode(goldenCheck, ["--manifest"], { cwd: tempDir(t, "cradle-golden-manifest-"), env: cleanEnv() });
+  assert.deepEqual([outside.status, outside.stdout, outside.stderr], [1, "", usage]);
 });
