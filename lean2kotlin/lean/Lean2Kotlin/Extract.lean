@@ -1874,6 +1874,80 @@ def deriveFault (cx : DeriveCtx) (fName : Name) : Elab.TermElabM (Option Json) :
     ("portCalls", Json.num portCalls),
     ("cases", Json.arr caseJs)])
 
+/-- 生成区分を持つ型 1 つの IR の項目(形状・制約・在住モジュール・Id・ワイヤ形式)と、形状が参照する型名。 -/
+def typeEntry (rootNs : Name) (env : Environment) (reg : MonoReg) (modOf : Name → Option Name)
+    (idTypes : Std.HashMap Name MonoType) (idHeads : List Name) (n : Name) (role : Role)
+    (targs : Array Expr) : Elab.TermElabM (Array Name × Json) := do
+  let shape ← shapeOf rootNs reg n targs
+  -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
+  let (constraints, unreadable) ← structConstraints rootNs n targs
+  let observed := role == .repositoryState
+  if observed then
+    for (f, pp) in unreadable do
+      logInfo m!"lean2kotlin: {n}.{f}: {pp} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、Repository 契約テストの個体の列はこの制約を満たすとは限りません"
+  let collectFromShape (j : Json) : Array Name :=
+    match j.getObjVal? "fields" with
+    | .ok (.arr fs) => fs.foldl (fun acc f =>
+        match f.getObjVal? "type" with
+        | .ok t => collectRefs t acc
+        | _ => acc) #[]
+    | _ =>
+      match j.getObjVal? "ctors" with
+      | .ok (.arr cs) => cs.foldl (fun acc c =>
+          match c.getObjVal? "fields" with
+          | .ok (.arr fs) => fs.foldl (fun acc f =>
+              match f.getObjVal? "type" with
+              | .ok t => collectRefs t acc
+              | _ => acc) acc
+          | _ => acc) #[]
+      | _ => #[]
+  let refs := collectFromShape shape
+  let kname := defaultKotlinName n
+  unless isKotlinIdent kname do
+    throwError "lean2kotlin: {n} の Kotlin 名 {kname} が識別子として不正です"
+  let mut entry := [("lean", Json.str (toString n)), ("kotlin", Json.str kname),
+                    ("role", Json.str role.str), ("shape", shape)]
+  unless constraints.isEmpty do
+    entry := entry ++ [("constraints", Json.arr constraints)]
+  -- 観測モデル以外の型の制約: 生成器は KDoc に構築する側の義務として写し、Arb は
+  -- Lean が制約を decide して通したサンプルから引く(Kotlin の型は制約を検査しない)
+  unless observed || unreadable.isEmpty do
+    entry := entry ++ [("invariants", Json.arr (unreadable.map fun (f, pp) =>
+      Json.mkObj [("name", Json.str f), ("lean", Json.str pp)]))]
+    let samples ← typeSamples idHeads n targs
+    if samples.isEmpty then
+      logInfo m!"lean2kotlin: note: {n} の制約を満たすサンプルを組めません — この型の Arb は作れません"
+    entry := entry ++ [("samples", Json.arr samples)]
+  -- 生成先パッケージの導出源: 型の在住モジュール(Lean のディレクトリ構成の写し)
+  if let some m := modOf n then
+    entry := entry ++ [("module", Json.str (toString m))]
+  -- 宣言 docstring(生成 KDoc の素材 — 泉ポートの単調性の註記等)
+  if let some doc ← findDocString? env n then
+    entry := entry ++ [("doc", Json.str doc)]
+  if let some idM := idTypes.get? n then
+    let idJ ← typeToIR rootNs reg idM.expr
+    entry := entry ++ [("id", idJ)]
+  if idHeads.contains n then
+    entry := entry ++ [("isId", Json.bool true)]
+    -- ワイヤ形式の観測: Id 型の直列化が canonical UUID 文字列なら
+    -- Kotlin 表現は java.util.UUID(値ラッパの中身)に写す
+    let wire? ← do
+      if isStructure env n && (getStructureFields env n).size == 1 then
+        try
+          match env.find? n with
+          | some (.inductInfo ii) => do
+            let ci ← getConstInfo ii.ctors.head!
+            let lvls := ci.levelParams.map fun _ => Level.zero
+            let sample := mkAppN (mkConst ii.ctors.head! lvls) (targs ++ #[mkNatLit 1])
+            match ← valueToJson sample with
+            | .str s => pure (if isUuidString s then some "uuid" else none)
+            | _ => pure (none : Option String)
+          | _ => pure none
+        catch _ => pure none
+      else pure none
+    if let some w := wire? then entry := entry ++ [("wire", Json.str w)]
+  return (refs, Json.mkObj entry)
+
 elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
   let rootNs := nsStx.getString.toName
   let outPath := outStx.getString
@@ -2588,76 +2662,10 @@ elab "#kotlin_ir " nsStx:str outStx:str binds:str* : command => do
         match monoMap.get? n with
         | some a => pure a
         | none => monoArgsByConv rootNs n
-      let shape ← shapeOf rootNs reg n targs
-      -- 制約(Prop フィールド): 生成器が fixture を制約どおりに引くための宣言
-      let (constraints, unreadable) ← structConstraints rootNs n targs
-      let observed := role == .repositoryState
-      if observed then
-        for (f, pp) in unreadable do
-          logInfo m!"lean2kotlin: {n}.{f}: {pp} は読める制約の形(`(coll.map (·.f)).Nodup` / `(coll.filterMap (·.f)).Nodup` / `∀ x ∈ coll, x.f = c` / `(coll.filter p).length ≤ n`)ではないため、Repository 契約テストの個体の列はこの制約を満たすとは限りません"
-      let collectFromShape (j : Json) : Array Name :=
-        match j.getObjVal? "fields" with
-        | .ok (.arr fs) => fs.foldl (fun acc f =>
-            match f.getObjVal? "type" with
-            | .ok t => collectRefs t acc
-            | _ => acc) #[]
-        | _ =>
-          match j.getObjVal? "ctors" with
-          | .ok (.arr cs) => cs.foldl (fun acc c =>
-              match c.getObjVal? "fields" with
-              | .ok (.arr fs) => fs.foldl (fun acc f =>
-                  match f.getObjVal? "type" with
-                  | .ok t => collectRefs t acc
-                  | _ => acc) acc
-              | _ => acc) #[]
-          | _ => #[]
-      for r in collectFromShape shape do
+      let (refs, entry) ← typeEntry rootNs env reg modOf idTypes idHeads n role targs
+      for r in refs do
         allRefs := allRefs.push (n, r)
-      let kname := defaultKotlinName n
-      unless isKotlinIdent kname do
-        throwError "lean2kotlin: {n} の Kotlin 名 {kname} が識別子として不正です"
-      let mut entry := [("lean", Json.str (toString n)), ("kotlin", Json.str kname),
-                        ("role", Json.str role.str), ("shape", shape)]
-      unless constraints.isEmpty do
-        entry := entry ++ [("constraints", Json.arr constraints)]
-      -- 観測モデル以外の型の制約: 生成器は KDoc に構築する側の義務として写し、Arb は
-      -- Lean が制約を decide して通したサンプルから引く(Kotlin の型は制約を検査しない)
-      unless observed || unreadable.isEmpty do
-        entry := entry ++ [("invariants", Json.arr (unreadable.map fun (f, pp) =>
-          Json.mkObj [("name", Json.str f), ("lean", Json.str pp)]))]
-        let samples ← typeSamples idHeads n targs
-        if samples.isEmpty then
-          logInfo m!"lean2kotlin: note: {n} の制約を満たすサンプルを組めません — この型の Arb は作れません"
-        entry := entry ++ [("samples", Json.arr samples)]
-      -- 生成先パッケージの導出源: 型の在住モジュール(Lean のディレクトリ構成の写し)
-      if let some m := modOf n then
-        entry := entry ++ [("module", Json.str (toString m))]
-      -- 宣言 docstring(生成 KDoc の素材 — 泉ポートの単調性の註記等)
-      if let some doc ← findDocString? env n then
-        entry := entry ++ [("doc", Json.str doc)]
-      if let some idM := idTypes.get? n then
-        let idJ ← typeToIR rootNs reg idM.expr
-        entry := entry ++ [("id", idJ)]
-      if idHeads.contains n then
-        entry := entry ++ [("isId", Json.bool true)]
-        -- ワイヤ形式の観測: Id 型の直列化が canonical UUID 文字列なら
-        -- Kotlin 表現は java.util.UUID(値ラッパの中身)に写す
-        let wire? ← do
-          if isStructure env n && (getStructureFields env n).size == 1 then
-            try
-              match env.find? n with
-              | some (.inductInfo ii) => do
-                let ci ← getConstInfo ii.ctors.head!
-                let lvls := ci.levelParams.map fun _ => Level.zero
-                let sample := mkAppN (mkConst ii.ctors.head! lvls) (targs ++ #[mkNatLit 1])
-                match ← valueToJson sample with
-                | .str s => pure (if isUuidString s then some "uuid" else none)
-                | _ => pure (none : Option String)
-              | _ => pure none
-            catch _ => pure none
-          else pure none
-        if let some w := wire? then entry := entry ++ [("wire", Json.str w)]
-      typeEntries := typeEntries.push (Json.mkObj entry)
+      typeEntries := typeEntries.push entry
 
     for (src, r) in allRefs do
       unless roles.contains r do
