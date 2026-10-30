@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
+import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const specQuery = fileURLToPath(new URL("../.apm/skills/cradle/scripts/spec-query.mjs", import.meta.url));
 
@@ -66,4 +66,24 @@ test("meta の external は CLI への問い合わせで決まる — 未知の 
   assert.deepEqual({ scenarios: m.scenarios, environments: m.environments, external: m.external, views: m.views.outlets }, { scenarios: ["basic", "other"], environments: ["paymentAuthorized", "paymentLost"], external: null, views: ["notes"] });
   const current = fixture(t, { init, "external:views": { error: "external views requires state" } });
   assert.deepEqual(current("meta").external, { version: 1 });
+});
+
+test("使い方は先頭のコメントだけを出し、プロジェクトの外でも引ける（コマンド無しは 0、知らないコマンドは 1）。知っているコマンドは設定を読む", (t) => {
+  const outside = tempDir(t, "cradle-spec-query-usage-");
+  const run = (...args) => runNode(specQuery, args, { cwd: outside, env: cleanEnv() });
+  const usage = run();
+  assert.equal(usage.status, 0, usage.stderr);
+  assert.equal(usage.stderr, "");
+  assert.match(usage.stdout, /^spec-query — Lean 実行可能仕様への決定論的な問い合わせ。\n/);
+  assert.match(usage.stdout, /\n  共通: --build always\|auto\|never（既定 auto = バイナリが無ければ lake build）\n$/);
+  assert.doesNotMatch(usage.stdout, /同じ #print を繰り返さない/);
+  const unknown = run("bogus");
+  assert.equal(unknown.status, 1);
+  assert.equal(unknown.stdout, usage.stdout);
+  for (const cmd of ["scenarios", "environments", "commands", "errors", "outlets", "schemas", "meta", "external", "print", "init", "run", "step", "views", "raw"]) {
+    const r = run(cmd);
+    assert.equal(r.status, 1, cmd);
+    assert.equal(r.stdout, "", cmd);
+    assert.match(r.stderr, /^cradle: cradle\.json に project/, cmd);
+  }
 });

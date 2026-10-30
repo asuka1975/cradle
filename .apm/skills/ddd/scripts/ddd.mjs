@@ -8,7 +8,7 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, sha256, readText, git, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
@@ -136,9 +136,6 @@ switch (cmd) {
     break;
   }
   default:
-    // 使い方は先頭の連続したコメント行（本文のコメントは含めない）
-    const usage = [];
-    for (const l of readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1)) { if (!l.startsWith("//")) break; usage.push(l.slice(3)); }
-    console.log(usage.join("\n"));
+    console.log(headerUsage(import.meta.url));
     process.exit(cmd ? 1 : 0);
 }

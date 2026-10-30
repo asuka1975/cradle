@@ -597,6 +597,14 @@ export function stepOutcome(t) { return typeof t.result === "string" ? t.result 
 /** 入力が指名した障害契約の名前: trace の写し、無ければ sidecar の入力（input）のもの。どちらも文字列でなければ undefined。 */
 export function nominatedFault(t, input) { return typeof t.fault === "string" ? t.fault : typeof input?.fault === "string" ? input.fault : undefined; }
 
+/** 道具の使い方: スクリプトの shebang の次から続くコメント行（`// ` を外す）。最初のコメントでない行で止め、本文のコメントは含めない。
+    scriptUrl は道具の import.meta.url。設定を読まないので、プロジェクトの外でも出せる。 */
+export function headerUsage(scriptUrl) {
+  const usage = [];
+  for (const l of readFileSync(new URL(scriptUrl), "utf8").split("\n").slice(1)) { if (!l.startsWith("//")) break; usage.push(l.slice(3)); }
+  return usage.join("\n");
+}
+
 /** 道具のスクリプト（cradle/scripts/<name>）の絶対パス。他のスキルの道具も lib の置き場から引く — スキルの並び（../../cradle）を推し量らない。 */
 export function cradleScript(name) { return fileURLToPath(new URL(name, import.meta.url)); }
 

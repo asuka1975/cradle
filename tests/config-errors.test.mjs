@@ -1,4 +1,5 @@
 // 設定が読めない・git の外: 道具は `cradle: <理由>` の 1 行と exit 1 で止まり、スタックトレースを出さない。
+// spec-query はコマンドを渡す（コマンド無しは設定を読まずに使い方を出す）
 import test from "node:test";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
@@ -9,7 +10,7 @@ import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 const skill = (p) => fileURLToPath(new URL(`../.apm/skills/${p}`, import.meta.url));
 const cradle = skill("cradle/scripts/cradle.mjs");
 const entries = [
-  [cradle, ["status"]], [cradle, ["golden-check", "--build", "never"]], [cradle, ["spec-query"]], [cradle, ["lean-check"]],
+  [cradle, ["status"]], [cradle, ["golden-check", "--build", "never"]], [cradle, ["spec-query", "scenarios"]], [cradle, ["lean-check"]],
   [cradle, ["regen-impact", "--no-regen"]], [cradle, ["unslop", "--all"]], [cradle, ["ddd-clean-check"]], [cradle, ["doctor", "--local"]],
   [skill("api-contract/scripts/contract-check.mjs"), []], [skill("e2e-parity/scripts/flows-from-golden.mjs"), []], [skill("ddd/scripts/ddd.mjs"), ["status"]],
 ];

@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
 import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
-  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems } from "../.apm/skills/cradle/scripts/lib.mjs";
+  goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -101,6 +101,15 @@ test("renameScaffold は Sprout・sprout・__PROJECT__・__PROJECT_LOWER__ を�
   assert.equal(renameScaffold(text, { project: "MonoWa", domain: "  楽団の $1 と $& の管理 " }), "MonoWa.Main monowa MonoWa monowa\nプロダクト: 楽団の $1 と $& の管理\n");
   assert.equal(renameScaffold(text, { project: "MonoWa" }), `MonoWa.Main monowa MonoWa monowa\nプロダクト: ${PRODUCT_PLACEHOLDER}\n`);
   assert.equal(PRODUCT_PLACEHOLDER, "（一言で）");
+});
+
+test("headerUsage は shebang の次から続くコメント行を `// ` を外して返し、コードの後の本文のコメントは含めない", (t) => {
+  const root = tempDir(t, "cradle-usage-");
+  writeTree(root, { "tool.mjs": "#!/usr/bin/env node\n// tool — 一行の説明。\n//   tool run [--json]\n//\n// 続きの説明\nimport x from \"y\";\n// 本文のコメント\n  // 字下げしたコメント\n" });
+  assert.equal(headerUsage(pathToFileURL(join(root, "tool.mjs")).href), "tool — 一行の説明。\n  tool run [--json]\n\n続きの説明");
+  // 先頭の 1 行は shebang として読み飛ばす（コメントでも使い方に入れない）
+  writeTree(root, { "plain.mjs": "// 1 行目\n// 2 行目\n" });
+  assert.equal(headerUsage(pathToFileURL(join(root, "plain.mjs")).href), "2 行目");
 });
 
 test("findProjectRoot と loadConfig はルートを指す変数を渡された env から読み、空の env なら cradle.json を持つ祖先と root の cradle.json だけで決める", (t) => {

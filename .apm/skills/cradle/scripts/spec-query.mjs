@@ -23,11 +23,14 @@
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames } from "./lib.mjs";
+import { loadConfigOrFail, buildMode, callLean, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames, headerUsage } from "./lib.mjs";
 import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
 const [cmd, ...rest] = opts._;
+// 使い方は設定を読む前に出す（プロジェクトの外でも引ける）。下の switch の腕と同じ並び
+const COMMANDS = ["scenarios", "environments", "commands", "errors", "outlets", "schemas", "meta", "external", "print", "init", "run", "step", "views", "raw"];
+if (!COMMANDS.includes(cmd)) { console.log(headerUsage(import.meta.url)); process.exit(cmd ? 1 : 0); }
 const cfg = loadConfigOrFail();
 const build = buildMode(opts.build);
 
@@ -245,8 +248,5 @@ try {
       const req = jsonArg(rest[0] ?? "-");
       printJson(await callLean(cfg, req, { build })); break;
     }
-    default:
-      console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter(l => l.startsWith("//")).map(l => l.slice(3)).join("\n"));
-      process.exit(cmd ? 1 : 0);
   }
 } catch (e) { fail(e.message, e.exitCode ?? 1); }
