@@ -118,6 +118,9 @@ class Kotlinize(private val ir: Ir) {
 		return "${td.kotlin}Fixture"
 	}
 
+	/** 実体化フック(fixture → 実装)の名前。先頭を小文字にした Kotlin 名はキーワードになりうる(Package → package)。 */
+	fun materializerName(td: IrTypeDef): String = ident(decapitalizeFirst(td.kotlin))
+
 	// ───────────────────────── fixture 語彙の閉包
 
 	/** 型が entity-like(interface+fixture)へ shape を通じて到達するか。 */

@@ -87,7 +87,7 @@ internal class StatefulHarness(
 		for (part in sortedParts) {
 			val arr = tests.collOf(beforeO, part) ?: continue
 			tests.requireAddForSeeding(part, arr)
-			val mat = decapitalizeFirst(part.root.kotlin)
+			val mat = k.materializerName(part.root)
 			for (el in arr) {
 				sb.append("\t\t${repoVar(part.root)}.add($mat(${k.refLiteral(part.root, el)}))\n")
 			}
@@ -277,7 +277,7 @@ internal fun EmitTests.emitFaultContractTests() {
 			sb.append("abstract class ${ucName}FaultContractTest {\n")
 			h.declareHooks(sb)
 			val hookParams = h.hookParams()
-			fun hookOf(fc: IrFaultContract) = "faulted${capitalizeFirst(fc.def)}"
+			fun hookOf(fc: IrFaultContract) = ident("faulted${capitalizeFirst(fc.def)}")
 			sb.append("\t/* 「実行の途中で技術的障害が起きる」仕掛けを施した実装を、障害契約(定義)ごとに返す。注入手段は\n")
 			sb.append("\t   具象の自由(渡された泉・Port を差し替え・ラップしてよい)— ただし観測対象の Repository は渡されたものを配線し、\n")
 			sb.append("\t   Port の呼び出しは渡されたモックへ届けること(消費位置を検査する)。 */\n")

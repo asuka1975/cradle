@@ -76,7 +76,7 @@ internal fun EmitTests.portMockExpr(p: IrPort, ports: List<IrCasePort>): String 
 	return "${k.portMockName(p)}(${if (exps.isEmpty()) "emptyList()" else "listOf(${exps.joinToString(", ")})"})"
 }
 
-internal fun EmitTests.portVar(p: IrPort): String = decapitalizeFirst(p.name)
+internal fun EmitTests.portVar(p: IrPort): String = ident(decapitalizeFirst(p.name))
 
 /**
  * Port の Adapter の適合テスト(adapterTest): 観測(Outcome)の各構成子を Adapter が一度は産めることを
@@ -105,7 +105,7 @@ internal fun EmitTests.portAdapterTestBody(p: IrPort): String {
 			is IrShape.Structure -> listOf(Probe(op, null) { got -> "assertEquals(expected, $got)" })
 		}
 	}
-	fun hookOf(pr: Probe) = "arrange${capitalizeFirst(pr.op.method)}${pr.ctor?.let { capitalizeFirst(it) } ?: ""}"
+	fun hookOf(pr: Probe) = ident("arrange${capitalizeFirst(pr.op.method)}${pr.ctor?.let { capitalizeFirst(it) } ?: ""}")
 	for (pr in probes) {
 		if (pr.ctor == null) {
 			sb.append("\t/** 要求と、それに期待する観測。stub をその状態にしてから返す。 */\n")

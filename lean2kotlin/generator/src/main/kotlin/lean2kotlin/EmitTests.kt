@@ -50,7 +50,7 @@ class EmitTests(
 	internal fun appendMaterializerHooks(sb: StringBuilder, mats: Map<String, IrTypeDef>, noun: String = "値") {
 		for ((_, e) in mats) {
 			sb.append("\t/** fixture の実体化(観測が一致する実装の${noun}を返す)。 */\n")
-			sb.append("\tprotected abstract fun ${decapitalizeFirst(e.kotlin)}(" +
+			sb.append("\tprotected abstract fun ${k.materializerName(e)}(" +
 				"fixture: ${k.fixtureName(e)}): ${k.name(e.lean)}\n")
 		}
 	}

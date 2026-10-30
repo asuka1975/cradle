@@ -105,7 +105,7 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 						log("  note: ${c.theorem}: 主体 ${subjParam.name} がケースにありません")
 						return@forEachIndexed
 					}
-					"${decapitalizeFirst(td.kotlin)}(${k.refLiteral(td, j)})"
+					"${k.materializerName(td)}(${k.refLiteral(td, j)})"
 				} else if (isFactoryM(m)) "factory()"
 				else {
 					// 契約指名された静的語彙: レシーバ非依存 — 既定 fixture で実体化
@@ -113,7 +113,7 @@ internal fun EmitTests.emitEntityTheoremTest(td: IrTypeDef, contracts: List<IrCo
 						log("  note: ${c.theorem}: 既定 fixture を構築できません")
 						return@forEachIndexed
 					}
-					"${decapitalizeFirst(td.kotlin)}($dflt)"
+					"${k.materializerName(td)}($dflt)"
 				}
 				appendPureTest(sb, c, i, case.ok, m, receiver, callArgs)
 				emittedContracts += contractKey(c)

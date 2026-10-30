@@ -28,7 +28,7 @@ internal fun EmitTests.fixtureNorm(t: IrType): String = when (t) {
 internal fun EmitTests.inputLiteral(t: IrType, j: JsonElement): String = when (t) {
 	is IrType.Ref -> {
 		val td = ir.typeDef(t.lean)
-		if (k.isEntityLike(td)) "${decapitalizeFirst(td.kotlin)}(${k.refLiteral(td, j)})"
+		if (k.isEntityLike(td)) "${k.materializerName(td)}(${k.refLiteral(td, j)})"
 		else inputRefLiteral(td, j)
 	}
 	is IrType.ListOf ->
