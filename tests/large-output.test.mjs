@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, chmodSync, copyFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, chmodSync, copyFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
@@ -291,6 +291,31 @@ test("モックアップのサーバーは spec-query meta が 1MB を超えて�
   huge({ stdout: body });
   assert.deepEqual(meta.scenarios, ["basic"]);
   assert.deepEqual(meta.commands, commands);
+});
+
+test("mockup-build --meta-only は meta が 1MB を超えても meta.js に全部を書き、手元の絶対パスを持ち込まない", (t) => {
+  const root = tempProject(t, "cradle-large-mockup-meta-");
+  // meta の大きさは用語集で稼ぐ（長い英語候補を 6000 行）。spec-query の #print には偽の lake、CLI には偽の実行ファイルで答える
+  const rows = Array.from({ length: 6000 }, (_, i) => `| 用語${i} | ${long(i)} | 説明 |`).join("\n");
+  const tools = join(root, "tools");
+  writeTree(root, {
+    "documents/ddd/ubiquitous-language.md": `| 用語 | 英語候補 | 意味 |\n|---|---|---|\n${rows}\n`,
+    "lean/Example/Runtime/Json.lean": "\n",
+    "lean/.lake/build/bin/example": `#!${process.execPath}\nrequire("fs").readFileSync(0);\nprocess.stdout.write('{"error":"unknown scenario"}');\n`,
+    "tools/lake": `#!${process.execPath}\n`,
+  });
+  chmodSync(join(root, "lean/.lake/build/bin/example"), 0o755);
+  chmodSync(join(tools, "lake"), 0o755);
+  const r = runNode(script("cradle/scripts/mockup-build.mjs"), ["--meta-only", "--build", "never"], { cwd: root, env: cleanEnv({ PATH: tools }) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, "lean/mockup/public/meta.js を作り直した\n");
+  const text = readFileSync(join(root, "lean/mockup/public/meta.js"), "utf8");
+  assert.ok(text.startsWith("globalThis.CRADLE_META = ") && text.endsWith(";\n"));
+  huge({ stdout: text });
+  const meta = JSON.parse(text.slice("globalThis.CRADLE_META = ".length, -2));
+  assert.equal(Object.keys(meta.glossary).length, 6000);
+  assert.equal(meta.lean.bin, undefined);
+  assert.ok(!text.includes(root), "meta.js に手元のパスが残っている");
 });
 
 test("lean-check --build は lake build の出力が 1MB を超えても、通ったビルドを失敗と言わない", (t) => {

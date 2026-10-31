@@ -10,7 +10,7 @@ const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs"
 
 test("cradle は引数が無ければ使い方を 0 で、知らないコマンドには同じ使い方を 1 で出す。一覧は doctor・refs・contract-skeleton も含む入口すべて", (t) => {
   const root = tempProject(t, "cradle-usage-");
-  const usage = "usage: cradle <command> [args]\n" + ["spec-query", "golden-check", "lean-check", "regen-impact", "unslop", "status", "ddd-clean-check", "hook", "doctor", "refs", "contract-skeleton"].map(c => `  ${c}\n`).join("");
+  const usage = "usage: cradle <command> [args]\n" + ["spec-query", "golden-check", "lean-check", "regen-impact", "unslop", "status", "ddd-clean-check", "hook", "doctor", "refs", "contract-skeleton", "mockup-build"].map(c => `  ${c}\n`).join("");
   const none = runNode(cradle, [], { cwd: root, env: cleanEnv() });
   assert.deepEqual([none.status, none.stdout, none.stderr], [0, usage, ""]);
   const unknown = runNode(cradle, ["nope"], { cwd: root, env: cleanEnv() });

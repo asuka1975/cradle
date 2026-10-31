@@ -113,9 +113,15 @@ function guessProject(root) {
 }
 
 /** Lean CLI を 1 リクエスト 1 プロセスで呼ぶ（Promise）。stdin に JSON、stdout に JSON。stdin は非同期に流す — Codex のサンドボックスでは spawnSync に input を渡すと EOF が届かず固まる。 */
-export function callLean(cfg, request, { build = "auto" } = {}) {
+export async function callLean(cfg, request, { build = "auto" } = {}) {
   ensureLeanBinary(cfg, build);
-  const input = typeof request === "string" ? request : JSON.stringify(request);
+  const text = await callLeanText(cfg, typeof request === "string" ? request : JSON.stringify(request));
+  try { return JSON.parse(text); }
+  catch { throw new Error(`Lean CLI の応答が JSON ではありません: ${text.slice(0, 400)}`); }
+}
+
+/** Lean CLI の応答の文字列（前後の空白を除いたもの）。読み手のあるバイト列の比較に使う — mockup-build は wasm の応答と 1 バイトずつ突き合わせる。 */
+export function callLeanText(cfg, input) {
   return new Promise((resolve, reject) => {
     const p = spawn(cfg.lean.bin, [], { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
@@ -125,8 +131,7 @@ export function callLean(cfg, request, { build = "auto" } = {}) {
     p.on("close", (status) => {
       const text = out.trim();
       if (!text) return reject(new Error(`Lean CLI が何も返しませんでした (exit ${status}): ${err}`));
-      try { resolve(JSON.parse(text)); }
-      catch { reject(new Error(`Lean CLI の応答が JSON ではありません: ${text.slice(0, 400)}`)); }
+      resolve(text);
     });
     p.stdin.on("error", () => {});
     p.stdin.end(input);
