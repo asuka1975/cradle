@@ -83,6 +83,29 @@ class Lean2KotlinPluginTest {
 
 	@Test
 	@DisabledOnOs(OS.WINDOWS)
+	fun `lake update は対象の lean-toolchain を保つ — 依存の版へ上げない`(@TempDir dir: File) {
+		val calls = dir.resolve("calls.txt")
+		val lake = dir.resolve("lake").apply {
+			writeText("#!/bin/sh\necho \"\$*\" >> '$calls'\n[ \"\$1\" = update ] && echo '{}' > lake-manifest.json\nexit 0\n")
+			setExecutable(true)
+		}
+		val domain = dir.resolve("domain").apply { mkdirs() }
+		val extractor = dir.resolve("extractor").apply { mkdirs() }
+		domain.resolve("lakefile.toml").writeText("name = \"depot-lean\"\n")
+		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.32.2\n")
+		extractor.resolve("lakefile.toml").writeText("name = \"lean2kotlin\"\n")
+		val p = project(dir.resolve("p"))
+		p.ext().leanRootNamespace.set("Depot")
+		p.ext().leanDomainDir.set(domain)
+		p.ext().leanExtractorDir.set(extractor)
+		p.ext().lakeCommand.set(lake.absolutePath)
+		p.ext().irFile.get().asFile.apply { parentFile.mkdirs(); writeText("{}") }
+		p.extract().run()
+		assertEquals("update --keep-toolchain", calls.readLines().first())
+	}
+
+	@Test
+	@DisabledOnOs(OS.WINDOWS)
 	fun `抽出は対象か抽出器の lakefile・manifest が変わったときだけワークスペースの manifest を捨てて lake update で解き直す`(@TempDir dir: File) {
 		// lake の代役: サブコマンドを 1 行ずつ記録し、update ならワークスペースに manifest を書く
 		val calls = dir.resolve("calls.txt")

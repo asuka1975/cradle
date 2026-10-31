@@ -151,7 +151,8 @@ abstract class ExtractLeanIrTask : DefaultTask() {
 
 		logger.lifecycle("lean2kotlin: 抽出 #kotlin_ir \"$ns\"(domain: $domain)")
 		if (!ws.resolve("lake-manifest.json").exists()) {
-			execOps.exec { it.workingDir(ws); it.commandLine(lake, "update") }
+			// --keep-toolchain: 既定の update は依存の lean-toolchain が新しいとワークスペースの版を上げ、抽出が対象と違う Lean で走る
+			execOps.exec { it.workingDir(ws); it.commandLine(lake, "update", "--keep-toolchain") }
 		}
 		// lake env はビルドしない — 必要なライブラリ(対象 root と抽出器)を先に build する
 		execOps.exec { it.workingDir(ws); it.commandLine(lake, "build", ns, "Lean2Kotlin") }
