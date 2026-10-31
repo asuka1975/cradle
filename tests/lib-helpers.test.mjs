@@ -2,11 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, chmodSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, chmodSync, symlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
-import { sha256, walk, leanSnapshot, readText, DDD_FILES, countEvents, countStatusRows,
+import { sha256, walk, leanSnapshot, readableEntries, ports, readText, DDD_FILES, countEvents, countStatusRows,
   goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval, contractTestWiring, goldenRowLines } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
@@ -15,42 +15,62 @@ test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", (
   assert.equal(sha256(""), createHash("sha256").update("").digest("hex"));
 });
 
-test("walk は辿り着けないリンクを飛ばし、輪になるリンクでファイルを重ねて数えない", (t) => {
+const lock = "user@host.1:2";
+test("walk は Emacs のロックファイルだけを飛ばす。ほかの壊れたリンク・輪は投げ、検査の対象を黙って消さない", (t) => {
   const root = tempDir(t, "cradle-walk-");
-  writeTree(root, { "a.md": "", "sub/b.md": "" });
-  symlinkSync("user@host.1:2", join(root, ".#a.md"));
-  symlinkSync("loop", join(root, "loop"));
-  symlinkSync("a.md/nope", join(root, "notdir"));
-  symlinkSync("..", join(root, "sub", "up"));
-  assert.deepEqual(walk(root), [join(root, "a.md"), join(root, "sub", "b.md")]);
-  // strict は辿り着けないリンクで投げる（台本の置き場の壊れたリンクを status が言う）
-  assert.throws(() => walk(root, { strict: true }), { code: /^(ENOENT|ELOOP|ENOTDIR)$/ });
+  writeTree(root, { "a.md": "", ".#real.md": "" });
+  symlinkSync(lock, join(root, ".#a.md"));
+  // 同じ名前の形でも、実在するファイルは読む
+  assert.deepEqual(walk(root), [join(root, ".#real.md"), join(root, "a.md")]);
+  const broken = tempDir(t, "cradle-walk-");
+  symlinkSync("/nowhere/gone.md", join(broken, "gone.md"));
+  assert.throws(() => walk(broken), { code: "ENOENT" });
+  const loop = tempDir(t, "cradle-walk-");
+  writeTree(loop, { "sub/b.md": "" });
+  symlinkSync("..", join(loop, "sub", "up"));
+  assert.throws(() => walk(loop), { code: "ELOOP" });
 });
 
-test("walk はリンクの先のディレクトリも読むが、同じディレクトリを 2 度読まず、木の中のものは本来のパスで返す", (t) => {
+test("walk は実行権の無いディレクトリで投げ、下のファイルを黙って消さない", { skip: process.getuid?.() === 0 }, (t) => {
   const root = tempDir(t, "cradle-walk-");
-  const outside = tempDir(t, "cradle-walk-outside-");
+  writeTree(root, { "d/a.md": "" });
+  chmodSync(join(root, "d"), 0o600);
+  try {
+    assert.throws(() => walk(root), { code: "EACCES" });
+    assert.throws(() => leanSnapshot({ lean: { rootDir: root } }), { code: "EACCES" });
+  } finally { chmodSync(join(root, "d"), 0o700); }
+});
+
+test("walk はリンクのディレクトリも読み、木の中を指すものは両方のパスで返す（パスで判定する道具が別名を見失わない）", (t) => {
+  const root = tempDir(t, "cradle-walk-");
   writeTree(root, { "real/x.md": "" });
-  writeTree(outside, { "y.md": "" });
-  symlinkSync("real", join(root, "a-link"));
-  symlinkSync(outside, join(root, "shared"));
-  assert.deepEqual(walk(root), [join(root, "real", "x.md"), join(root, "shared", "y.md")]);
+  symlinkSync("real", join(root, "z-link"));
+  assert.deepEqual(walk(root), [join(root, "real", "x.md"), join(root, "z-link", "x.md")]);
 });
 
-test("leanSnapshot は指す先の無いリンクを先の名前で数え、Emacs のロックファイルは数えない", (t) => {
+test("leanSnapshot は Emacs のロックファイルを数えない", (t) => {
   const root = tempDir(t, "cradle-walk-");
   writeTree(root, { "lean/A.lean": "x" });
   const cfg = { lean: { rootDir: join(root, "lean") } };
   const before = leanSnapshot(cfg);
-  symlinkSync("user@host.1:2", join(root, "lean", ".#A.lean"));
+  symlinkSync(lock, join(root, "lean", ".#A.lean"));
   assert.deepEqual(leanSnapshot(cfg), before);
-  symlinkSync("/nowhere/gone.lean", join(root, "lean", "Gone.lean"));
-  const withLink = leanSnapshot(cfg);
-  assert.deepEqual(Object.keys(withLink).sort(), ["A.lean", "Gone.lean"]);
-  assert.equal(withLink["A.lean"], before["A.lean"]);
-  rmSync(join(root, "lean", "Gone.lean"));
-  symlinkSync("/nowhere/other.lean", join(root, "lean", "Gone.lean"));
-  assert.notEqual(leanSnapshot(cfg)["Gone.lean"], withLink["Gone.lean"]);
+});
+
+test("readableEntries は Emacs のロックファイルだけを除く。ports と goldenFlowFiles はそれを通す", (t) => {
+  const root = tempDir(t, "cradle-walk-");
+  writeTree(root, { "golden/a-flow.json": "{}", "golden/.#real-flow.json": "{}", "Model/Application/Port/Directory/Find.lean": "" });
+  symlinkSync(lock, join(root, "golden", ".#b-flow.json"));
+  assert.deepEqual(readableEntries(join(root, "golden")).sort(), [".#real-flow.json", "a-flow.json"]);
+  assert.deepEqual(goldenFlowFiles(join(root, "golden")), [".#real-flow.json", "a-flow.json"]);
+  // ほかの壊れたリンクは残す（読む道具が golden を読めないと言う）
+  symlinkSync("/nowhere/gone.json", join(root, "golden", "gone-flow.json"));
+  assert.ok(goldenFlowFiles(join(root, "golden")).includes("gone-flow.json"));
+  const port = join(root, "Model/Application/Port");
+  symlinkSync(lock, join(port, ".#x"));
+  symlinkSync(lock, join(port, "Directory", ".#Find.lean"));
+  const found = ports({ lean: { modelDir: join(root, "Model"), root: "Model" } });
+  assert.deepEqual(found.map(p => [p.name, p.operations.map(o => o.name)]), [["Directory", ["Find"]]]);
 });
 
 test("walk の既定はビルド成果物と VCS の置き場を見ない。leanSnapshot はそれに lake-manifest.json を足す", (t) => {

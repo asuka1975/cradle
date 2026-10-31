@@ -352,7 +352,20 @@ test("再生成の後の解析が例外で止まっても --dry-run は生成デ
   assert.doesNotMatch(l.stderr, /^\s+at /m);
 });
 
-test("指す先の無いシンボリックリンク（Emacs のロックファイル）があっても、手書きの .kt としては読まず最後まで解析する", (t) => {
+test("指す先の無いリンクで解析が止まっても --dry-run は生成ディレクトリを HEAD に戻し、cradle: の文と 2 で終わる", (t) => {
+  for (const d of ["main", "test", "adapterTest"]) {
+    const { root, run, porcelain } = fixture(t);
+    const link = `backend/src/${d}/kotlin/Broken.kt`;
+    symlinkSync("/nowhere/gone.kt", join(root, link));
+    const r = run("--no-golden", "--dry-run");
+    assert.equal(r.status, 2, d);
+    assert.match(r.stderr, /^cradle: 影響の解析で止まりました: ENOENT/, d);
+    assert.doesNotMatch(r.stderr, /^\s+at /m, d);
+    assert.equal(porcelain(), `?? ${link}\n`, d);
+  }
+});
+
+test("Emacs のロックファイルがあっても、手書きの .kt としては読まず最後まで解析する", (t) => {
   const { root, run, porcelain } = fixture(t);
   const link = "backend/src/main/kotlin/.#Broken.kt";
   symlinkSync("user@host.1234:5678", join(root, link));

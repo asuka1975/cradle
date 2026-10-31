@@ -1,9 +1,9 @@
 // Cradle 共通ライブラリ — 設定の読み込み・Lean CLI 呼び出し・小道具。
 // 依存は Node 標準ライブラリだけ（配布先に何も入れさせない）。
-import { existsSync, lstatSync, readFileSync, readlinkSync, readdirSync, realpathSync, statSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { basename, join, resolve, relative, sep } from "node:path";
+import { join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 /** プロジェクトルート: CRADLE_PROJECT_DIR > CLAUDE_PROJECT_DIR > cradle.json を持つ祖先 > cwd。変数は env から読む（既定は process.env） */
 export function findProjectRoot(start = process.cwd(), env = process.env) {
@@ -181,46 +181,42 @@ export function git(root, args, opts = {}) {
 export function readJson(file) { return JSON.parse(readFileSync(file, "utf8")); }
 
 const DEFAULT_WALK_SKIP = Object.freeze([".lake", "node_modules", "build", ".git", "dist"]);
-export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP, strict = false, danglingLinks = false } = {}) {
+export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP } = {}) {
   const out = [];
   if (!existsSync(dir)) return out;
-  // リンクの先は読むが、同じディレクトリは 2 度読まない（up -> .. の輪でファイルを重ねて数えない）。木の中のものを本来のパスで返すよう、リンクは最後に回す
-  const stack = [dir], seen = new Set();
+  const stack = [dir];
   while (stack.length) {
     const d = stack.pop();
-    const real = realpathSync(d);
-    if (seen.has(real)) continue;
-    seen.add(real);
-    for (const name of readdirSync(d).sort()) {
+    for (const name of readdirSync(d)) {
       if (skip.includes(name)) continue;
       const p = join(d, name);
-      // 辿り着けないリンク（Emacs のロックファイル .#X など）は読むものが無い。ここで投げると道具ごと落ちる。strict はそれを知らせたい置き場（台本）
       let st;
-      try { st = statSync(p); } catch (e) {
-        if (strict || !isLink(p)) throw e;
-        if (danglingLinks) out.push(p);
-        continue;
-      }
-      if (st.isDirectory()) { if (isLink(p)) stack.unshift(p); else stack.push(p); }
+      try { st = statSync(p); } catch (e) { if (isEditorLock(name, e)) continue; throw e; }
+      if (st.isDirectory()) stack.push(p);
       else if (!ext || ext.some(e => name.endsWith(e))) out.push(p);
     }
   }
   return out.sort();
 }
-function isLink(p) { try { return lstatSync(p).isSymbolicLink(); } catch { return true; } } // 読む間に消えたものも読むものが無い
+/** Emacs が編集中のファイルの隣に置く指す先の無いリンク（.#X -> user@host.pid:boot）は読むものが無く、作業中はいつでもある。
+    ほかの壊れたリンク・輪・読めないディレクトリは飛ばさない — 黙って飛ばすと検査の対象が消える（落ちて知らせる方がよい）。 */
+const isEditorLock = (name, e) => name.startsWith(".#") && e.code === "ENOENT";
 
-/** ディレクトリの項目の名前。指す先の無いリンク（編集中の Emacs のロックファイル .#X など）は読むものが無いので除く。 */
-export function readableEntries(dir) { return readdirSync(dir).filter(name => existsSync(join(dir, name))); }
+/** ディレクトリの項目の名前。Emacs のロックファイル（isEditorLock）は除く。 */
+export function readableEntries(dir) {
+  return readdirSync(dir).filter(name => {
+    if (!name.startsWith(".#")) return true;
+    try { statSync(join(dir, name)); return true; } catch (e) { if (isEditorLock(name, e)) return false; throw e; }
+  });
+}
 
 export function rel(root, p) { return relative(root, p).split(sep).join("/"); }
 
 /** lean/ の全ファイルの sha256（lean/ からの相対パス → ハッシュ）。lake-manifest.json は lake build が書く（初回のビルドで現れる）ので数えない。 */
 export function leanSnapshot(cfg) {
   const out = {};
-  // 指す先の無いリンクは先の名前で比べる（ddd-clean-check がプローブの残骸を見落とさない）。Emacs のロックファイルは編集中の印で、中身の変化ではない
-  for (const f of walk(cfg.lean.rootDir, { skip: [...DEFAULT_WALK_SKIP, "lake-manifest.json"], danglingLinks: true })) {
-    if (existsSync(f)) out[rel(cfg.lean.rootDir, f)] = sha256(readFileSync(f));
-    else if (!basename(f).startsWith(".#")) out[rel(cfg.lean.rootDir, f)] = sha256(`link:${readlinkSync(f)}`);
+  for (const f of walk(cfg.lean.rootDir, { skip: [...DEFAULT_WALK_SKIP, "lake-manifest.json"] })) {
+    out[rel(cfg.lean.rootDir, f)] = sha256(readFileSync(f));
   }
   return out;
 }
@@ -612,7 +608,7 @@ export function outcomeOf(traceEntry) {
 export function scenarioScripts(cfg, place) {
   const root = resolve(cfg.root, place);
   if (!existsSync(root)) return [];
-  const files = statSync(root).isDirectory() ? walk(root, { ext: [".json"], strict: true }) : [root];
+  const files = statSync(root).isDirectory() ? walk(root, { ext: [".json"] }) : [root];
   const out = [];
   for (const file of files) {
     let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }

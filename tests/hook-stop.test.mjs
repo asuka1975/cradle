@@ -79,8 +79,8 @@ test("読み手が stdout を先に閉じても、hook は stderr を空にし�
   assert.deepEqual(r, { status: 0, stderr: "" });
 });
 
-// 指す先の無いリンク（Emacs のロックファイル）で unslop が落ちると、Stop は同じ差分の違反ごと黙って通していた
-test("Stop は指す先の無いリンクがあっても、無いパスを指す差分の unslop error で差し戻す", (t) => {
+// Emacs のロックファイルで unslop が落ちると、Stop は同じ差分の違反ごと黙って通していた
+test("Stop は Emacs のロックファイルがあっても、無いパスを指す差分の unslop error で差し戻す", (t) => {
   const { root, stop } = fixture(t);
   symlinkSync("user@host.1:2", join(root, ".#x.md"));
   writeTree(root, { "e2e/flow.ts": "// see backend/src/main/kotlin/Gone.kt\nexport const y = 1;\n" });
