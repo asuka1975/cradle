@@ -89,6 +89,16 @@ test("refs は一致が多くても遅い読み手のパイプに全行と結び
   assert.match(r.stdout, /洗い直すこと。\n$/);
 });
 
+test("contract-skeleton は抽象メソッドが多くても遅い読み手のパイプに閉じ括弧まで出し、0 で終わる", async (t) => {
+  const root = tempProject(t, "cradle-large-skeleton-");
+  const file = "HugeContractTest.kt";
+  writeTree(root, { [file]: `package p\n\nabstract class HugeContractTest {\n${Array.from({ length: 3000 }, (_, i) => `\tprotected abstract fun ${long(i)}(): Int\n`).join("")}}\n` });
+  const r = await slowRead(script("cradle/scripts/contract-skeleton.mjs"), [file], { cwd: root, env: cleanEnv() });
+  assert.equal(r.status, 0, r.stderr);
+  big(r);
+  assert.match(r.stdout, /override fun N.*2999\(\): Int = TODO\(.*\)\n\}\n+$/);
+});
+
 test("regen-impact --json は変わった生成シンボルが多くてもパイプ越しに全件の JSON を出す", (t) => {
   const root = tempProject(t, "cradle-large-regen-");
   commitAll(root);

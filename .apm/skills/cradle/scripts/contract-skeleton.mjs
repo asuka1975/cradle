@@ -21,4 +21,3 @@ const lines = [`package ${outPkg}`, "", `import ${pkg}.${cls}`, "", "/** 生成�
 for (const m of sigs) lines.push(`\toverride fun ${m[1]}(${m[2].trim()}): ${m[3].trim()} = TODO("wire: 本番の実装を返す（${m[3].trim()}）")`);
 lines.push("}", "");
 console.log(lines.join("\n"));
-process.exit(0);
