@@ -20,6 +20,23 @@ test("stripLeanComments は複数行の docstring・入れ子のブロック・�
   assert.equal(stripLeanComments("/- 閉じない\nブロック"), "\n");
 });
 
+test("stripLeanComments は名前の文字に挟まれたブロックを空白 1 つにし、前後のトークンをつながない", () => {
+  assert.equal(stripLeanComments("theorem t : True := by/- 後で -/sorry\n"), "theorem t : True := by sorry\n");
+  assert.equal(stripLeanComments("axiom/- 説明 -/bad : False\n"), "axiom bad : False\n");
+  assert.equal(stripLeanComments("exact/- 外 /- 内 -/ まだ外 -/sorry"), "exact sorry");
+  // Lean でも sor と ry の 2 つの名前で、sorry ではない
+  assert.equal(stripLeanComments("sor/- x -/ry\n"), "sor ry\n");
+  // サロゲート対（𝒜）も 1 文字に読む
+  assert.equal(stripLeanComments("𝒜/- x -/𝒜\n"), "𝒜 𝒜\n");
+  // 片側が名前の文字でなければ足さない（行頭の /- … -/import は ^import のまま）
+  assert.equal(stripLeanComments("by /- c -/sorry\n"), "by sorry\n");
+  assert.equal(stripLeanComments("by/- c -/ sorry\n"), "by sorry\n");
+  assert.equal(stripLeanComments("f/- c -/(x)\n"), "f(x)\n");
+  assert.equal(stripLeanComments("x\n/- c -/import Y\n"), "x\nimport Y\n");
+  // 途中で改行するブロックは改行が残るので足さない
+  assert.equal(stripLeanComments("axiom/- a\nb -/bad\n"), "axiom\nbad\n");
+});
+
 test("stripLeanComments はコードの文字列リテラルと文字リテラルをそのまま写し、その中の -- と /- でコメントを開かない", () => {
   // GitLab の /-/ を持つ文字列のあとの docstring だけを消し、sorry と axiom はコードに残す
   const url = 'def u : String := "https://gitlab.example.com/team/app/-/issues"\n';

@@ -89,3 +89,13 @@ test("lean-check と status は生文字列 r\"C:\\\" と r#\"say \"hi\"# の後
   assert.equal(s.status, 0, s.stderr);
   assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 2"), s.stdout);
 });
+
+test("lean-check と status は、空白なしのブロックコメントに続く sorry・axiom も拾い、名前を分けるブロックからは sorry を作らない", (t) => {
+  const root = tempProject(t, "cradle-sorry-");
+  writeTree(root, { "lean/Example/Domain/A.lean": "namespace Example\ntheorem t : True := by/- 後で証明 -/sorry\naxiom/- 説明 -/bad : False\ndef sor := 1\ndef ry := sor/- x -/ry\nend Example\n" });
+  const j = JSON.parse(runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() }).stdout);
+  assert.deepEqual(j.findings.filter(f => ["sorry", "axiom"].includes(f.rule)).map(f => `${f.rule} ${f.line}`), ["sorry 2", "axiom 3"]);
+  assert.equal(j.sorry, 1);
+  const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 1"), s.stdout);
+});

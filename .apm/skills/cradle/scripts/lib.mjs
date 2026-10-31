@@ -289,6 +289,7 @@ export function fail(msg, code = 1) {
 }
 
 /** Lean のコメントを消した写し。改行は残し（行番号と行の index を動かさない）、消した文字は空白で埋めない（`/- … -/import` の行も `^import` で拾う）。
+    ただしブロックの両側が名前の文字なら空白を 1 つ残す（Lean ではコメントがトークンを分ける。`by/- … -/sorry` を `bysorry`、`sor/- … -/ry` を `sorry` にしない）。
     左から読む: コードの `--` は行末まで、`/-`（docstring の `/--` も）からはブロックで、ブロックの中の `/-` と `-/` で深さを数える。
     正規表現を 2 回かける読み方では、`/--` の `--` を行コメントとして消すと docstring の続きの行がコードに残り、行コメントの中の `/-` からブロックを開くと次の `-/` までのコードが消える。
     コードの文字列リテラル（`\"` `\\` のエスケープを越えて次の `"` まで。閉じなければ最後まで）と文字リテラルはそのまま写す。Lean の字句と同じく中の `--` `/-` でコメントを開かない（`".../-/issues"` からファイルの残りを消さない）。
@@ -298,13 +299,14 @@ export function fail(msg, code = 1) {
     `«…»` の名前も次の `»` までをそのまま写す（Lean は中の `"` `--` `/-` と改行を名前に含める）。
     `s!"…{…}…"` の `{}` の中の文字列は追わない（引用符の対がずれても、その文字列が `--` `/-` を持たなければ写す文字は同じ）。 */
 export function stripLeanComments(text) {
+  const nameEnd = /[\p{L}\p{N}_'!?.]$/u, nameStart = /^[\p{L}\p{N}_'!?.]/u;
   let out = "", depth = 0;
   for (let i = 0; i < text.length; i++) {
     const c = text[i], n = text[i + 1];
     if (depth === 0) {
       if (c === "-" && n === "-") { const e = text.indexOf("\n", i); if (e < 0) break; i = e - 1; continue; }
       if (c === "/" && n === "-") { depth = 1; i++; continue; }
-      if (c === "r" && !/[\p{L}\p{N}_'!?.]$/u.test(text.slice(Math.max(0, i - 2), i))) {
+      if (c === "r" && !nameEnd.test(text.slice(Math.max(0, i - 2), i))) {
         let h = 0;
         while (text[i + 1 + h] === "#") h++;
         if (text[i + 1 + h] === '"') {
@@ -328,7 +330,10 @@ export function stripLeanComments(text) {
       }
       out += c;
     } else if (c === "/" && n === "-") { depth++; i++; }
-    else if (c === "-" && n === "/") { depth--; i++; }
+    else if (c === "-" && n === "/") {
+      depth--; i++;
+      if (depth === 0 && nameEnd.test(out.slice(-2)) && nameStart.test(text.slice(i + 1, i + 3))) out += " ";
+    }
     else if (c === "\n") out += c;
   }
   return out;
