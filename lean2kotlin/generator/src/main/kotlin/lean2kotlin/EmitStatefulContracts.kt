@@ -4,6 +4,35 @@ import kotlinx.serialization.json.*
 
 // ───────────────────────── 更新系の契約テスト(状態遷移契約・障害契約)
 
+/** フックの時計のフィールド: 受ける引数名を全部持つ。値は各ケースの args が運ぶ。 */
+internal data class ClockField(val paramNames: List<String>, val field: IrField)
+
+/**
+ * methods の時計の引数を、フィールドの名前ごとに 1 つにまとめる — フックの仮引数はフィールドの名前なので、validate と execute が
+ * 別の名前(_clock / clock)や別の時計の型で受けても 1 回だけ配線する。フィールドの型が時計ごとに違うときと、
+ * 1 つのメソッドが型の違う時計で同じ名前のフィールドを受けるときは、値を黙って取り違えないよう理由を言って止める。
+ */
+internal fun EmitTests.clockFieldsOf(s: IrService, methods: List<IrMethod>): List<ClockField> = methods
+	.map { m ->
+		val clocks = m.params.mapNotNull { p ->
+			val td = (p.type as? IrType.Ref)?.let { ir.typeDef(it.lean) } ?: return@mapNotNull null
+			if (td.role != "clockPort") return@mapNotNull null
+			p.name to td
+		}
+		val byField = clocks.flatMap { c -> (c.second.shape as IrShape.Structure).fields.map { it.name to c } }.groupBy({ it.first }, { it.second })
+		for ((field, cs) in byField) if (cs.map { it.second.lean }.distinct().size > 1)
+			error("${s.name}.${m.name}: 型の違う時計 ${cs.joinToString("・") { it.first }} が同じ名前のフィールド $field を持ち、フックの引数 1 つでは値を分けられません")
+		clocks
+	}
+	.flatten()
+	.flatMap { (pn, td) -> (td.shape as IrShape.Structure).fields.map { it to pn } }
+	.groupBy { (f, _) -> f.name }
+	.map { (name, g) ->
+		val types = g.map { k.typeRef(it.first.type) }.distinct()
+		if (types.size > 1) error("${s.name}: 時計のフィールド $name の型が時計ごとに違い(${types.joinToString("・")})、フックの引数 1 つに写せません")
+		ClockField(g.map { it.second }.distinct(), g.first().first)
+	}
+
 /**
  * 更新系の契約テスト(状態遷移契約・障害契約)が共有する実装フックの配線 — 観測用 Repository・実体化フック・
  * Port のモック・泉の採番ポート・固定の主体と時計。配線の導出は emitFile の外で行い(参照を記録する
@@ -26,29 +55,7 @@ internal class StatefulHarness(
 	}
 	// 時計ポート: Clock は署名から落ちる — 契約テストは**固定 today** を
 	// 実装フックへ渡す(Sequential<X>IdGenerator と同格の決定的配線)。
-	// フックの仮引数はフィールドの名前なので、その名前ごとに 1 つ — validate と execute が別の名前(_clock / clock)や
-	// 別の時計の型で受けても 1 回だけ配線し、受ける引数名は全部持つ。値は各ケースの args が運ぶ
-	data class ClockField(val paramNames: List<String>, val field: IrField)
-	val clockFields = methods
-		.map { m ->
-			val clocks = m.params.mapNotNull { p ->
-				val td = (p.type as? IrType.Ref)?.let { ir.typeDef(it.lean) } ?: return@mapNotNull null
-				if (td.role != "clockPort") return@mapNotNull null
-				p.name to td
-			}
-			val byField = clocks.flatMap { c -> (c.second.shape as IrShape.Structure).fields.map { it.name to c } }.groupBy({ it.first }, { it.second })
-			for ((field, cs) in byField) if (cs.map { it.second.lean }.distinct().size > 1)
-				error("${s.name}.${m.name}: 型の違う時計 ${cs.joinToString("・") { it.first }} が同じ名前のフィールド $field を持ち、フックの引数 1 つでは値を分けられません")
-			clocks
-		}
-		.flatten()
-		.flatMap { (pn, td) -> (td.shape as IrShape.Structure).fields.map { it to pn } }
-		.groupBy { (f, _) -> f.name }
-		.map { (name, g) ->
-			val types = g.map { k.typeRef(it.first.type) }.distinct()
-			if (types.size > 1) error("${s.name}: 時計のフィールド $name の型が時計ごとに違い(${types.joinToString("・")})、フックの引数 1 つに写せません")
-			ClockField(g.map { it.second }.distinct(), g.first().first)
-		}
+	val clockFields = tests.clockFieldsOf(s, methods)
 	// 主体ポート: actor も署名から落ちる — 契約テストは**固定の主体**を
 	// 実装フックへ渡す(today と同格の決定的配線。値は各ケースの args が運ぶ)
 	val actorParams = methods

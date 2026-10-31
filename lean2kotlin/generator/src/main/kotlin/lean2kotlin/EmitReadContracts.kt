@@ -161,10 +161,11 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 	data class FactoryParam(
 		val name: String, val type: IrType, val fromRmField: IrField?,
 		val fromArgs: Boolean = false,
-		/** 時計のフィールドなら時計の引数名。 */
-		val clockParam: String? = null,
+		/** 時計のフィールドなら、それを受ける引数名(1 つ以上)。 */
+		val clockParams: List<String> = emptyList(),
 	)
 	val factoryParams = mutableListOf<FactoryParam>()
+	val clocks = clockFieldsOf(s, listOf(m)).associateBy { it.field.name }
 	// 参照系の配線を持たない配管(State・外部能力の観測・precise な入力)と役割 — note してケースを生成しない
 	val unwired = mutableListOf<Pair<IrField, String>>()
 	for (p in m.params.filter { k.isUseCasePlumbing(it.type) }) {
@@ -177,7 +178,8 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 					td.role == "readModel" && fields != null ->
 						for (f in fields) factoryParams += FactoryParam(f.name, f.type, f)
 					td.role == "clockPort" && fields != null ->
-						for (f in fields) factoryParams += FactoryParam(f.name, f.type, null, clockParam = p.name)
+						for (f in fields) if (factoryParams.none { it.name == f.name && it.clockParams.isNotEmpty() })
+							factoryParams += FactoryParam(f.name, f.type, null, clockParams = clocks.getValue(f.name).paramNames)
 					else -> unwired += p to (if (k.isPlumbing(t)) td.role else "precise な入力")
 				}
 			}
@@ -196,7 +198,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 		sb.append(" */\n")
 		sb.append("abstract class ${s.name}ContractTest {\n")
 		// 時計のフィールドはフックの引数に並ぶ — 遷移契約のフックと同じく何を渡すかを書く
-		val clockFields = factoryParams.filter { it.clockParam != null }
+		val clockFields = factoryParams.filter { it.clockParams.isNotEmpty() }
 		val clockDoc = if (clockFields.isNotEmpty())
 			"。時計は固定の ${clockFields.joinToString("・") { it.name }} を配線する(Clock ポート)" else ""
 		sb.append("\t/** 行と鍵を実装へ配線して返す(例: インメモリの読み取りストア)$clockDoc。 */\n")
@@ -223,7 +225,7 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 			val wired = factoryParams.map { fp ->
 				if (fp.fromRmField != null) synthesizeArg(fp.fromRmField.type, snap.state)
 				// golden の状態は時計を運ばない — 時計を受ける参照系の golden は合成できずスキップする
-				else if (fp.clockParam != null) null
+				else if (fp.clockParams.isNotEmpty()) null
 				else synthesizeArg(m.params.first { it.name == fp.name }.type, snap.state)
 			}
 			if (realArgs.any { it == null } || wired.any { it == null }) {
@@ -269,9 +271,9 @@ internal fun EmitTests.emitReadUseCaseContractTest(
 							return@forEachIndexed
 						}
 						k.literal(fp.type, j)
-					} else if (fp.clockParam != null) {
+					} else if (fp.clockParams.isNotEmpty()) {
 						// 時計(clockPort): 定理が選んだ日を配線する(ケースに無ければ既定値 — 遷移契約と同じ)
-						(case.args[fp.clockParam] as? JsonObject)?.get(fp.name)?.let { k.literal(fp.type, it) }
+						fp.clockParams.firstNotNullOfOrNull { (case.args[it] as? JsonObject)?.get(fp.name) }?.let { k.literal(fp.type, it) }
 							?: defaultLiteral(fp.type) ?: run {
 								log("  note: ${c.theorem}: 時計 ${fp.name} の値を構成できません")
 								return@forEachIndexed
