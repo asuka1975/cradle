@@ -1,6 +1,8 @@
 // 既存CLIを無変更で呼び出す。判定規則はこのアダプターに複製しない。
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { unslopErrorSummary } from "../.apm/skills/cradle/scripts/unslop-report.mjs";
+import { CHILD_OUTPUT_MAX } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 const scripts = new URL("../.apm/skills/cradle/scripts/", import.meta.url);
 
@@ -12,7 +14,7 @@ function run(script, args, cwd, input) {
   delete env.CRADLE_CONFIG;
   return new Promise((resolve, reject) => {
     const child = execFile("node", [fileURLToPath(new URL(script, scripts)), ...args], {
-      cwd, env, encoding: "utf8", timeout: 30000, maxBuffer: 4 * 1024 * 1024,
+      cwd, env, encoding: "utf8", timeout: 30000, maxBuffer: CHILD_OUTPUT_MAX,
     }, (error, stdout) => {
       // unslopは違反を見つけるとexit 1を返す。その他の失敗は握りつぶさない。
       if (error && !(script === "unslop-lint.mjs" && error.code === 1 && stdout.trim())) {
@@ -35,11 +37,8 @@ export function reminder(result) {
   return result?.reason ?? result?.hookSpecificOutput?.additionalContext;
 }
 
-// Piでは未初期化のGitリポジトリでも検査するため、既存CLIの--allを利用する。
+// --diffはGitの外で2で止まり、runはそれを失敗として投げる。PiではGitに依らない既存CLIの--allで設定のディレクトリ全部を検査する（Claude/CodexのStopの差分とは範囲が違う）。
 export async function checkAll(root) {
   const result = await run("unslop-lint.mjs", ["--all", "--json"], root);
-  const errors = result?.findings?.filter(f => f.severity === "error") ?? [];
-  if (!errors.length) return null;
-  const lines = errors.slice(0, 15).map(f => `- ${f.file}:${f.line} [${f.rule}] ${f.message}`);
-  return `unslop --all の検査対象にerrorが ${errors.length} 件あります。終了前に修正してください。\n${lines.join("\n")}${errors.length > 15 ? "\n…（cradle unslop --all で全件）" : ""}`;
+  return unslopErrorSummary(result?.findings ?? [], { lead: (n) => `unslop --all の検査対象にerrorが ${n} 件あります。終了前に修正してください。`, full: "cradle unslop --all" });
 }

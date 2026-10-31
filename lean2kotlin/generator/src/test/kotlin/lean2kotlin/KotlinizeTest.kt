@@ -41,6 +41,26 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `kdocBody は doc の行ごとに KDoc の行を作り、空の doc と段落の間の空行は行末に空白を残さない`() {
+		assertEquals(" * いま操作している利用者。", kdocBody("いま操作している利用者。 "))
+		assertEquals(" * 一段落目。\n *\n * 二段落目。", kdocBody("一段落目。\n\n  二段落目。\n"))
+		assertEquals(" *", kdocBody(""))
+	}
+
+	@Test
+	fun `kdocSafe は閉じる並びを先に崩し、崩した後の文にどちらの並びも残さない`() {
+		assertEquals("a* /b/ *c", kdocSafe("a*/b/*c"))
+		assertEquals("/ * /", kdocSafe("/*/"))
+		assertEquals("a * b / c と 2/3", kdocSafe("a * b / c と 2/3"))
+	}
+
+	@Test
+	fun `docLine と kdocBody は KDoc を閉じる並びと入れ子を開く並びを崩す`() {
+		assertEquals("置き場は Application/Port/ * / の下", docLine("置き場は Application/Port/*/ の下\n二行目"))
+		assertEquals(" * **読み** / **書き**\n * a/ *b", kdocBody("**読み**/**書き**\na/*b"))
+	}
+
+	@Test
 	fun `typeRef は IR の型を Kotlin の型に写す`() {
 		assertEquals("Long", k.typeRef(IrType.Nat))
 		assertEquals("String", k.typeRef(IrType.Str))
@@ -172,7 +192,7 @@ class KotlinizeTest {
 
 	@Test
 	fun `ふるまいは主体を取るものと主体を作るものに仕分けられる`() {
-		assertEquals(listOf("isOpen", "close"), k.instanceMethodsOf(td(note)).map { it.name })
+		assertEquals(listOf("close", "isOpen"), k.instanceMethodsOf(td(note)).map { it.name })
 		assertEquals(listOf("post"), k.factoryMethodsOf(td(note)).map { it.name })
 		assertTrue(k.instanceMethodsOf(td(title)).isEmpty())
 		assertEquals("id", k.idFieldName(td(note)))
@@ -250,6 +270,14 @@ class KotlinizeTest {
 	}
 
 	@Test
+	fun `constraintDoc は値の中の KDoc の区切りを崩す`() {
+		val titleField = (td(note).shape as IrShape.Structure).fields.single { it.name == "title" }
+		val key = Kotlinize.ConstraintKey(
+			IrConstraint("atMost", "atMostOneOdd", "notes", "title", op = "eq", value = json("{\"text\":\"*/ と /*\"}"), max = 1), titleField)
+		assertEquals("atMostOneOdd: title = {\"text\":\"* / と / *\"} は高々 1 件", k.constraintDoc(key))
+	}
+
+	@Test
 	fun `collecting は参照した型と Arb と fixture を集める`() {
 		val (_, c) = k.collecting {
 			k.typeRef(IrType.Ref(noteId))
@@ -259,5 +287,26 @@ class KotlinizeTest {
 		assertEquals(setOf(noteId), c.refs)
 		assertEquals(setOf("NoteView"), c.arbs)
 		assertEquals(setOf(note), c.fixtures)
+	}
+
+	@Test
+	fun `入れ子の collecting から戻ると外側の収集が続き、内側の参照は内側にだけ集まる`() {
+		val (inner, outer) = k.collecting {
+			k.typeRef(IrType.Ref(noteId))
+			val (_, inner) = k.collecting {
+				k.typeRef(IrType.Ref(userId))
+				k.arbOf(IrType.Ref(noteView))
+			}
+			k.typeRef(IrType.Ref(title))
+			k.arbOf(IrType.Ref(noteId))
+			k.fixtureName(td(note))
+			inner
+		}
+		assertEquals(setOf(userId), inner.refs)
+		assertEquals(setOf("NoteView"), inner.arbs)
+		assertEquals(emptySet(), inner.fixtures)
+		assertEquals(setOf(noteId, title), outer.refs)
+		assertEquals(setOf("NoteId"), outer.arbs)
+		assertEquals(setOf(note), outer.fixtures)
 	}
 }

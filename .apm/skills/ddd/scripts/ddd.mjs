@@ -6,23 +6,20 @@
 //   ddd.mjs end [--abandon]           questions.md・naming.md を消し、ddd-clean-check --build に .session（開始時点の lean/）を渡す。通れば .session も消す（answers を中継した後でだけ通る。問いを捨てるなら --abandon）
 //   ddd.mjs status                    プロダクトの一言・出来事数・open の HS/UX/MQ・用語数・命名の確認待ち
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, leanSnapshot, git, rel, productLine, PRODUCT_PLACEHOLDER } from "../../cradle/scripts/lib.mjs";
+import { loadConfigOrFail, parseArgs, jsonArg, fail, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, leanSnapshot, leanGitStatus, sha256, readText, rel, productLine, PRODUCT_PLACEHOLDER, DDD_FILES, DDD_QUESTION_IDS, countEvents, countStatusRows, cradleScript, headerUsage } from "../../cradle/scripts/lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { abandon: "bool", "no-build": "bool", help: "bool" });
 const [cmd, arg] = opts._;
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const ddd = join(cfg.root, cfg.documents.ddd);
-const FILES = ["event-timeline.md", "hotspots.md", "ubiquitous-language.md", "ux-review.md", "model-review.md"];
 const qfile = join(ddd, "questions.md");
 const nfile = join(ddd, "naming.md");
 const marker = join(ddd, ".session");
 const timeline = join(ddd, "event-timeline.md");
 // .session には開始時点の lean/ の sha256、問いの版（sha256）、その版の回答を answers で中継したかを記録する。
 // end は lean/ を開始時点と比べ（HEAD と比べると未コミットの形式化が差分に出る）、explorer が回答を受け取らないまま片付けるのを止める。
-const sha = (t) => createHash("sha256").update(t).digest("hex");
 const readSession = () => { try { return JSON.parse(readFileSync(marker, "utf8")); } catch { return null; } };
 const writeSession = (s) => writeFileSync(marker, JSON.stringify(s) + "\n");
 // lean/ が骨格のサンプル（メモ）のままなら、プローブもモックアップも無い巡になる（サンプルは実ドメインではない）
@@ -30,15 +27,11 @@ const scaffold = scaffoldSampleFiles(cfg).length > 0;
 // 形式化が付けた名前のうち用語集に行が無いもの。用語集が唯一の正本で、行が立てば一覧から消える
 const unlistedNames = () => { const glossary = glossaryEnglish(cfg); return leanVocabulary(cfg).filter(v => !glossary.has(v.name.toLowerCase())); };
 
-function countRows(text, idRe, statusRe) {
-  return (text.match(new RegExp(`^\\|\\s*${idRe}\\s*\\|.*\\|\\s*${statusRe}\\s*\\|`, "gm")) ?? []).length;
-}
-
 switch (cmd) {
   case "start": {
     // 前のセッションの印が残ったまま記録し直すと、残っているプローブが「開始時点」に入って end を通る
     if (existsSync(marker)) fail(`前のセッション（${cfg.documents.ddd}/.session）が end されていません。プローブを片付けて ddd.mjs end を先に実行する。前の探索は終わっていて lean/ の変更が形式化（フェーズ 2）なら、${cfg.documents.ddd}/.session を消してから start する`);
-    const missing = FILES.filter(f => !existsSync(join(ddd, f)));
+    const missing = DDD_FILES.filter(f => !existsSync(join(ddd, f)));
     if (missing.length) fail(`${cfg.documents.ddd}/ に無いファイル: ${missing.join(", ")}（cradle-init スキルで骨格を作る）`);
     // プロダクトの一言（event-timeline.md 冒頭の `プロダクト:` 行）は探索役の最初の問いの出発点。無いまま始めない
     if (opts.domain !== undefined) {
@@ -56,7 +49,8 @@ switch (cmd) {
     writeSession({ theme: opts.theme ?? null, scaffold, lean: leanSnapshot(cfg) });
     console.log(`セッション開始（${cfg.documents.ddd}/.session）。終わりに ddd.mjs end を必ず実行する。`);
     let uncommitted = "";
-    try { uncommitted = git(cfg.root, ["status", "--porcelain", "--", cfg.lean.dir]); } catch {}
+    // lake build が書く lake-manifest.json は数えない（初回のビルドの後に毎回「前回の形式化？」と言わない）
+    try { uncommitted = leanGitStatus(cfg); } catch {}
     if (uncommitted) console.log(`${cfg.lean.dir}/ に未コミットの差分がある（前回の形式化？）。end はこの時点と比べるので探索の邪魔にはならないが、プローブの戻しに git checkout / stash を使うとこの差分ごと消える — 戻すのは編集を手で。`);
     if (scaffold) console.log(`${cfg.lean.dir}/ は骨格のサンプルドメイン（メモ）のまま。実ドメインではないので探索の根拠にせず、この巡はプローブもモックアップも使わない（questions.md にモックアップ欄は出ない）。`);
     else {
@@ -95,7 +89,7 @@ switch (cmd) {
       lines.push("", "**回答:**", "", "<!-- 選択肢の記号か、自由に書いてください。「前提が違う」「問いが成り立たない」もそのまま。 -->", "");
     });
     writeFileSync(qfile, lines.join("\n"));
-    writeSession({ ...(readSession() ?? { theme: null }), questions: sha(lines.join("\n")), answered: null });
+    writeSession({ ...(readSession() ?? { theme: null }), questions: sha256(lines.join("\n")), answered: null });
     console.log(`${cfg.documents.ddd}/questions.md に ${j.questions.length} 問を書いた。${scaffold ? "骨格のサンプルのままなのでプローブ欄は無い。" : "プローブ名は仮置き（用意できない選択肢は — と理由に書き換える）。"}`);
     break;
   }
@@ -112,40 +106,43 @@ switch (cmd) {
     }
     console.log(out.join("\n\n"));
     const s = readSession();
-    if (s) writeSession({ ...s, answered: sha(text) });
+    if (s) writeSession({ ...s, answered: sha256(text) });
     break;
   }
   case "end": {
     const s = readSession();
     if (existsSync(qfile) && !opts.abandon) {
-      if (!s || s.answered !== sha(readFileSync(qfile, "utf8"))) fail("questions.md の回答がまだ中継されていません。ddd.mjs answers を実行して出力を explorer に返してから end する。問いを捨てて終えるなら --abandon（ユーザーがそう決めたときだけ）");
+      if (!s || s.answered !== sha256(readFileSync(qfile, "utf8"))) fail("questions.md の回答がまだ中継されていません。ddd.mjs answers を実行して出力を explorer に返してから end する。問いを捨てて終えるなら --abandon（ユーザーがそう決めたときだけ）");
     }
     // 開始時点の記録（.session）は検査が通るまで残す — 残骸を消して end をやり直すときも同じ基準で比べる。記録の無い印（start を経ていない）は先に消し、検査は HEAD と比べる
     const baseline = s?.lean ? ["--baseline", marker] : [];
     for (const f of [qfile, nfile, ...(baseline.length ? [] : [marker])]) if (existsSync(f)) unlinkSync(f);
-    const r = spawnSync(process.execPath, [join(import.meta.dirname, "..", "..", "cradle", "scripts", "ddd-clean-check.mjs"), ...(opts["no-build"] ? [] : ["--build"]), ...baseline], { cwd: cfg.root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-    process.stdout.write(r.stdout ?? ""); process.stderr.write(r.stderr ?? "");
+    // 検査の出力は読まずに写すだけなので、子に stdout / stderr を渡す（パイプで受けると読み取りの上限で行の途中から先を落とす）
+    const r = spawnSync(process.execPath, [cradleScript("ddd-clean-check.mjs"), ...(opts["no-build"] ? [] : ["--build"]), ...baseline], { cwd: cfg.root, stdio: ["ignore", "inherit", "inherit"] });
+    // 起動できなければ検査の結果は無い。.session を残し、2（検査できなかった）で終わる
+    if (r.error) { process.stderr.write(`cradle: ddd-clean-check を走らせられませんでした: ${r.error.message}\n`); process.exitCode = 2; break; }
     if (r.status === 0 && baseline.length) unlinkSync(marker);
-    process.exit(r.status ?? 1);
+    // 終了コードは検査のもの（signal で止まれば status は null なので 1）
+    process.exitCode = r.status ?? 1;
+    break;
   }
   case "status": {
-    const read = (f) => existsSync(join(ddd, f)) ? readFileSync(join(ddd, f), "utf8") : "";
+    const read = (f) => readText(join(ddd, f));
     const tl = read("event-timeline.md");
-    const events = (tl.match(/^\|\s*\d+(?:\.\d+)?[a-z]?\s*\|/gm) ?? []).length;
+    const events = countEvents(tl);
     const hs = read("hotspots.md"), ux = read("ux-review.md"), mq = read("model-review.md"), ul = read("ubiquitous-language.md");
-    const terms = (ul.match(/^\|(?!\s*用語)(?!---)[^|]+\|/gm) ?? []).length;
+    const { "hotspots.md": hsId, "ux-review.md": uxId, "model-review.md": mqId } = DDD_QUESTION_IDS;
+    // 用語は表のデータ行。見出しと区切り行（Prettier の | --- | や揃えの |:---| も）は数えない
+    const terms = tableRows(ul).length;
     console.log(JSON.stringify({
       product: productLine(cfg).value,
-      events, hotspots: { open: countRows(hs, "HS-\\d+", "open"), resolved: countRows(hs, "HS-\\d+", "resolved") },
-      ux: { open: countRows(ux, "UX-\\d+", "open") }, mq: { open: countRows(mq, "MQ-\\d+", "open") }, terms,
+      events, hotspots: { open: countStatusRows(hs, hsId, "open"), resolved: countStatusRows(hs, hsId, "resolved") },
+      ux: { open: countStatusRows(ux, uxId, "open") }, mq: { open: countStatusRows(mq, mqId, "open") }, terms,
       session: existsSync(marker), questionsPending: existsSync(qfile), namingPending: scaffold ? 0 : unlistedNames().length, scaffoldSample: scaffold,
     }, null, 2));
     break;
   }
   default:
-    // 使い方は先頭の連続したコメント行（本文のコメントは含めない）
-    const usage = [];
-    for (const l of readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1)) { if (!l.startsWith("//")) break; usage.push(l.slice(3)); }
-    console.log(usage.join("\n"));
+    console.log(headerUsage(import.meta.url));
     process.exit(cmd ? 1 : 0);
 }

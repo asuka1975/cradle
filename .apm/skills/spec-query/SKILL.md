@@ -12,7 +12,7 @@ description: Use whenever a question is about what the specification says or doe
 
 | 問い | 手順 |
 |---|---|
-| 「どんな操作がある / 無い」「どんな失敗がある」「外から何が届く」 | `spec-query meta` → commands / observations（内部入力: 通知・契機。利用者の操作ではない）/ ports / errors をそのまま示す。無いものは「モデルに無い（反機能の一覧 `Runtime/Command.lean` を確認）」と答える |
+| 「どんな操作がある / 無い」「どんな失敗がある」「外から何が届く」 | `spec-query meta` → commands / observations（内部入力: 通知・契機。利用者の操作ではない）/ ports / errors をそのまま示す。無いものは「モデルに無い（反機能の一覧 `Runtime/Command.lean` を確認）」と答える。ただし meta の末尾に `evalErrors` があれば、その鍵の一覧（commands / observations / errors / schemas / observationSchemas）は Lean を評価できておらず空か欠けている — 「モデルに無い」と言わず `evalErrors` の理由を示し、ビルドを直して（`cd lean && lake build`。lake が無ければ `cradle doctor`）引き直すか `spec-query print <FullName>` で確かめる |
 | 「このコマンドは何を受け取る」「この型の中身」 | `spec-query print <FullName>`（例: `MonoWa.Application.PostIntentUseCase.Command`） |
 | 「この状況で X が Y したらどうなる」 | 1) `spec-query scenarios` で出発点を選ぶ 2) 必要なら `spec-query init --scenario S --viewer V` で盤面を見る 3) `spec-query run --scenario S --actor A --viewer V --today D --commands '[…]'` で手を打つ 4) 各手の ok / domainError と最後の views を引用 |
 | 「外部が〜と答えたら」「通知が届いたら」「途中で落ちたら」 | Port を使う手・内部入力の手は `spec-query external flow --scenario S --environment N --inputs '[…]'`（環境の名前は `spec-query environments`。script そのものは `--env @file`。1 手ずつなら `external init` → `external step --state @file --env @file --input J`）。入力は `{"command":…,"actor":…}` か `{"observation":…}`、障害契約の指名は `"fault":"<def 名>"`。各手の result（applied / refused / fault）と環境の cursor、`harnessError` なら環境と入力列の不一致（業務の答えではない）を引用。旧 `run` は環境を持たないので Port を使う手はプロトコルエラーになる |

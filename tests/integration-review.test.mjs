@@ -1,19 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createJiti } from "jiti";
-import { callHook } from "../integrations/hook-client.mjs";
+import { callHook, checkAll } from "../integrations/hook-client.mjs";
+import { tempProject } from "./helpers.mjs";
 
 const jiti = createJiti(import.meta.url);
 const piExtension = (await jiti.import("../integrations/pi/index.ts")).default;
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-review-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-review-");
   mkdirSync(join(root, "lean"));
   return root;
 }
@@ -66,6 +64,16 @@ test("hook委譲は設定された保護領域を利用し、不明な設定を�
     assert.equal(result.hookSpecificOutput.permissionDecision, "deny");
   }
   assert.equal(await callHook("pre-guard", { cwd: root, tool_name: "Edit", tool_input: { path: "documents/developer/a.md" } }), null);
+});
+
+// 20000 件の unslop --all --json は 4.8MB 余りで、execFile の maxBuffer を 4MB にしていたときは読めなかった
+test("checkAllはunslop --all --jsonが大きくても全部読んで要約する", async t => {
+  const root = fixture(t);
+  mkdirSync(join(root, "e2e"));
+  writeFileSync(join(root, "e2e/flow.ts"), Array.from({ length: 20000 }, (_, i) => `// 手 ${i + 1} は未決\n`).join("") + "export const y = 1;\n");
+  const summary = await checkAll(root);
+  assert.match(summary, /^unslop --all の検査対象にerrorが 20000 件あります。/);
+  assert.match(summary, /…（cradle unslop --all で全件）$/);
 });
 
 test("doctorはjsonとjsoncのpluginパスを認識する", t => {

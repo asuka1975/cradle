@@ -41,6 +41,34 @@ fun stringLit(s: String): String {
 	return sb.append('"').toString()
 }
 
+/** KDoc に写す文の、コメントを閉じる並び(`*` の後に `/`)と入れ子のコメントを開く並び(`/` の後に `*`)に空白を挟む。
+    Kotlin のブロックコメントは入れ子になるので、残すと KDoc が途中で閉じるかファイルの終わりまで閉じない。
+    閉じる側を先に崩せば、崩した後の文にどちらの並びも残らない。 */
+internal fun kdocSafe(s: String): String = s.replace("*/", "* /").replace("/*", "/ *")
+
+/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。KDoc の区切りは kdocSafe で崩す。 */
+internal fun docLine(doc: String): String? =
+	doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let(::kdocSafe)
+
+/** メンバ 1 つ分の 1 行 KDoc。doc が空なら何も出さない。 */
+internal fun kdocLine(doc: String): String = docLine(doc)?.let { "\t/** $it */\n" } ?: ""
+
+/** doc の全文を KDoc の本文(行ごとに ` * `)にする。空の行は ` *` だけにして行末に空白を残さない。 */
+internal fun kdocBody(doc: String): String = kdocSafe(doc).trim().lineSequence()
+	.joinToString("\n") { l -> l.trim().let { if (it.isEmpty()) " *" else " * $it" } }
+
+/** 定理由来のケースのテスト名。利用者のテストレポートに出る名前なので文言を変えない。 */
+internal fun theoremTestName(method: String, theorem: String, i: Int): String =
+	"$method は定理 $theorem を再現する(${i + 1})"
+
+private val TEST_NAME_ILLEGAL = Regex("""[.;\[\]/<>:\\`\r\n]""")
+
+/** バッククォートのテスト名に埋める外来の文字列(golden の出どころ = ファイル名の接頭辞)。JVM はバッククォートの中でも
+    `. ; [ ] / < > : \` を名前に許さず、Kotlin はバッククォートの名前にバッククォートと改行を許さないので _ にする。
+    ほかの文字(#・空白・括弧・日本語)はそのまま残す。
+    単射でないので、写すと同じになる golden の組は Golden.load が error にして読まない。 */
+internal fun testNameSafe(s: String): String = s.replace(TEST_NAME_ILLEGAL, "_")
+
 /** ファイル単位の参照収集の結果(インポート計算用)。 */
 data class Collected(val refs: Set<String>, val arbs: Set<String>, val fixtures: Set<String>)
 
@@ -52,16 +80,19 @@ class Kotlinize(private val ir: Ir) {
 	private var arbSink: MutableSet<String>? = null
 	private var fixtureSink: MutableSet<String>? = null
 
-	/** block 中に参照された生成型(lean 名)・Arb 関数・fixture(lean 名)を収集する。 */
+	/** block 中に参照された生成型(lean 名)・Arb 関数・fixture(lean 名)を収集する。
+	    本文を作る Kotlinize の呼び出しは block の内側で行う(外の呼び出しは import に載らない)。 */
 	fun <T> collecting(block: () -> T): Pair<T, Collected> {
 		val r = mutableSetOf<String>()
 		val a = mutableSetOf<String>()
 		val f = mutableSetOf<String>()
+		// 入れ子で呼ばれても、戻った後は外側の収集を続ける
+		val outerRefs = refSink; val outerArbs = arbSink; val outerFixtures = fixtureSink
 		refSink = r; arbSink = a; fixtureSink = f
 		try {
 			return block() to Collected(r, a, f)
 		} finally {
-			refSink = null; arbSink = null; fixtureSink = null
+			refSink = outerRefs; arbSink = outerArbs; fixtureSink = outerFixtures
 		}
 	}
 
@@ -95,13 +126,10 @@ class Kotlinize(private val ir: Ir) {
 		return "${td.kotlin}Fixture"
 	}
 
-	// ───────────────────────── fixture 語彙の閉包
+	/** 実体化フック(fixture → 実装)の名前。先頭を小文字にした Kotlin 名はキーワードになりうる(Package → package)。 */
+	fun materializerName(td: IrTypeDef): String = ident(decapitalizeFirst(td.kotlin))
 
-	private fun shapeFieldTypes(td: IrTypeDef): List<IrType> = when (val s = td.shape) {
-		is IrShape.Structure -> s.fields.map { it.type }
-		is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.map { it.type } }
-		else -> emptyList()
-	}
+	// ───────────────────────── fixture 語彙の閉包
 
 	/** 型が entity-like(interface+fixture)へ shape を通じて到達するか。 */
 	fun reachesEntityLike(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
@@ -109,7 +137,7 @@ class Kotlinize(private val ir: Ir) {
 			val td = ir.typeDef(t.lean)
 			if (isEntityLike(td)) true
 			else if (!seen.add(t.lean)) false
-			else shapeFieldTypes(td).any { reachesEntityLike(it, seen) }
+			else td.fieldTypes().any { reachesEntityLike(it, seen) }
 		}
 		is IrType.ListOf -> reachesEntityLike(t.of, seen)
 		is IrType.OptionOf -> reachesEntityLike(t.of, seen)
@@ -123,7 +151,7 @@ class Kotlinize(private val ir: Ir) {
 	fun reachesRole(t: IrType, role: String, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Ref -> {
 			val td = ir.typeDef(t.lean)
-			td.role == role || (seen.add(t.lean) && shapeFieldTypes(td).any { reachesRole(it, role, seen) })
+			td.role == role || (seen.add(t.lean) && td.fieldTypes().any { reachesRole(it, role, seen) })
 		}
 		is IrType.ListOf -> reachesRole(t.of, role, seen)
 		is IrType.OptionOf -> reachesRole(t.of, role, seen)
@@ -136,7 +164,7 @@ class Kotlinize(private val ir: Ir) {
 	/** 型が関数型へ shape を通じて到達するか(値で比較できない — Port の要求・観測に置けない)。 */
 	fun reachesArrow(t: IrType, seen: MutableSet<String> = mutableSetOf()): Boolean = when (t) {
 		is IrType.Arrow -> true
-		is IrType.Ref -> seen.add(t.lean) && shapeFieldTypes(ir.typeDef(t.lean)).any { reachesArrow(it, seen) }
+		is IrType.Ref -> seen.add(t.lean) && ir.typeDef(t.lean).fieldTypes().any { reachesArrow(it, seen) }
 		is IrType.ListOf -> reachesArrow(t.of, seen)
 		is IrType.OptionOf -> reachesArrow(t.of, seen)
 		is IrType.PairOf -> reachesArrow(t.fst, seen) || reachesArrow(t.snd, seen)
@@ -152,11 +180,14 @@ class Kotlinize(private val ir: Ir) {
 	val fixtureBridged: Set<String> by lazy {
 		ir.types.filter { td ->
 			td.role == "valueObject" && !td.isId && !isEntityLike(td) &&
-				shapeFieldTypes(td).any { reachesEntityLike(it) }
+				td.fieldTypes().any { reachesEntityLike(it) }
 		}.map { it.lean }.toSet()
 	}
 
 	fun isFixtureBridged(lean: String): Boolean = lean in fixtureBridged
+
+	/** fixture 語彙(<X>Fixture)で表す型: entity-like と橋渡し型。 */
+	fun isFixtureVocab(td: IrTypeDef): Boolean = isEntityLike(td) || isFixtureBridged(td.lean)
 
 	/** fixture 語彙での型表現: Entity / 集約ルート・橋渡し型(entity-like を運ぶ
 	    sealed / VO 構造)の参照を fixture 型に置き換える
@@ -164,10 +195,13 @@ class Kotlinize(private val ir: Ir) {
 	fun typeRefFixture(t: IrType): String = when (t) {
 		is IrType.Ref -> {
 			val td = ir.typeDef(t.lean)
-			if (isEntityLike(td) || isFixtureBridged(t.lean)) fixtureName(td) else typeRef(t)
+			if (isFixtureVocab(td)) fixtureName(td) else typeRef(t)
 		}
 		is IrType.ListOf -> "List<${typeRefFixture(t.of)}>"
 		is IrType.OptionOf -> "${typeRefFixture(t.of)}?"
+		// 対と結果の中も reachesEntityLike と同じく降りる(中身が届かなければ typeRef と同じ形)
+		is IrType.PairOf -> "Pair<${typeRefFixture(t.fst)}, ${typeRefFixture(t.snd)}>"
+		is IrType.Result -> "DomainResult<${typeRefFixture(t.err)}, ${typeRefFixture(t.ok)}>"
 		is IrType.WithDefault -> typeRefFixture(t.of)
 		else -> typeRef(t)
 	}
@@ -214,9 +248,43 @@ class Kotlinize(private val ir: Ir) {
 	/** 入力語彙の役割: 利用者の Command と内部入力の Observation。ふるまい・Arb を持たず、値は定理由来のケースが運ぶ。 */
 	fun isInputRole(role: String): Boolean = role == "command" || role == "observation"
 
+	private val plumbingRoles = setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
+	private val preciseInputRoles = setOf("aggregateRoot", "entity", "readModelRow")
+
+	/** モデル配管(観測の Set・乱択の鍵・時計・主体・外部能力の観測)— 本番署名から落とし、実装の配線とする。 */
+	fun isPlumbing(t: IrType): Boolean = when (t) {
+		is IrType.Ref -> ir.typeDef(t.lean).role in plumbingRoles
+		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
+			t.to == IrType.Nat
+		else -> false
+	}
+
+	/**
+	 * precise な入力(lookup 結果・採番列)の判定: 参照の葉がすべて
+	 * Id・集約ルート・Entity・Row のもの。ペイロード(Command / Query / View の DTO)は
+	 * 残る。UseCase の固定形にのみ適用する(DomainService の resolve の lu/nid 等は
+	 * ドメイン語彙なので落とさない)。
+	 */
+	fun isPreciseInput(t: IrType): Boolean {
+		// 内部入力(Observation)は相関 Id だけを運んでも入力。leafRefs は構造体の中へ降りないので今は到達しない —
+		// 降りる変更への防波堤として明示しておく
+		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
+		val refs = t.leafRefs()
+		return refs.isNotEmpty() && refs.all {
+			val td = ir.typeDef(it)
+			td.isId || td.role in preciseInputRoles
+		}
+	}
+
+	/** UseCase の固定形で本番署名から落ちる引数(配管と precise な入力)。契約テストの呼び出し引数もこれで決まる。 */
+	fun isUseCasePlumbing(t: IrType): Boolean = isPlumbing(t) || isPreciseInput(t)
+
 	/** Repository の在処: ドメインの持ち物だが、Entity / ValueObject と同格の
 	    専用ディレクトリを切る。 */
 	val repositoryPackage = "domain.repository"
+
+	/** 泉(IdGenerator ポート)の在処。interface(main)と契約テストの import が同じ値を使う。 */
+	val fountainPortPackage = "application"
 
 	/** Repository 操作の導出(ドメインの遷移から許可されるものだけ)。add / update は観測モデル
 	    (`<Root>RepositoryState`)の同名の操作(保存に要る証明を引数に取る add / update)から導く。
@@ -225,11 +293,7 @@ class Kotlinize(private val ir: Ir) {
 	fun repoOps(td: IrTypeDef): RepoOps {
 		val idLean = (td.id as? IrType.Ref)?.lean
 		val find = idLean != null && ir.types.any { c ->
-			isInputRole(c.role) && when (val sh = c.shape) {
-				is IrShape.Structure -> sh.fields.any { it.type.leafRefs().contains(idLean) }
-				is IrShape.Sealed -> sh.ctors.any { ct -> ct.fields.any { it.type.leafRefs().contains(idLean) } }
-				else -> false
-			}
+			isInputRole(c.role) && c.fieldTypes().any { it.leafRefs().contains(idLean) }
 		}
 		val stateOps = rootCollectionOf(td)?.let { rc ->
 			ir.behaviors.find { it.subject == rc.state.lean }?.methods?.map { it.name }
@@ -291,15 +355,15 @@ class Kotlinize(private val ir: Ir) {
 		return "x.${ident(key.field.name)} $cmp ${valueLiteral(key)}"
 	}
 
-	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。 */
+	/** 制約の一言(生成 KDoc 用): 一意性はフィールド名、all / atMost は述語と上限。値は文字列も運ぶので kdocSafe を通す。 */
 	fun constraintDoc(key: ConstraintKey): String {
 		val c = key.constraint
 		val pred = { "${key.field.name} ${if (c.op == "ne") "≠" else "="} ${c.value}" }
-		return when (c.kind) {
+		return kdocSafe(when (c.kind) {
 			"all" -> "${c.name}: 全件 ${pred()}"
 			"atMost" -> "${c.name}: ${pred()} は高々 ${c.max} 件"
 			else -> "${c.name}: ${key.field.name}"
-		}
+		})
 	}
 
 	/** 列 xs を制約どおりにする式。unique は distinctBy、uniqueSome は値のある要素だけ初出を残す。
@@ -340,16 +404,23 @@ class Kotlinize(private val ir: Ir) {
 	/** UseCase が使う Port を Port 名順に(契約テストのフック引数の並び)。 */
 	fun portsOf(s: IrService): List<IrPort> = s.ports.map { ir.port(it.port) }.distinctBy { it.name }.sortedBy { it.name }
 
+	/** 泉の状態(@[repositoryState] の `<X>IdGeneratorState`)か。 */
+	fun isFountainState(td: IrTypeDef): Boolean =
+		td.role == "repositoryState" && td.kotlin.endsWith("IdGeneratorState")
+
+	/** 泉の状態 `<X>IdGeneratorState` が供給する Id 型の Kotlin 名 `<X>Id`。対になる Id 型が無い泉の検査(Runner)も同じ名前を引く。 */
+	fun fountainIdName(st: IrTypeDef): String = st.kotlin.removeSuffix("IdGeneratorState") + "Id"
+
 	/** 泉(IdGenerator ポート)の導出:
 	    @[repositoryState] の `<X>IdGeneratorState` ↔ ポート `<X>IdGenerator`
 	    (命名規約 `<X>State ↔ <X>` — RepositoryState.lean)。供給する Id 型は
 	    `<X>Id`。表現(Long 連番 / UUID)はモデルの具体化の写し。 */
 	data class FountainPort(val stateTd: IrTypeDef, val port: String, val idTd: IrTypeDef)
 	fun fountainPorts(): List<FountainPort> =
-		ir.types.filter { it.role == "repositoryState" && it.kotlin.endsWith("IdGeneratorState") }
+		ir.types.filter { isFountainState(it) }
 			.mapNotNull { st ->
-				val prefix = st.kotlin.removeSuffix("IdGeneratorState")
-				val idTd = ir.types.find { it.isId && it.kotlin == prefix + "Id" }
+				val idName = fountainIdName(st)
+				val idTd = ir.types.find { it.isId && it.kotlin == idName }
 					?: return@mapNotNull null
 				FountainPort(st, st.kotlin.removeSuffix("State"), idTd)
 			}.sortedBy { it.port }
@@ -411,6 +482,13 @@ class Kotlinize(private val ir: Ir) {
 		return matches.single().name
 	}
 
+	/** 同一性フィールド(Id 型の Ref を運ぶ最初のフィールド)。id が Ref でない・structure でない・見つからなければ null。
+	    一致が一意かは見ない(一意を求めるのは idFieldName)。 */
+	fun idFieldOf(td: IrTypeDef): IrField? {
+		val idLean = (td.id as? IrType.Ref)?.lean ?: return null
+		return (td.shape as? IrShape.Structure)?.fields?.find { (it.type as? IrType.Ref)?.lean == idLean }
+	}
+
 	/** sealed のコンストラクタ名 → Kotlin のサブクラス名。 */
 	fun ctorClassName(ctor: String): String = capitalizeFirst(ctor)
 
@@ -470,10 +548,9 @@ class Kotlinize(private val ir: Ir) {
 			else {
 				val o = j.jsonObject
 				val args = shape.fields.joinToString(", ") { f ->
-					require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
-					"${ident(f.name)} = ${literal(f.type, o.getValue(f.name))}"
+					"${ident(f.name)} = ${literal(f.type, fieldJson(td, o, f))}"
 				}
-				val ctor = if (isEntityLike(td) || isFixtureBridged(td.lean)) fixtureName(td) else td.kotlin
+				val ctor = if (isFixtureVocab(td)) fixtureName(td) else td.kotlin
 				"$ctor($args)"
 			}
 		}
@@ -488,28 +565,60 @@ class Kotlinize(private val ir: Ir) {
 			// literal() が fixture に写すため、本番 sealed に埋めると型が合わない。
 			// 本番語彙での構築(コマンド入力)は inputLiteral 側の仕事
 			val base = if (isFixtureBridged(td.lean)) fixtureName(td) else td.kotlin
-			// 引数なし ctor は "name"(文字列)、引数あり ctor は {"name": {"arg": ...}}
-			if (j is JsonPrimitive) {
-				val ctor = shape.ctors.find { it.name == j.content }
-					?: error("${td.lean}: 不明なコンストラクタ ${j.content}")
-				require(ctor.fields.isEmpty())
-				"$base.${ctorClassName(ctor.name)}"
-			} else {
-				val o = j.jsonObject
-				require(o.size == 1) { "${td.lean}: sealed 値の JSON が不正です: $j" }
-				val (name, body) = o.entries.single()
-				val ctor = shape.ctors.find { it.name == name }
-					?: error("${td.lean}: 不明なコンストラクタ $name")
-				if (ctor.fields.isEmpty()) "$base.${ctorClassName(name)}"
-				else {
-					val bo = body.jsonObject
-					val args = ctor.fields.joinToString(", ") { f ->
-						"${ident(f.name)} = ${literal(f.type, bo.getValue(f.name))}"
-					}
-					"$base.${ctorClassName(name)}($args)"
-				}
+			val (ctor, bo) = sealedCtorOf(td, shape, j)
+			if (bo == null) "$base.${ctorClassName(ctor.name)}"
+			else {
+				val args = readingCtorArgs(td, ctor, j) { ctor.fields.joinToString(", ") { f ->
+					"${ident(f.name)} = ${literal(f.type, fieldJson(td, bo, f))}"
+				} }
+				"$base.${ctorClassName(ctor.name)}($args)"
 			}
 		}
+	}
+
+	/** td の値(構造体、または sealed の構成子の引数)の JSON o から、フィールド f の値を取り出す(無ければ生成を止める)。 */
+	fun fieldJson(td: IrTypeDef, o: JsonObject, f: IrField): JsonElement {
+		require(f.name in o) { "${td.lean}.${f.name}: JSON に無い" }
+		return o.getValue(f.name)
+	}
+
+	/** sealed 値の JSON を構成子とその引数の object に分ける。引数なし ctor は "name"(文字列)、
+	    引数あり ctor は {"name": {"arg": ...}}。引数の無い ctor の引数は null(JSON の中身を読まない)。
+	    名前の無い引数を持つ ctor は Lean の derive した ToJson の形でも来る(ctorArgs)。 */
+	fun sealedCtorOf(td: IrTypeDef, shape: IrShape.Sealed, j: JsonElement): Pair<IrCtor, JsonObject?> {
+		if (j is JsonPrimitive) {
+			val ctor = shape.ctors.find { it.name == j.content }
+				?: error("${td.lean}: 不明なコンストラクタ ${j.content}")
+			require(ctor.fields.isEmpty())
+			return ctor to null
+		}
+		val o = j.jsonObject
+		require(o.size == 1) { "${td.lean}: sealed 値の JSON が不正です: $j" }
+		val (name, body) = o.entries.single()
+		val ctor = shape.ctors.find { it.name == name }
+			?: error("${td.lean}: 不明なコンストラクタ $name")
+		return ctor to (if (ctor.fields.isEmpty()) null else ctorArgs(td, ctor, body))
+	}
+
+	/** 名前の無い引数を持つ ctor の引数を読む。単一の引数は何でも欄名の鍵に包むので(ctorArgs)、形違いは中の読み手の kotlinx の例外になる —
+	    型と構成子の文にして止める(単一の引数が arg0 という欄を持つ structure の derive の形もここに来る)。 */
+	fun <T> readingCtorArgs(td: IrTypeDef, ctor: IrCtor, j: JsonElement, read: () -> T): T {
+		if (ctor.fields.withIndex().none { (i, f) -> f.name == "arg$i" }) return read()
+		return try { read() } catch (e: RuntimeException) {
+			error("${td.lean}.${ctor.name}: 構成子の引数の JSON が不正です: ${j.jsonObject.values.single()}(${e.message})")
+		}
+	}
+
+	/** 構成子の引数の JSON を欄名の鍵の object に揃える。名前の無い引数(欄名 arg<序数>)を持つ ctor は、抽出器の ctor 分解と
+	    合成シリアライザなら欄名の鍵で、derive した ToJson(golden と、インスタンスを通ったオラクル)なら
+	    引数 1 つは裸の値、2 つ以上は(名前のある引数が混ざっても)配列で書かれる。 */
+	private fun ctorArgs(td: IrTypeDef, ctor: IrCtor, body: JsonElement): JsonObject {
+		val fields = ctor.fields
+		val unnamed = fields.withIndex().any { (i, f) -> f.name == "arg$i" }
+		if (body is JsonObject && (!unnamed || fields.all { it.name in body })) return body
+		if (unnamed && fields.size == 1) return JsonObject(mapOf(fields.single().name to body))
+		if (unnamed && body is JsonArray && body.size == fields.size) return JsonObject(fields.map { it.name }.zip(body).toMap())
+		error("${td.lean}.${ctor.name}: 構成子の引数の JSON が不正です: $body")
 	}
 
 	// ───────────────────────── Arb(Kotest ジェネレータ)
@@ -538,11 +647,7 @@ class Kotlinize(private val ir: Ir) {
 	fun listArb(t: IrType.ListOf, keys: List<ConstraintKey>, size: String = "0..5"): String {
 		val el = (t.of as? IrType.Ref)?.let { ir.typeDef(it.lean) }
 		val base = "Arb.list(${arbOf(t.of)}, $size)"
-		val idLean = (el?.id as? IrType.Ref)?.lean
-		val idField = if (idLean == null) null
-			else (el.shape as? IrShape.Structure)?.fields?.find { f ->
-				(f.type as? IrType.Ref)?.lean == idLean
-			}
+		val idField = el?.let { idFieldOf(it) }
 		val start = if (idField != null) "xs.distinctBy { x -> x.${ident(idField.name)} }" else "xs"
 		val body = constrainExpr(start, keys.filter { !(it.constraint.kind == "unique" && it.field.name == idField?.name) })
 		return if (body == "xs") base else "$base.map { xs -> $body }"

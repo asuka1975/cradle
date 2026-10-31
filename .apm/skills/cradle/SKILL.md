@@ -13,23 +13,26 @@ description: Use when you need the current position in the Lean spec-driven pipe
 | `status` | パイプラインの現在地（フェーズごとの事実と次の一手） | 作業の最初。プロダクトオーナーに現在地を説明するとき |
 | `spec-query …` | Lean を動かして仕様に答える（`spec-query` スキル） | 仕様に関する問いすべて |
 | `golden-check [--update]` | golden を再生して突き合わせる（外部能力の golden は init / flow に加えて step の連鎖（chain）も再生し、応答の port / operation がモデルの Port にあることも見る） | `lake build` が通ったあと、モデルを変えたとき |
-| `lean-check [--build]` | 層の壁・sorry・axiom・生成器への言及 | Lean を編集したあと、コミット前 |
+| `lean-check [--build] [--smoke]` | 層の壁・sorry・axiom・生成器への言及（`--build` は lake build も、`--smoke` は CLI に init を流して ok を確かめる） | Lean を編集したあと、コミット前 |
 | `regen-impact [--dry-run]` | 再生成 → 生成物の差分 → 参照する手書き実装と契約テスト → golden 回帰 | Lean を変えて backend に追随するとき |
 | `unslop [--diff\|--all]` | コメント規約・腐ったパス・逃げ言葉・握りつぶし | 止まる前（Stop hook が error を差し戻す） |
 | `ddd-clean-check [--build] [--baseline <file>]` | 探索の残骸（questions.md・naming.md・probe-・lean の差分。`ddd.mjs end` は `.session` を baseline に渡し、開始時点と比べる）が無いこと | ddd スキルの終わり |
 | `doctor` | ハーネスの置き場と hooks の配線、Codex の hooks の信頼、AGENTS.md の大きさ（Codex の上限）、道具の有無と版（node / lake / elan / java / pnpm / apm / claude / codex …）、lean2kotlin の解決可否（`LEAN2KOTLIN_HOME`） | 導入時、道具が見つからないと言われたとき、backend の着手前 |
 | `doctor --local` | local スタックのコンテナ（`cradle.json` の `infra.containers`）の鮮度（Created と HEAD のコミット時刻） | local を作り直す前、E2E の前 |
+| `refs <ID>` | その ID（HS / UX / MQ / INFRA-D / イベント#）を引いている場所を全部出す（documents / lean / 契約 / 設計 / README） | HS / UX / MQ を撤回・訂正したとき（ddd スキルの撤回の伝播） |
+| `contract-skeleton <file> [--package <pkg>]` | 生成された抽象契約テストの具象サブクラスの骨格を出す（`--package` は package 行だけを差し替える） | 契約テストを本番実装に配線するとき（backend-implement スキル） |
 
 ## 使い方の決めごと
 
 - 出力は要約せず、そのまま引用する。判断（意図した変化か・直すか）は出力を見てから書く。
 - `golden-check` で CHANGED が出たら、意図した変更だけを `--update` し、golden の差分を変更理由とともにコミットする。意図していない流れが変わっていたら、それがモデル変更の意図しない影響。
-- `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。
+- `regen-impact` は生成ディレクトリがクリーンな状態で回す（差分だけ読むなら `--no-regen`）。`--dry-run` はクリーンでなければ断る（元に戻すと未コミットの差分も消える）。
 - どの道具も `CRADLE_PROJECT_DIR` でルートを指定できる（hook は Claude Code の `CLAUDE_PROJECT_DIR`、無ければ stdin の `cwd` から `cradle.json` を持つ祖先を探す）。
-- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。
+- 道具が無いことを確かめる問い（「〜は存在するか」）は `spec-query print` と `meta` で確かめてから答える。`meta` の末尾に `evalErrors` があれば、その鍵の一覧は Lean を評価できていない（無いとは言えない）— 理由を示し、ビルドを直して引き直すか `print` で確かめる。`print` は評価できなければ理由と 1 で終わり、その前に走る lake build（既定の `--build auto` ではバイナリが無いとき、`always` では毎回。`never` は走らせない）が落ちれば `lake build が失敗しました:` と lake の出力（lake を起動できなければその理由）と 2 で終わる。
 
 ## 道具が落ちたとき
 
 - `Lean CLI がありません` → `cd lean && lake build`。
-- `cradle.json に project が要ります` → ルートに `cradle.json` を置く（cradle-init スキル）。
-- `golden の request.json が無い` → 5 cmd で採った golden なら `--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。外部能力の経路（`external`）で採った golden は脇書き（版・環境・入力列）が無いと再生できず、manifest からも復元しない — モックアップで採り直す。脇書きの `version` が 1 でないものも同じ。
+- `cradle.json に project（Lean のルート名前空間）が要ります` → ルートに `cradle.json` を置く（cradle-init スキル）。
+- `.request.json が無い（再生できない golden）` → 5 cmd で採った golden。`--manifest` で scenario / viewer / today を補うか、モックアップで採り直す。
+- `.request.json（版・環境・入力列）が無いと再生できない` → 外部能力の経路（`external`）で採った golden は脇書きが無いと再生できず、manifest からも復元しない — モックアップで採り直す。脇書きの `version` が 1 でないもの（`は読めない（読める版: 1）`）も同じ。

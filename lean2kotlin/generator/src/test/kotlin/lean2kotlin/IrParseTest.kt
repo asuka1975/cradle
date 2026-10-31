@@ -198,6 +198,20 @@ class IrParseTest {
 	}
 
 	@Test
+	fun `抽出器の IR は節の中のメソッドを名前順に持つ`() {
+		// 環境の走査順(import 全体の定数の数で変わる)が interface のメンバの並びに出ないこと
+		for ((label, ir) in listOf("sprout" to sproutIr(), "lobby" to lobbyIr())) {
+			val sections = (ir.queryServices + ir.useCases + ir.domainServices + ir.useCaseRules).map { it.name to it.methods } +
+				ir.behaviors.map { it.subject to it.methods }
+			assertTrue(sections.isNotEmpty(), label)
+			for ((name, methods) in sections) {
+				val names = methods.map { it.name }
+				assertEquals(names.sorted(), names, "$label $name")
+			}
+		}
+	}
+
+	@Test
 	fun `diagnostics の dropped と ports は無ければ空`() {
 		val ir = Ir.parse("""{"version":1,"rootNamespace":"T","types":[],"diagnostics":{"dropped":[{"kind":"contract","name":"T.x","reason":"r"}]}}""")
 		assertEquals(listOf(IrDropped("contract", "T.x", "r")), ir.dropped)

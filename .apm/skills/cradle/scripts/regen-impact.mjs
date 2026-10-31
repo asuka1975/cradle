@@ -1,101 +1,126 @@
 #!/usr/bin/env node
 // regen-impact — Lean を変えたあと、生成物を作り直して「何が変わり、誰に効くか」を機械で出す。
-//   regen-impact [--report] [--dry-run] [--no-regen] [--no-golden] [--manifest file] [--json]
+//   regen-impact [--report] [--dry-run] [--no-regen] [--force] [--no-golden] [--manifest file] [--json]
 //     --report   生成物の差分と参照元（手書き実装・契約テスト）の一覧を出す（既定）
-//     --dry-run  再生成の結果を見たあと生成ディレクトリを git で元に戻す
+//     --dry-run  再生成の結果を見たあと生成ディレクトリを git で元に戻す（生成ディレクトリがクリーンなときだけ）
 //     --no-regen 再生成せず、作業ツリーにある生成物の差分だけを読む
+//     --force    生成ディレクトリに未コミットの差分があっても再生成して重ねる
 //     --no-golden golden 回帰を省く
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig, parseArgs, walk, rel, git, fail } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, blankArg, walk, rel, git, fail, readText, cradleScript, contractTestWiring, goldenRowLines, readManifest, CHILD_OUTPUT_MAX } from "./lib.mjs";
+import { diffDecls, impactOf } from "./regen-core.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { report: "bool", "dry-run": "bool", "no-regen": "bool", "no-golden": "bool", json: "bool", force: "bool" });
-const cfg = loadConfig();
+// 値の無い --manifest は再生成する前に止める（golden-check に `--manifest true` を渡して、再生成の後に golden 回帰だけを落とさない）
+if (blankArg(opts.manifest)) fail("--manifest には manifest のファイル（JSON）のパスが要ります");
+const cfg = loadConfigOrFail();
+// 無い・JSON でない・形の違う manifest も再生成する前に golden-check と同じ 1 行で止める。golden-check は cfg.root を cwd に走るので、相対のパスは cfg.root から引く
+if (opts.manifest) { try { readManifest(resolve(cfg.root, opts.manifest), opts.manifest); } catch (e) { fail(e.message); } }
 const gens = cfg.backend.generated;
 
-const dirty = git(cfg.root, ["status", "--porcelain", "--", ...gens]);
+// git の外（リポジトリでない置き場）ではここで止まる。スタックトレースにしない。
+// 未追跡は status.showUntrackedFiles に依らず出す（git clean は設定を見ないので、出さないと --dry-run の後始末が利用者のファイルを消す）
+let dirty; try { dirty = git(cfg.root, ["status", "--porcelain", "--untracked-files=normal", "--", ...gens]); } catch (e) { fail(e.message); }
+// コミットが 1 つも無いリポジトリでは git status は通るが HEAD と比べられない。再生成する前に止める
+try { git(cfg.root, ["rev-parse", "--verify", "-q", "HEAD"]); } catch { fail("まだコミットがありません。regen-impact は生成物を HEAD と比べるので、先にコミットしてから回す"); }
 if (dirty && !opts["no-regen"] && !opts.force) fail(`生成ディレクトリに未コミットの差分があります。先にコミットするか、差分だけ読むなら --no-regen:\n${dirty}`);
+// 元に戻す（checkout と clean）は始める前の差分とこの実行の出力を見分けないので、--no-regen・--force でも差分があれば --dry-run を断る
+if (opts["dry-run"] && dirty) fail(`--dry-run は生成ディレクトリがクリーンなときだけ（元に戻すと未コミットの差分も消える）:\n${dirty}`);
+/** --dry-run の後始末: 生成ディレクトリを HEAD に戻す。checkout は追跡しているファイルのあるものだけ（無いパスは git が断る）、
+    clean は在るものだけに渡す（パスの無い git clean はリポジトリ全体の未追跡を消す）。
+    git が断れば（別の git が index.lock を持つ・書く権限が無いなど）git の stderr ごとの理由の文を返し、戻せたら ""。スタックトレースにしない。 */
+function restoreGenerated() {
+  const run = (args) => git(cfg.root, args, { stdio: ["ignore", "pipe", "pipe"] });
+  try {
+    const tracked = gens.filter(g => run(["ls-files", "--", g]));
+    if (tracked.length) run(["checkout", "--", ...tracked]);
+    const present = gens.filter(g => existsSync(join(cfg.root, g)));
+    if (present.length) run(["clean", "-fdq", "--", ...present]);
+    return "";
+  } catch (e) { return `--dry-run の後始末で生成ディレクトリを HEAD に戻せませんでした（今回の出力が残っています）: ${e.message.trimEnd()}`; }
+}
 
 let regenOut = null;
 if (!opts["no-regen"]) {
-  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8" });
+  const r = spawnSync("sh", ["-c", cfg.backend.regenerate], { stdio: ["ignore", "pipe", "pipe"], cwd: join(cfg.root, cfg.backend.dir), encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
   regenOut = (r.stdout ?? "") + (r.stderr ?? "");
-  if (r.status !== 0) fail(`再生成に失敗しました（${cfg.backend.regenerate}）:\n${regenOut.slice(-3000)}`, 2);
-}
-
-const nameStatus = git(cfg.root, ["diff", "--name-status", "HEAD", "--", ...gens]).split("\n").filter(Boolean).map(l => { const [st, ...p] = l.split("\t"); return { status: st[0], path: p[p.length - 1] }; });
-const untracked = git(cfg.root, ["ls-files", "--others", "--exclude-standard", "--", ...gens]).split("\n").filter(Boolean).map(path => ({ status: "A", path }));
-const changed = [...nameStatus, ...untracked];
-
-const TYPE_DECL = /^(?:public\s+|internal\s+|private\s+)?(?:abstract\s+|open\s+|sealed\s+|data\s+|value\s+|enum\s+|annotation\s+)*(interface|class|object|typealias)\s+`?([A-Za-z_][\w]*)`?/;
-const MEMBER_DECL = /^\s+(?:override\s+|abstract\s+|open\s+|suspend\s+|operator\s+|infix\s+|inline\s+|public\s+|internal\s+|protected\s+)*(fun|val|var)\s+(?:<[^>]*>\s*)?(?:[A-Za-z_][\w.]*\.)?`?([A-Za-z_][\w]*)`?/;
-const TOP_FUN = /^(?:public\s+|internal\s+|private\s+)?(?:inline\s+|suspend\s+)*(fun|val|var)\s+(?:<[^>]*>\s*)?(?:[A-Za-z_][\w.]*\.)?`?([A-Za-z_][\w]*)`?/;
-/** 宣言の一覧: {key, name, owner, kind, sig}。sig（署名行）が一致すれば同じ宣言とみなす。 */
-function declsOf(text) {
-  const out = new Map();
-  let owner = null;
-  for (const raw of text.split("\n")) {
-    const line = raw.replace(/\s+$/, "");
-    if (!line.trim() || /^\s*(\/\/|\*|\/\*)/.test(line)) continue;
-    let m = line.match(TYPE_DECL);
-    if (m) { owner = m[2]; out.set(`type:${m[2]}`, { name: m[2], owner: null, kind: m[1], sig: line.trim() }); continue; }
-    m = line.match(TOP_FUN);
-    if (m) { out.set(`top:${m[2]}`, { name: m[2], owner: null, kind: m[1], sig: line.trim() }); continue; }
-    m = line.match(MEMBER_DECL);
-    if (m && owner) out.set(`member:${owner}.${m[2]}:${line.trim()}`, { name: m[2], owner, kind: m[1], sig: line.trim() });
-  }
-  return out;
-}
-function textAt(path, which) {
-  if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:${path}`]); } catch { return ""; } }
-  const p = join(cfg.root, path); return existsSync(p) ? readFileSync(p, "utf8") : "";
-}
-/** 変わった宣言 = 署名行が片方にしか無いもの（名前が同じでも署名が変われば「変更」）。 */
-const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }
-for (const c of changed) {
-  const before = declsOf(textAt(c.path, "HEAD"));
-  const after = declsOf(textAt(c.path, "WT"));
-  const sigOf = (m) => new Set([...m.values()].map(d => `${d.owner ?? ""}|${d.name}|${d.sig}`));
-  const sb = sigOf(before), sa = sigOf(after);
-  const touched = [];
-  for (const d of before.values()) if (!sa.has(`${d.owner ?? ""}|${d.name}|${d.sig}`)) touched.push({ ...d, change: [...after.values()].some(x => x.name === d.name && x.owner === d.owner) ? "changed" : "removed" });
-  for (const d of after.values()) if (!sb.has(`${d.owner ?? ""}|${d.name}|${d.sig}`) && ![...before.values()].some(x => x.name === d.name && x.owner === d.owner)) touched.push({ ...d, change: "added" });
-  for (const d of touched) {
-    const key = `${d.owner ?? ""}.${d.name}`;
-    const e = symbols.get(key) ?? { name: d.name, owner: d.owner, kind: d.kind, files: new Set(), change: d.change };
-    e.files.add(c.path); if (e.change !== d.change) e.change = "changed";
-    symbols.set(key, e);
+  if (r.status !== 0) {
+    // 作りかけの出力を残さない。戻せなければ再生成の失敗の後ろに添える
+    // sh を起動できない（backend.dir が無い）・出力が上限を超えたときの理由は r.error にしか無い（起動できなければ出力も無い）
+    const unrestored = opts["dry-run"] ? restoreGenerated() : "";
+    fail(`再生成に失敗しました（${cfg.backend.regenerate}）:${r.error ? ` ${r.error.message}` : ""}\n${regenOut.slice(-3000)}${unrestored && `\n${unrestored}`}`, 2);
   }
 }
 
-// 参照元: 型はその名前で、メンバーは「所有する型を参照し、かつその名前を呼ぶ／実装する」ファイルで探す
-const handFiles = [...walk(join(cfg.root, cfg.backend.dir, "src", "main"), { ext: [".kt"] }), ...walk(join(cfg.root, cfg.backend.dir, "src", "test"), { ext: [".kt"] })]
-  .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
-const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
-const impact = [];
-for (const e of symbols.values()) {
-  const nameRe = new RegExp(`\\b${e.name}\\b`);
-  const refs = e.owner
-    ? handTexts.filter(h => new RegExp(`\\b${e.owner}\\b`).test(h.text) && new RegExp(`(\\.|\\bfun\\s+|\\bval\\s+|\\bvar\\s+)${e.name}\\b`).test(h.text)).map(h => h.file)
-    : handTexts.filter(h => nameRe.test(h.text)).map(h => h.file);
-  impact.push({ symbol: e.owner ? `${e.owner}.${e.name}` : e.name, kinds: [e.change], generatedFiles: [...e.files], referencedBy: refs });
+// 差分の読み取りから golden の回帰までの解析。投げれば（読めない手書き .kt・指す先の無いシンボリックリンクなど）--dry-run の後始末を飛ばさない
+function analyze() {
+  // -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、cfg.root に繋いでも git show に渡しても読めない。
+  // --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対にする。
+  // -z の --name-status は状態とパスを NUL で区切り、改名・複写（R / C）だけ元と先の 2 つのパスが続く。出すのは先のパス
+  const nameStatus = [];
+  for (let f = git(cfg.root, ["diff", "--name-status", "-z", "--relative", "HEAD", "--", ...gens]).split("\0"), i = 0; f[i];) {
+    const status = f[i][0], paths = "RC".includes(status) ? 2 : 1;
+    nameStatus.push({ status, path: f[i + paths] });
+    i += 1 + paths;
+  }
+  const untracked = git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard", "--", ...gens]).split("\0").filter(Boolean).map(path => ({ status: "A", path }));
+  const changed = [...nameStatus, ...untracked];
+
+  function textAt(path, which) {
+    // HEAD:<path> は git のルートから引くので、cfg.root からの相対のパスは ./ を付けて cwd から引く
+    if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:./${path}`]); } catch { return ""; } }
+    return readText(join(cfg.root, path));
+  }
+  // 同じシンボルが複数のファイルで変わり、その変わり方がファイルごとに違えば「変更」
+  const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }
+  for (const c of changed) {
+    for (const d of diffDecls(textAt(c.path, "HEAD"), textAt(c.path, "WT"))) {
+      const key = `${d.owner ?? ""}.${d.name}`;
+      const e = symbols.get(key) ?? { name: d.name, owner: d.owner, kind: d.kind, files: new Set(), change: d.change };
+      e.files.add(c.path); if (e.change !== d.change) e.change = "changed";
+      symbols.set(key, e);
+    }
+  }
+
+  // 参照元を探す手書き: src/main・src/test・src/adapterTest（Adapter の適合テストの具象クラス）のうち生成ディレクトリの外
+  const handFiles = ["main", "test", "adapterTest"].flatMap(d => walk(join(cfg.root, cfg.backend.dir, "src", d), { ext: [".kt"] }))
+    .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
+  const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
+  const impact = impactOf(symbols.values(), handTexts);
+
+  // 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）。
+  // 再生成で消えた（D）抽象テストは配線するものが無い。残った具象クラスは消えたシンボルの参照元に出る
+  const abstractTests = changed.filter(c => c.status !== "D" && /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
+  const unwired = contractTestWiring(cfg, abstractTests).filter(w => !w.wired).map(w => w.name);
+
+  let golden = null;
+  if (!opts["no-golden"]) {
+    const args = [cradleScript("golden-check.mjs"), "--json"];
+    if (opts.manifest) args.push("--manifest", opts.manifest);
+    const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
+    // 読み切れなかった出力（上限を超えた・起動できない）は判定にしない。golden 回帰は「実行できず」で出す
+    if (r.error) {
+      golden = { error: `golden-check の出力を読めませんでした: ${r.error.message}` };
+      process.stderr.write(`cradle: ${golden.error}\n`);
+    } else {
+      try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+    }
+  }
+  return { changed, impact, unwired, golden };
 }
-impact.sort((a, b) => b.referencedBy.length - a.referencedBy.length || a.symbol.localeCompare(b.symbol));
 
-// 契約テスト: 生成された抽象テストと具象の配線
-const abstractTests = changed.filter(c => /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
-const unwired = abstractTests.filter(n => !handTexts.some(h => new RegExp(`:\\s*${n}\\s*\\(`).test(h.text)));
-
-let golden = null;
-if (!opts["no-golden"]) {
-  const args = [join(import.meta.dirname, "golden-check.mjs"), "--json"];
-  if (opts.manifest) args.push("--manifest", opts.manifest);
-  const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8" });
-  try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+let analysis;
+try { analysis = analyze(); }
+catch (e) {
+  const unrestored = opts["dry-run"] ? restoreGenerated() : "";
+  fail(`影響の解析で止まりました: ${e.message.trimEnd()}${unrestored && `\n${unrestored}`}`, 2);
 }
+const { changed, impact, unwired, golden } = analysis;
 
-if (opts["dry-run"]) { git(cfg.root, ["checkout", "--", ...gens.filter(g => existsSync(join(cfg.root, g)))]); git(cfg.root, ["clean", "-fdq", "--", ...gens.filter(g => existsSync(join(cfg.root, g)))]); }
+// 戻せなければ結果を出さない（--json の restored: true が嘘になる）。再生成の失敗と同じく途中で止まった 2
+if (opts["dry-run"]) { const unrestored = restoreGenerated(); if (unrestored) fail(unrestored, 2); }
 
 const result = { changedGeneratedFiles: changed, symbols: impact, unwiredContractTests: unwired, golden, restored: !!opts["dry-run"] };
 if (opts.json) console.log(JSON.stringify(result, null, 2));
@@ -110,9 +135,9 @@ else {
   if (unwired.length) console.log(`\n未配線の契約テスト: ${unwired.join(", ")}`);
   if (golden) {
     if (golden.error) console.log(`\ngolden 回帰: 実行できず — ${golden.error}`);
-    else console.log(`\ngolden 回帰: ${golden.failed ? `${golden.failed} 件が変わった（意図した変更か確かめる）` : "全一致"}`);
-    for (const r of (golden.report ?? []).filter(r => r.status === "changed")) console.log(`  CHANGED ${r.name}-${r.kind} at ${r.firstDivergence}${r.step ? ` (step #${r.step} ${r.command})` : ""}`);
+    else console.log(`\ngolden 回帰: ${golden.failed ? `${golden.failed} 件が changed/error（意図した変更か確かめる）` : "全一致"}`);
+    // ok 以外の行を golden-check と同じ言い方で（食い違いの詳しい行は golden-check に任せ、先頭の行だけ）
+    for (const r of (golden.report ?? []).filter(r => r.status !== "ok")) console.log(`  ${goldenRowLines(r)[0]}`);
   }
   if (opts["dry-run"]) console.log("\n（--dry-run: 生成ディレクトリは元に戻した）");
 }
-process.exit(0);

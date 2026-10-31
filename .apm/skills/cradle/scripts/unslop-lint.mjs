@@ -2,7 +2,7 @@
 // unslop-lint — AI が書きがちな「それらしいが価値のない」痕跡と、腐る情報の写しを機械で拾う。
 //
 //   unslop-lint [--all | --diff | <files>...] [--json]
-//     既定は --diff（HEAD との差分 + 未追跡ファイル）。
+//     既定は --diff（HEAD との差分 + 未追跡ファイル。コミットが無ければ追跡中のファイル全部 + 未追跡。git の外では 2 で止まる）。
 //
 // 規則（cradle.json の unslop.disable で個別に切れる / unslop.extraHedges で語を足せる / unslop.skipFiles で見ないファイル / unslop.ignorePaths で実在しなくてよいパス）:
 //   comment-status   [error] コードのコメントにドメイン事実のステータス語（open / resolved / unresolved / 反映済 / 却下 / 未決 / 検証済 / 未検証）
@@ -24,11 +24,11 @@
 //   restate          [warn]  直下の宣言名をそのまま繰り返すだけのコメント
 //   ai-note-header   [error] ai-notes の命名（YYYYMMDD-NN-<topic>.md）と冒頭の「規約ではありません」の断り
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, extname, dirname, basename } from "node:path";
-import { loadConfig, parseArgs, walk, rel, git, fail, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows } from "./lib.mjs";
+import { join, extname, dirname } from "node:path";
+import { loadConfigOrFail, parseArgs, fail, walk, rel, git, globToRegExp, scaffoldSampleFiles, leanVocabulary, glossaryEnglish, tableRows, aiNoteProblems } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { all: "bool", diff: "bool", json: "bool" });
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const disabled = new Set(cfg.unslop.disable ?? []);
 const CODE_EXT = [".kt", ".kts", ".ts", ".tsx", ".js", ".mjs", ".lean", ".sql", ".tf", ".css", ".html"];
 const DOC_EXT = [".md", ".yaml", ".yml"];
@@ -40,7 +40,17 @@ const isHarnessProse = (relPath) => HARNESS_DIRS.some(d => relPath.startsWith(d 
 const isHarnessCode = (relPath) => isHarnessProse(relPath) && extname(relPath) !== ".md";
 
 function candidateFiles() {
-  if (opts._.length) return opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p)).filter(existsSync);
+  if (opts._.length) {
+    const files = opts._.map(p => p.startsWith("/") ? p : join(cfg.root, p));
+    // 綴りの誤ったパスとディレクトリ（拡張子で検査から外れる）を落として「0 findings」で通さない。2 は検査できなかった印（1 は error が見つかった）
+    const missing = opts._.filter((p, i) => !existsSync(files[i]));
+    const notFiles = opts._.filter((p, i) => existsSync(files[i]) && !statSync(files[i]).isFile());
+    const problems = [missing.length && `ファイルがありません（プロジェクトルートからの相対）: ${missing.join(", ")}`,
+      notFiles.length && `ファイルではありません（ディレクトリは中のファイルを並べて渡すか --all で見る）: ${notFiles.join(", ")}`].filter(Boolean);
+    // fail は先頭の行にだけ cradle: を付けるので、2 つめの行にも付ける
+    if (problems.length) fail(problems.join("\ncradle: "), 2);
+    return files;
+  }
   if (opts.all) {
     const code = codeDirs.flatMap(d => walk(d, { ext: CODE_EXT }));
     // .apm/instructions は消費側の固有の事実の正本（写しの rules / AGENTS.md ではなくここを見る）
@@ -50,10 +60,18 @@ function candidateFiles() {
       ...HARNESS_DIRS.flatMap(d => walk(join(cfg.root, d), { ext: [".md"] }))];
     return [...new Set([...code, ...docs])];
   }
-  let names = [];
+  // 既定の --diff は HEAD との差分と未追跡を git で読む。git の外（git が無いときも）で読めない差分を 0 件と言わず、検査できなかった 2 で止める
+  try { git(cfg.root, ["rev-parse", "--is-inside-work-tree"]); }
+  catch { fail("--diff（引数の無い既定）は git で HEAD との差分を読むので、git のリポジトリの中で回す。git の外では --all か、ファイルを並べて渡す", 2); }
+  // コミットの無いリポジトリでは diff HEAD が断る。空の HEAD との差分は追跡中のファイル全部
+  let unborn = false;
+  try { git(cfg.root, ["rev-parse", "--verify", "-q", "HEAD"]); } catch { unborn = true; }
+  // -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、そのままでは cfg.root に繋いでも無いファイルになる。
+  // --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対で、その下だけを読む
+  let names;
   try {
-    names = [...git(cfg.root, ["diff", "--name-only", "HEAD"]).split("\n"), ...git(cfg.root, ["ls-files", "--others", "--exclude-standard"]).split("\n")];
-  } catch { return []; }
+    names = [...git(cfg.root, unborn ? ["ls-files", "-z", "--cached"] : ["diff", "--name-only", "-z", "--relative", "HEAD"]).split("\0"), ...git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0")];
+  } catch (e) { fail(e.message, 2); }
   return [...new Set(names.filter(n => n && !isHarnessCode(n)))].map(n => join(cfg.root, n)).filter(p => existsSync(p) && statSync(p).isFile());
 }
 
@@ -180,11 +198,9 @@ for (const file of files) {
     }
   });
 
-  if (isDoc && relPath.startsWith(cfg.documents.aiNotes + "/") && !relPath.endsWith("README.md") && !relPath.endsWith("TEMPLATE.md")) {
-    const name = relPath.slice(cfg.documents.aiNotes.length + 1);
-    if (!/^\d{8}-\d{2}-[a-z0-9-]+\.md$/.test(name)) add("ai-note-header", "error", file, 1, `ファイル名は YYYYMMDD-NN-<topic>.md（${name}）`);
-    if (!/規約ではありません/.test(text.slice(0, 800))) add("ai-note-header", "error", file, 1, "冒頭に「これは規約ではありません。」の断りが無い");
-  }
+  const note = isDoc ? aiNoteProblems(cfg.documents.aiNotes, relPath, text) : null;
+  if (note?.badName) add("ai-note-header", "error", file, 1, `ファイル名は YYYYMMDD-NN-<topic>.md（${note.name}）`);
+  if (note?.noHeader) add("ai-note-header", "error", file, 1, "冒頭に「これは規約ではありません。」の断りが無い");
   if (isDoc) {
     // ドキュメント側は文体の規則だけ（ID・ステータスは正本の持ち物）
     if (!isDdd) lines.forEach((l, i) => { if (EMOJI.test(l) && !/^\|/.test(l.trim())) add("emoji", "warn", file, i + 1, "装飾の絵文字"); });
@@ -262,4 +278,5 @@ else {
   const e = findings.filter(f => f.severity === "error").length;
   console.log(`\n${findings.length} findings (${e} error, ${findings.length - e} warn)`);
 }
-process.exit(findings.some(f => f.severity === "error") ? 1 : 0);
+// process.exit はパイプにまだ書いていない stdout を捨てる（Stop hook が読む --json が 64KB 前後で切れ、差し戻さずに通す）。終了コードだけを置いて書き切らせる
+process.exitCode = findings.some(f => f.severity === "error") ? 1 : 0;

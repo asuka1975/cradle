@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const contractCheck = fileURLToPath(new URL("../.apm/skills/api-contract/scripts/contract-check.mjs", import.meta.url));
 
@@ -34,17 +33,18 @@ const get = (path, id) => ({ method: "get", path, id });
 const command = (path, id, ctor, over = {}) => ({ method: "post", path, id, kind: "command", model: `Example.Runtime.Command.${ctor}`, ...over });
 const observation = (path, id, ctor, over = {}) => ({ method: "post", path, id, kind: "observation", model: `Example.Runtime.Observation.${ctor}`, ...over });
 
-// 一時プロジェクト: cradle.json と openapi.yaml だけ。契約検査を --meta @file --json で走らせて結果を返す
-function run(t, ops, { config = {}, metaOverride = meta } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-contract-check-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example", ...config }));
+// 一時プロジェクト: cradle.json と openapi.yaml だけ。契約検査を --meta @file で走らせる（runRaw は子プロセスの結果そのまま）
+function runRaw(t, ops, { config = {}, metaOverride = meta, args = ["--json"] } = {}) {
+  const root = tempProject(t, "cradle-contract-check-", { project: "Example", ...config });
   mkdirSync(join(root, "documents/codebase"), { recursive: true });
   writeFileSync(join(root, "documents/codebase/openapi.yaml"), `openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths:\n${paths(ops)}\n`);
   writeFileSync(join(root, "meta.json"), JSON.stringify(metaOverride));
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const r = spawnSync(process.execPath, [contractCheck, "--meta", "@meta.json", "--json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  return runNode(contractCheck, ["--meta", "@meta.json", ...args], { cwd: root, env: cleanEnv() });
+}
+
+// --json の結果を返す
+function run(t, ops, options) {
+  const r = runRaw(t, ops, options);
   assert.ok(r.stdout.trim(), r.stderr);
   return { status: r.status, result: JSON.parse(r.stdout) };
 }
@@ -127,4 +127,40 @@ test("GET の無い画面の口は NG。api.outletsWithoutEndpoint に挙げた�
   assert.equal(ok.status, 0, JSON.stringify(ok.result));
   assert.deepEqual(ok.result.outletsWithoutGet, []);
   assert.equal(ok.result.outlets, 1);
+});
+
+test("meta が Lean を評価しきれていなければ（commands / observations の #print・画面の口）照合せず、理由の 1 行と 2 で終わる", (t) => {
+  for (const [label, metaOverride] of [
+    ["commands", { ...meta, commands: [], evalErrors: { commands: "spawnSync lake ENOENT" } }],
+    ["observations", { ...meta, observations: [], evalErrors: { observations: "killed by SIGTERM" } }],
+    ["views", { ...meta, views: { error: { error: "unknown scenario" }, outlets: [] } }],
+  ]) {
+    for (const args of [["--json"], []]) {
+      const r = runRaw(t, covered, { metaOverride, args });
+      assert.equal(r.status, 2, `${label} ${args}: ${r.stdout}${r.stderr}`);
+      assert.equal(r.stdout, "", label);
+      assert.match(r.stderr, /^cradle: spec-query meta が Lean を評価しきれていないので照合しない（/, label);
+    }
+  }
+  const both = runRaw(t, covered, { metaOverride: { ...meta, evalErrors: { commands: "spawnSync lake ENOENT" }, views: { error: "シナリオが見つかりません（scenarioByName）", outlets: [] } } });
+  assert.equal(both.stderr, "cradle: spec-query meta が Lean を評価しきれていないので照合しない（commands: spawnSync lake ENOENT; views: シナリオが見つかりません（scenarioByName））\n");
+  // 契約が使わない errors の評価の失敗では止めない
+  const errorsOnly = run(t, covered, { metaOverride: { ...meta, evalErrors: { errors: "spawnSync lake ENOENT" } } });
+  assert.equal(errorsOnly.status, 0, JSON.stringify(errorsOnly.result));
+});
+
+test("--meta 無しで spec-query meta が lake build の失敗（2）で止まれば、NG の 1 にせず 2 で終わる", (t) => {
+  const root = tempProject(t, "cradle-contract-check-");
+  mkdirSync(join(root, "documents/codebase"), { recursive: true });
+  writeFileSync(join(root, "documents/codebase/openapi.yaml"), `openapi: 3.1.0\ninfo:\n  title: t\n  version: 0.0.1\npaths:\n${paths(covered)}\n`);
+  // Lean CLI のバイナリが無く PATH に lake も無い: spec-query meta は lake build を走らせて失敗する
+  mkdirSync(join(root, "lean"));
+  const noTools = join(root, "no-tools");
+  mkdirSync(noTools);
+  for (const args of [["--json"], []]) {
+    const r = runNode(contractCheck, args, { cwd: root, env: cleanEnv({ PATH: noTools }) });
+    assert.equal(r.status, 2, `${args}: ${r.stdout}${r.stderr}`);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /^cradle: spec-query meta が何も返しませんでした: cradle: lake build が失敗しました: spawnSync lake ENOENT\n/);
+  }
 });

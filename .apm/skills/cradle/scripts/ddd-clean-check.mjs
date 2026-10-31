@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // ddd-clean-check — 探索セッション（ddd スキル）が残したプローブ・問いかけファイル・命名の確認が消えていること
 // （--baseline なしならセッション印も）を機械で確かめる。
-//   ddd-clean-check [--build] [--baseline <file>]
+//   ddd-clean-check [--build] [--baseline <file>] [--json]
 //   --baseline は ddd.mjs start が書いた .session（lean に開始時点の sha256）。lean/ をその時点と比べ、無ければ HEAD と比べる
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { loadConfig, parseArgs, fail, walk, rel, git, lakeBuild, readJson, leanSnapshot } from "./lib.mjs";
+import { loadConfigOrFail, parseArgs, fail, walk, rel, git, lakeBuild, readJson, leanSnapshot, leanGitStatus } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { build: "bool", json: "bool" });
 if (opts.baseline === true) fail("usage: ddd-clean-check [--build] [--baseline <file>]");
-const cfg = loadConfig();
+const cfg = loadConfigOrFail();
 const baseline = (() => {
   if (!opts.baseline) return null;
   const file = resolve(cfg.root, opts.baseline);
@@ -35,11 +35,12 @@ if (baseline) {
 } else {
   try {
     git(cfg.root, ["rev-parse", "--verify", "HEAD"]);   // コミットが 1 つも無ければ差分の比較はできない
-    const dirty = git(cfg.root, ["status", "--short", "--", cfg.lean.dir]);
+    const dirty = leanGitStatus(cfg);
     if (dirty) problems.push(`${cfg.lean.dir}/ に HEAD と違う差分があります（セッション開始時の記録が無いので HEAD と比べている。前回の形式化（フェーズ 2）が未コミットならそれも差分に出る — ddd.mjs end 経由なら開始時点と比べる）:\n${dirty}`);
   } catch {}
 }
 if (opts.build) { try { lakeBuild(cfg); } catch (e) { problems.push(e.message); } }
 if (opts.json) console.log(JSON.stringify({ ok: !problems.length, problems }, null, 2));
 else { for (const p of problems) console.log(`NG ${p}`); console.log(problems.length ? "後片付けが残っています" : "OK 後片付け済み"); }
-process.exit(problems.length ? 1 : 0);
+// process.exit はパイプにまだ書いていない stdout を捨てる（--json が 64KB 前後で切れる）。終了コードだけを置いて書き切らせる
+process.exitCode = problems.length ? 1 : 0;

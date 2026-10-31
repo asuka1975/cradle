@@ -17,7 +17,7 @@ interface Note {
 	val author: UserId
 	val title: Title
 	val closed: Boolean
-	fun isOpen(): Boolean
 	/** 閉じる。もう閉じているメモは閉じられない — メモ自身の規則で、メモ自身が断る。 */
 	fun close(): DomainResult<DomainError, Note>
+	fun isOpen(): Boolean
 }

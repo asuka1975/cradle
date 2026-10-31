@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tempProject } from "./helpers.mjs";
 
 import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
@@ -35,9 +35,7 @@ function makePi(root) {
 }
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-pi-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-pi-");
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
   mkdirSync(join(root, "documents/developer"), { recursive: true });
   return root;
@@ -86,6 +84,24 @@ test("agent_end で unslop error があると follow-up を投入する", async 
   const root = fixture(t);
   mkdirSync(join(root, "documents/ai-notes"), { recursive: true });
   writeFileSync(join(root, "documents/ai-notes/20260910-01-bad.md"), "no header");
+  const pi = makePi(root);
+  piExtension(pi);
+  const ctx = makeCtx(root);
+  await pi._handlers.session_start[0]({}, ctx);
+  await pi._handlers.agent_end[0]({}, ctx);
+  assert.equal(pi._userMessages.length, 1);
+  assert.match(pi._userMessages[0].text, /unslop/);
+});
+
+test("agent_end はルートを指す変数（CLAUDE_PROJECT_DIR・CRADLE_PROJECT_DIR・CRADLE_CONFIG）があっても、イベントの cwd のプロジェクトを検査する", async (t) => {
+  const root = fixture(t);
+  mkdirSync(join(root, "documents/ai-notes"), { recursive: true });
+  writeFileSync(join(root, "documents/ai-notes/20260910-01-bad.md"), "no header");
+  // Pi を起動したシェルが別のプロジェクト（違反の無い Cradle のプロジェクト）を指している
+  const other = tempProject(t, "cradle-pi-other-");
+  const saved = Object.fromEntries(["CLAUDE_PROJECT_DIR", "CRADLE_PROJECT_DIR", "CRADLE_CONFIG"].map(k => [k, process.env[k]]));
+  t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  Object.assign(process.env, { CLAUDE_PROJECT_DIR: other, CRADLE_PROJECT_DIR: other, CRADLE_CONFIG: join(other, "cradle.json") });
   const pi = makePi(root);
   piExtension(pi);
   const ctx = makeCtx(root);

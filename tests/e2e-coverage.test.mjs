@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempDir, tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const flowsFromGolden = fileURLToPath(new URL("../.apm/skills/e2e-parity/scripts/flows-from-golden.mjs", import.meta.url));
 const status = fileURLToPath(new URL("../.apm/skills/cradle/scripts/status.mjs", import.meta.url));
@@ -17,12 +16,9 @@ const flow = (trace) => ({ ok: { trace } });
 // 台本の手: from-golden.json と同じ形（command は構成子名・actor・outcome）
 const step = (n, actor, command, outcome) => ({ n, actor, command, outcome });
 
-// 一時プロジェクト: cradle.json・golden 2 本（basic: 2 手 / other: 1 手）・e2e/。台本は各テストが置く。
-// 環境変数を落とすのは、Claude Code の中で走るとプロジェクトルートが cradle 自身に解決されるため
+// 一時プロジェクト: cradle.json・golden 2 本（basic: 2 手 / other: 1 手）・e2e/。台本は各テストが置く
 function fixture(t, cradle = {}) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-e2e-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example", ...cradle }));
+  const root = tempProject(t, "cradle-e2e-", { project: "Example", ...cradle });
   mkdirSync(join(root, "lean/golden"), { recursive: true });
   mkdirSync(join(root, "e2e"), { recursive: true });
   writeFileSync(join(root, "lean/golden/basic-flow.json"), JSON.stringify(flow([
@@ -30,9 +26,8 @@ function fixture(t, cradle = {}) {
     refused(bob, { closeNote: { note: { id: 0 } } }),
   ])));
   writeFileSync(join(root, "lean/golden/other-flow.json"), JSON.stringify(flow([applied(alice, { closeNote: { note: { id: 0 } } })])));
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const run = (script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const env = cleanEnv();
+  const run = (script, ...args) => runNode(script, args, { cwd: root, env });
   const put = (rel, json) => { mkdirSync(join(root, rel, ".."), { recursive: true }); writeFileSync(join(root, rel), JSON.stringify(json)); };
   return { root, run, put };
 }
@@ -128,6 +123,24 @@ test("status は対応が揃えば pnpm test を次の一手にする", (t) => {
   assert.match(e2e.next, /pnpm test/);
 });
 
+test("台本の置き場を辿れない（壊れたリンク）なら、status は golden を読めないと言わず置き場の名前を出し、置き場を直すことを次の一手にして本番投入まで出す", (t) => {
+  for (const place of ["e2e/scenarios", "e2e/src/model/flows"]) {
+    const { root, run, put } = fixture(t, place === "e2e/scenarios" ? {} : { e2e: { scenarios: place } });
+    put(`${place}/basic.json`, basicScript);
+    symlinkSync("nowhere.json", join(root, place, "dangling.json"));
+    const r = run(status, "--json");
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, "");
+    const phases = JSON.parse(r.stdout).phases;
+    const e2e = phases.find(p => p.name.startsWith("E2E"));
+    assert.equal(e2e.facts.length, 1, e2e.facts.join(" / "));
+    assert.ok(e2e.facts[0].startsWith(`台本の置き場を読めない（${place}）: `), e2e.facts[0]);
+    assert.match(e2e.facts[0], /dangling\.json/);
+    assert.equal(e2e.next, `${place} の壊れたリンクや読めないディレクトリを直す`);
+    assert.equal(phases.at(-1).name, "本番投入");
+  }
+});
+
 // 外部能力の経路（cmd external）で採った golden: trace の要素は result・環境・外部能力の往復を持ち、内部入力（observation）の手に当事者は無い
 const env0 = { cursor: 0, script: [] };
 const external = (input, result, extra = {}) => ({ ...input, result, state: {}, views: { notes: [] }, env: env0, interactions: [], ...extra });
@@ -213,4 +226,30 @@ test("flows-from-golden は外部能力の流れに external・environment・int
   const c = JSON.parse(run(flowsFromGolden, "--check", "--json").stdout);
   assert.deepEqual({ covered: c.covered, uncovered: c.uncovered, scripts: c.scripts }, { covered: ["basic", "other", "pay", "stop"], uncovered: [], scripts: 4 });
   assert.deepEqual(c.flows.find(f => f.id === "stop").environment, { name: "paymentAuthorized", script: [authorize, inquire] });
+});
+
+test("flows-from-golden --out は相対パスをプロジェクトルートから、絶対パスをそのまま書き、値の無い --out（空の値も）は使い方の 1 行で止まる", (t) => {
+  const { root, run } = fixture(t);
+  const rel = run(flowsFromGolden, "--out", "e2e/scenarios/from-golden.json");
+  assert.equal(rel.stdout, "wrote e2e/scenarios/from-golden.json (2 flows)\n");
+  const written = readFileSync(join(root, "e2e/scenarios/from-golden.json"), "utf8");
+  assert.deepEqual(JSON.parse(written).flows.map(f => f.id), ["basic", "other"]);
+  const elsewhere = join(tempDir(t, "cradle-e2e-out-"), "nested/flows.json");
+  const abs = run(flowsFromGolden, "--out", elsewhere);
+  assert.equal(abs.status, 0, abs.stderr);
+  assert.equal(abs.stdout, `wrote ${elsewhere} (2 flows)\n`);
+  assert.equal(readFileSync(elsewhere, "utf8"), written);
+  assert.equal(existsSync(join(root, elsewhere)), false);
+  for (const args of [["--out"], ["--out", "--json"], ["--out="], ["--out=", "--json"], ["--out", ""], ["--out", " "]]) {
+    const bare = run(flowsFromGolden, ...args);
+    assert.equal(bare.status, 1, args.join(" "));
+    assert.equal(bare.stdout, "");
+    assert.equal(bare.stderr, "cradle: --out にはファイルのパスが要ります（例: --out e2e/scenarios/from-golden.json）\n");
+  }
+  // --check は --out を見ない（台本は最初に書いた from-golden.json）
+  for (const out of ["--out", "--out="]) {
+    const check = run(flowsFromGolden, "--check", out);
+    assert.equal(check.status, 0, check.stdout + check.stderr);
+    assert.match(check.stdout, /^golden の流れ 2 本のうち台本が対応しているのは 2 本/);
+  }
 });

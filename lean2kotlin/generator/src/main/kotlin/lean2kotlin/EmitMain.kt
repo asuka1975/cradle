@@ -37,7 +37,7 @@ class EmitMain(
 					"(実装は java.time.Clock を直接注入。契約テストは固定 today を配線)")
 				// 主体ポート(@[actorContext]): 調達の引数種だが、Clock と違い
 				// JDK に正準型が無いため型(data class)は main に生成する。
-				// 本番の UseCase 署名からは落ちる(isPlumbing — 実装の配線)
+				// 本番の UseCase 署名からは落ちる(k.isPlumbing — 実装の配線)
 				"actorPort" -> emitFile(k.packagePathOf(td), td.kotlin) { actorPortBody(td) }
 				else -> emitFile(k.packagePathOf(td), td.kotlin) { dataTypeBody(td) }
 			}
@@ -53,7 +53,7 @@ class EmitMain(
 			// interface に写せない — 除外して note で明示する(取得の契約面には
 			// Row によらない形が必要 = モデル側の宿題)
 			val kept = s.methods.filter { m ->
-				val refs = m.params.filterNot { isPlumbing(it.type) }
+				val refs = m.params.filterNot { k.isPlumbing(it.type) }
 					.flatMap { it.type.leafRefs() } + m.ret.leafRefs()
 				refs.none { ir.typeDef(it).role == "readModelRow" && it !in mainReachable }
 			}
@@ -64,27 +64,23 @@ class EmitMain(
 				log("  note: ${s.name}: 本番に写せるメソッドがないため interface を生成しません")
 				continue
 			}
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = kept.any { it.ret is IrType.Result }) { serviceInterfaceBody(
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(
 				s.copy(methods = kept),
 				"取得ポート — 参照系 UseCase が内部で呼ぶ**アプリの持ち物**。") }
 		}
 		for (s in ir.useCases) {
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(s,
 				"アプリケーション層の UseCase(固定形 validate / execute)。",
 				fixedForm = true) }
 		}
 		for (s in ir.useCaseRules) {
 			// 純粋な判断 — 引数はすべて判断の入力(観測・集約ルートも配線ではない)
-			emitFile(k.useCasePackage(s.module), s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile(k.useCasePackage(s.module), s.name) { serviceInterfaceBody(s,
 				"UseCase の判断(validate / apply が呼ぶ純粋な補助)。UseCase の実装はこれを呼び、分岐条件を再実装しない。",
 				raw = true) }
 		}
 		for (s in ir.domainServices) {
-			emitFile("domain.domainservice", s.name,
-				usesDomainResult = s.methods.any { it.ret is IrType.Result }) { serviceInterfaceBody(s,
+			emitFile("domain.domainservice", s.name) { serviceInterfaceBody(s,
 				"**ドメインモデルの持ち物**(DomainService — 複数の集約ルートへの関心・参照透過)。") }
 		}
 		for (b in ir.behaviors) {
@@ -99,8 +95,7 @@ class EmitMain(
 					c.target == "behaviors" && c.useCase == td.lean && factory.any { it.name == c.method }
 				}
 				if (nominated) {
-					emitFile(k.packagePathOf(td), "${td.kotlin}Factory", toTest = true,
-						usesDomainResult = factory.any { it.ret is IrType.Result }) {
+					emitFile(k.packagePathOf(td), "${td.kotlin}Factory", toTest = true) {
 						serviceInterfaceBody(
 							IrService("${td.kotlin}Factory", b.module, factory),
 							"ファクトリ(`${b.subject}` を作るふるまい — テスト専用語彙。採番は呼び出し側の関心)。",
@@ -141,9 +136,8 @@ class EmitMain(
 				log("  note: ${td.kotlin}.${m.name}: 契約指名のないふるまい — 本番から除外")
 			}
 			if (contracted.isEmpty()) continue
-			val toTest = td.role in setOf("repositoryState", "readModel", "readModelRow")
-			emitFile(k.packagePathOf(td), "${td.kotlin}Behaviors", toTest = toTest,
-				usesDomainResult = contracted.any { it.ret is IrType.Result }) {
+			val toTest = td.role in setOf("readModel", "readModelRow")
+			emitFile(k.packagePathOf(td), "${td.kotlin}Behaviors", toTest = toTest) {
 				serviceInterfaceBody(
 					IrService("${td.kotlin}Behaviors", b.module, contracted),
 					"ふるまい(`${b.subject}` の def の写し — @[contract] 定理群が単体テストで固定)。",
@@ -153,17 +147,13 @@ class EmitMain(
 		// 泉ごとの IdGenerator ポート: @[repositoryState] の <X>IdGeneratorState から
 		// 命名規約 <X>State ↔ <X> で導出。供給値の型はモデルの具体化の写し(Long 連番 / UUID)
 		for (p in k.fountainPorts()) {
-			emitFile("application", p.port) { fountainPortBody(p) }
+			emitFile(k.fountainPortPackage, p.port) { fountainPortBody(p) }
 		}
 		// 外部能力の Port: 操作ごとに「要求 → 観測」の 1 メソッド。Adapter(外部の呼び方)は手書き
 		for (p in ir.ports) {
 			emitFile(k.portPackage(p), p.name) { portBody(p) }
 		}
 	}
-
-	/** 宣言 doc の先頭行(KDoc の 1 行要約に使う)。 */
-	private fun docLine(doc: String): String? =
-		doc.lineSequence().firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }
 
 	/**
 	 * 本番(main)面から参照が到達する型の集合。種は main に出る型の形
@@ -176,20 +166,16 @@ class EmitMain(
 	 */
 	private val mainReachable: Set<String> by lazy {
 		val testRoles = setOf("readModelRow", "repositoryState", "readModel", "clockPort")
-		fun shapeRefs(td: IrTypeDef): List<String> = when (val s = td.shape) {
-			is IrShape.Structure -> s.fields.flatMap { it.type.leafRefs() }
-			is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.flatMap { it.type.leafRefs() } }
-			else -> emptyList()
-		}
+		fun shapeRefs(td: IrTypeDef): List<String> = td.fieldTypes().flatMap { it.leafRefs() }
 		val seeds = mutableListOf<String>()
 		for (td in ir.types) if (td.role !in testRoles) seeds += shapeRefs(td)
 		for (s in ir.useCases) for (m in s.methods) {
-			seeds += m.params.filterNot { isPlumbing(it.type) || isPreciseInput(it.type) }
+			seeds += m.params.filterNot { k.isUseCasePlumbing(it.type) }
 				.flatMap { it.type.leafRefs() }
 			seeds += m.ret.leafRefs()
 		}
 		for (s in ir.domainServices) for (m in s.methods) {
-			seeds += m.params.filterNot { isPlumbing(it.type) }.flatMap { it.type.leafRefs() }
+			seeds += m.params.filterNot { k.isPlumbing(it.type) }.flatMap { it.type.leafRefs() }
 			seeds += m.ret.leafRefs()
 		}
 		val reach = mutableSetOf<String>()
@@ -202,32 +188,11 @@ class EmitMain(
 		reach
 	}
 
-	private fun emitFile(
-		subpkg: String?, name: String, usesDomainResult: Boolean = false,
-		toTest: Boolean = false, build: () -> String,
-	) {
-		val (body, c) = k.collecting(build)
-		val imports = mutableListOf<String>()
-		if ((usesDomainResult || DOMAIN_RESULT_REF.containsMatchIn(body)) && subpkg != null) imports.add("${out.basePackage}.DomainResult")
-		for (lean in c.refs) {
-			val td = ir.typeDef(lean)
-			val target = k.packagePathOf(td)
-			if (target != subpkg) {
-				imports.add(out.basePackage + (target?.let { ".$it" } ?: "") + "." + td.kotlin)
-			}
-		}
-		for (lean in c.fixtures) {
-			// fixture はテストのルートパッケージ(GeneratedFixtures)在住
-			if (subpkg != null) {
-				imports.add(out.basePackage + "." + ir.typeDef(lean).kotlin + "Fixture")
-			}
-		}
-		if (subpkg != null && body.contains(".toFixture(")) {
-			imports.add("${out.basePackage}.toFixture")
-		}
-		if (subpkg != null && RATIONAL_REF.containsMatchIn(body)) imports.add("${out.basePackage}.Rational")
-		(if (toTest) testOut else out).file(subpkg, name, imports, body)
-	}
+	private val files = GeneratedFiles(ir, k, out.basePackage)
+
+	// DomainResult の import は本文の参照が決める — Result を返すメソッドは typeRef が `DomainResult<` と書く
+	private fun emitFile(subpkg: String?, name: String, toTest: Boolean = false, build: () -> String) =
+		files.emit(if (toTest) testOut else out, subpkg, name, build = build)
 
 	private val domainResultBody = """
 /**
@@ -287,7 +252,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 		} else if (td.invariants.isNotEmpty())
 			// 型は制約を検査しない — 構築する側(validate など)が満たしてから作る
 			"/**\n * Lean: `${td.lean}`(${td.role})\n *\n * 制約(Lean の Prop フィールド。この型は検査しない — 構築する側の義務):\n" +
-				td.invariants.joinToString("") { " * - ${it.name}: `${it.lean}`\n" } + " */"
+				td.invariants.joinToString("") { " * - ${it.name}: `${kdocSafe(it.lean)}`\n" } + " */"
 		else
 			"/**\n * Lean: `${td.lean}`(${td.role})\n */"
 
@@ -297,7 +262,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 
 	/** 主体を取らず主体も返さない静的語彙のうち、@[contract] 定理が指名するもの。
 	    指名のないもの(isLeap 等)は証明の分解装置 — 本番に写さない。 */
-	fun contractedStaticsOf(td: IrTypeDef): List<IrMethod> =
+	private fun contractedStaticsOf(td: IrTypeDef): List<IrMethod> =
 		(ir.behaviors.find { it.subject == td.lean }?.methods ?: emptyList())
 			.filter { m ->
 				m.params.none { isSubjectParam(it, td) } &&
@@ -324,7 +289,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 					val si = m.params.indexOfFirst { isSubjectParam(it, td) }
 					val ps = m.params.filterIndexed { idx, _ -> idx != si }
 						.joinToString(", ") { "${ident(it.name)}: ${k.typeRef(it.type)}" }
-					val doc = docLine(m.doc)?.let { "\t/** $it */\n" } ?: ""
+					val doc = kdocLine(m.doc)
 					"\n$doc\tfun ${ident(m.name)}($ps): ${k.typeRef(m.ret)}"
 				}
 				"${docFor(td)}\ninterface ${td.kotlin} {\n$props$methods\n}"
@@ -334,7 +299,7 @@ class Rational private constructor(val numerator: BigInteger, val denominator: B
 			} else if (shape.fields.isEmpty()) {
 				"${docFor(td)}\ndata object ${td.kotlin}"
 			} else {
-				val fixtureTyped = td.role == "repositoryState" || td.role == "readModelRow"
+				val fixtureTyped = td.role == "readModelRow"
 				val params = shape.fields.joinToString("\n") { f ->
 					val dflt = (f.type as? IrType.WithDefault)?.let { " = ${k.defaultExpr(it)}" } ?: ""
 					val tr = if (fixtureTyped) k.typeRefFixture(f.type) else k.typeRef(f.type)
@@ -412,8 +377,7 @@ interface ${rootK}Repository {$ops
 	private fun actorPortBody(td: IrTypeDef): String {
 		val shape = td.shape as? IrShape.Structure
 			?: error("${td.lean}: actorPort は structure である必要があります")
-		val docBody = td.doc.trim().lineSequence()
-			.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+		val docBody = kdocBody(td.doc)
 		val params = shape.fields.joinToString("\n") { f ->
 			"\tval ${ident(f.name)}: ${k.typeRef((f.type as? IrType.WithDefault)?.of ?: f.type)},"
 		}
@@ -440,8 +404,7 @@ interface ${rootK}Repository {$ops
 	/** 泉ごとの IdGenerator ポート。KDoc には Lean 側の生成器状態の docstring を
 	    全文写す — 泉の単調性(保存順の担い手)のような法則の所在が実装者に見える。 */
 	private fun fountainPortBody(p: Kotlinize.FountainPort): String {
-		val docBody = p.stateTd.doc.trim().lineSequence()
-			.joinToString("\n") { " * ${it.trim()}" }.ifEmpty { " *" }
+		val docBody = kdocBody(p.stateTd.doc)
 		return "/**\n" +
 			" * Lean: `${p.stateTd.lean}` — 泉(同一性の供給)の観測モデルに対応する\n" +
 			" * IdGenerator ポート(命名規約 `<X>State ↔ <X>`)。\n" +
@@ -462,7 +425,7 @@ interface ${rootK}Repository {$ops
 	    外部の呼び方(HTTP・SDK・認証・再試行)は Adapter の持ち物。 */
 	private fun portBody(p: IrPort): String {
 		val ops = p.operations.joinToString("") { op ->
-			val doc = docLine(op.doc)?.let { "\t/** $it */\n" } ?: ""
+			val doc = kdocLine(op.doc)
 			"\n$doc\tfun ${ident(op.method)}(request: ${k.name(op.request)}): ${k.name(op.outcome)}"
 		}
 		return "/**\n" +
@@ -475,32 +438,6 @@ interface ${rootK}Repository {$ops
 			"interface ${p.name} {$ops\n}"
 	}
 
-	/** モデル配管(観測の Set・乱択の鍵・時計・主体・外部能力の観測)— 本番署名から落とし、実装の配線とする。 */
-	fun isPlumbing(t: IrType): Boolean = when (t) {
-		is IrType.Ref -> ir.typeDef(t.lean).role in
-			setOf("readModel", "repositoryState", "clockPort", "actorPort", "portOutcome")
-		is IrType.Arrow -> (t.from as? IrType.Ref)?.let { ir.typeDef(it.lean).isId } == true &&
-			t.to == IrType.Nat
-		else -> false
-	}
-
-	/**
-	 * precise な入力(lookup 結果・採番列)の判定: 参照の葉がすべて
-	 * Id・集約ルート・Entity・Row のもの。ペイロード(Command / Query / View の DTO)は
-	 * 残る。UseCase の固定形にのみ適用する(DomainService の resolve の lu/nid 等は
-	 * ドメイン語彙なので落とさない)。
-	 */
-	private fun isPreciseInput(t: IrType): Boolean {
-		// 内部入力(Observation)は相関 Id だけを運んでも入力。leafRefs は構造体の中へ降りないので今は到達しない —
-		// 降りる変更への防波堤として明示しておく
-		if ((t as? IrType.Ref)?.let { ir.typeDef(it.lean).role } == "observation") return false
-		val refs = t.leafRefs()
-		return refs.isNotEmpty() && refs.all {
-			val td = ir.typeDef(it)
-			td.isId || td.role in setOf("aggregateRoot", "entity", "readModelRow")
-		}
-	}
-
 	/** QueryService / UseCase の interface(Lean モジュール内 def の署名写し)。 */
 	private fun serviceInterfaceBody(
 		s: IrService, roleDoc: String, fixedForm: Boolean = false, raw: Boolean = false,
@@ -508,7 +445,7 @@ interface ${rootK}Repository {$ops
 		var dropped = false
 		val methods = s.methods.joinToString("\n") { m ->
 			val real = if (raw) m.params else m.params.filterNot {
-				isPlumbing(it.type) || (fixedForm && isPreciseInput(it.type))
+				k.isPlumbing(it.type) || (fixedForm && k.isPreciseInput(it.type))
 			}
 			if (real.size != m.params.size) dropped = true
 			val ps = real.joinToString(", ") { f -> "${ident(f.name)}: ${k.typeRef(f.type)}" }
@@ -519,7 +456,7 @@ interface ${rootK}Repository {$ops
 				"\t/**\n$head\t * 本番では execute の内部第一段として呼ばれる(実装は「execute は\n" +
 					"\t * validate を呼ぶ」形に一本化する — 分岐条件を再実装しない)。\n" +
 					"\t * 公開メンバとしては**テストシーム**(定理→テスト 1:1 導出・読み取り専用の検査)。\n\t */\n"
-			} else docLine(m.doc)?.let { "\t/** $it */\n" } ?: ""
+			} else kdocLine(m.doc)
 			"$doc\tfun ${ident(m.name)}($ps): ${k.typeRef(m.ret)}"
 		}
 		val plumbingDoc = if (dropped)

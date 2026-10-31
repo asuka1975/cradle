@@ -8,28 +8,39 @@
 // 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm install が rules に写す。Codex は apm compile --single-agents で AGENTS.md に）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
 // .claude/ と .codex/ の設定例は、その置き場が既にあるもの（apm install 済みのターゲット）だけ敷く。どちらも無ければ両方。
 // 既にあるファイルは上書きしない（--force で上書き）。
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, appendFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { renameScaffold, parseArgs } from "../../cradle/scripts/lib.mjs";
 
-const args = process.argv.slice(2);
-// 次の語が別のフラグなら値ではない（`--domain --force` の domain は「値なし」）
-const opt = (k, d) => { const i = args.indexOf(`--${k}`); if (i < 0) return d; const v = args[i + 1]; return v === undefined || v.startsWith("--") ? true : v; };
-const project = opt("project");
-const target = opt("dir", process.env.CRADLE_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
-const backendPkg = opt("backend", null);
-const domain = opt("domain", null);
-const dryRun = args.includes("--dry-run");
-const force = args.includes("--force");
-const only = opt("only", null);
+// 次の語が別のフラグなら値ではない（`--domain --force` の domain は「値なし」）。`--only=lean/mockup` も読む（読まずに落とすと --force が骨格を丸ごと上書きする）
+const opts = parseArgs(process.argv.slice(2), { "dry-run": "bool", force: "bool" });
+const project = opts.project;
+const target = opts.dir ?? process.env.CRADLE_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+const backendPkg = opts.backend ?? null;
+const domain = opts.domain ?? null;
+const dryRun = !!opts["dry-run"];
+const force = !!opts.force;
+// 末尾の / を落としてから空かを見る（空の変数を渡した --only "$P/" は "/" になり、落とした "" は全部のファイルに一致する）
+const only = typeof opts.only === "string" ? opts.only.replace(/\/+$/, "") : opts.only ?? null;
+// 引数の誤りは何か書く前に止める（敷いた後で止めると、書いた分の一覧も出さずに 1 で終わる）
 if (!project || !/^[A-Z][A-Za-z0-9]*$/.test(project)) { console.error("--project <Root> が要ります（大文字始まりの英数字。例: MonoWa）"); process.exit(1); }
 if (domain === true || (domain !== null && !String(domain).trim())) { console.error("--domain には一言（空でない文字列）が要ります"); process.exit(1); }
-const lower = project.toLowerCase();
-const assets = join(import.meta.dirname, "..", "assets");
+// 空の値（--only= や空の変数を渡した --only "$P"）も値の無い形と同じに止める。通すと --only は絞らずに全部を、--dir は cwd を指す
+const blank = (v) => v === true || (typeof v === "string" && !v.trim());
+if (blank(opts.dir)) { console.error("--dir <path> が要ります（骨格を敷くディレクトリ）"); process.exit(1); }
+if (blank(only)) { console.error("--only <prefix> が要ります（例: lean/mockup）"); process.exit(1); }
+if (blank(backendPkg)) { console.error("--backend <package> が要ります（例: com.example.notes）"); process.exit(1); }
+if (backendPkg && !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(backendPkg)) { console.error("--backend は Java のパッケージ名（例: com.example.notes）"); process.exit(1); }
+// parseArgs は --force=false も文字列として残すので、付けたことにすると手で書いた内容を上書きする。値を付けた形は受けない
+for (const k of ["force", "dry-run"]) if (typeof opts[k] === "string") { console.error(`--${k} は値を取りません（--${k}=${opts[k]}）`); process.exit(1); }
+// import.meta の dirname は Node 20.11 から。要件の Node 20 のどの版でも動くよう URL から引く
+const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
 const written = [], skipped = [], failed = [];
 // 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する
 function put(rel, content, { exec = false } = {}) {
-  if (only && only !== true && !rel.startsWith(only.replace(/\/$/, ""))) return;
+  if (only && !rel.startsWith(only)) return;
   const dest = join(target, rel);
   if (existsSync(dest) && !force) { skipped.push(rel); return; }
   if (dryRun) { written.push(rel); return; }
@@ -39,10 +50,7 @@ function put(rel, content, { exec = false } = {}) {
     written.push(rel);
   } catch (e) { failed.push(`${rel}（${e.code ?? e.message}）`); }
 }
-function rename(text) {
-  return text.replace(/Sprout/g, project).replace(/sprout/g, lower).replace(/__PROJECT__/g, project).replace(/__PROJECT_LOWER__/g, lower)
-    .replace(/__DOMAIN__/g, () => domain === null ? "（一言で）" : String(domain).trim());
-}
+const rename = (text) => renameScaffold(text, { project, domain });
 function walk(dir) {
   const out = [];
   for (const name of readdirSync(dir)) { const p = join(dir, name); out.push(...(statSync(p).isDirectory() ? walk(p) : [p])); }
@@ -76,8 +84,7 @@ for (const f of walk(join(assets, "lean"))) {
   put(join("lean", rel), rename(text), { exec: f.endsWith(".mjs") });
 }
 
-if (backendPkg && backendPkg !== true) {
-  if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(backendPkg)) { console.error("--backend は Java のパッケージ名（例: com.example.notes）"); process.exit(1); }
+if (backendPkg) {
   for (const f of walk(join(assets, "backend"))) {
     const relPath = relative(join(assets, "backend"), f);
     put(join("backend", relPath), rename(readFileSync(f, "utf8")).replace(/__PACKAGE__/g, backendPkg));

@@ -23,38 +23,18 @@
 //   共通: --build always|auto|never（既定 auto = バイナリが無ければ lake build）
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, callLean, leanEval, parseArgs, jsonArg, fail, walk, traceInputOf, ports } from "./lib.mjs";
-import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom } from "./schema.mjs";
+import { loadConfigOrFail, buildMode, callLean, ensureLeanBinary, leanEval, parseArgs, jsonArg, fail, traceInputOf, ports, scenarioNames, environmentNames, headerUsage } from "./lib.mjs";
+import { joinWrapped, payloadHeads, payloadTypeOf, schemasFrom, splitTypeApp } from "./schema.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { full: "bool", json: "bool" });
 const [cmd, ...rest] = opts._;
-const cfg = loadConfig();
-const build = opts.build ?? "auto";
+// 使い方は設定を読む前に出す（プロジェクトの外でも引ける）。下の switch の腕と同じ並び
+const COMMANDS = ["scenarios", "environments", "commands", "errors", "outlets", "schemas", "meta", "external", "print", "init", "run", "step", "views", "raw"];
+if (!COMMANDS.includes(cmd)) { console.log(headerUsage(import.meta.url)); process.exit(cmd ? 1 : 0); }
+const cfg = loadConfigOrFail();
+const build = buildMode(opts.build);
 
 const printJson = (v) => process.stdout.write(JSON.stringify(v, null, 2) + "\n");
-
-function scenarios() {
-  const files = walk(cfg.lean.rootDir, { ext: [".lean"] });
-  const names = new Set();
-  for (const f of files) {
-    const text = readFileSync(f, "utf8");
-    const m = text.match(/def\s+scenarioByName[\s\S]*?(?=\n\S|$)/);
-    if (!m) continue;
-    for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
-  }
-  return [...names];
-}
-
-/** 名前付きの環境（外部能力の script）: Runtime/Scenarios.lean の environmentByName の腕。持たないプロジェクトでは空。 */
-function environments() {
-  const file = join(cfg.lean.modelDir, "Runtime", "Scenarios.lean");
-  if (!existsSync(file)) return [];
-  const m = readFileSync(file, "utf8").match(/def\s+environmentByName[\s\S]*?(?=\n\S|$)/);
-  if (!m) return [];
-  const names = new Set();
-  for (const c of m[0].matchAll(/\|\s*"([^"]+)"\s*=>\s*some/g)) names.add(c[1]);
-  return [...names];
-}
 
 /** 外部能力の経路（cmd external）の版。CLI に views を 1 回流して決める（ファイルの有無では決めない）—
     旧実行器は未知の cmd として拒否し（null）、新しい実行器は state が無いというプロトコルエラーで応じる（版 1 を持つ）。 */
@@ -65,12 +45,12 @@ async function externalProtocol() {
   return typeof res?.error === "string" && /unknown cmd/.test(res.error) ? null : { version: EXTERNAL_VERSION };
 }
 
-/** #print の出力から構成子名と型を抜く。 */
+/** #print の出力から構成子名と型を抜く。評価が終わらなかった（leanEval の error）か構成子の欄が無ければ、error に理由を載せて構成子は空。 */
 function constructorsOf(fullName) {
   const r = leanEval(cfg, `import ${cfg.lean.root}\n#print ${fullName}\n`);
   const lines = joinWrapped(r.stdout.split("\n"));
   const i = lines.findIndex(l => l.startsWith("constructors:"));
-  if (i < 0) return { error: (r.stderr || r.stdout).trim().slice(0, 500), constructors: [] };
+  if (r.error !== undefined || i < 0) return { error: r.error ?? (r.stderr || r.stdout).trim().slice(0, 500), constructors: [] };
   const ctors = [];
   for (const l of lines.slice(i + 1)) {
     const m = l.match(/^(\S+)\s*:\s*(.*)$/);
@@ -79,17 +59,22 @@ function constructorsOf(fullName) {
   return { constructors: ctors };
 }
 
-// 同じ #print を繰り返さない（meta は commands / observations を何度も引く）
+/** commands / errors / schemas / print の腕の先頭で --build の build を 1 回走らせる — `lake env lean` は callLean を通らず、build の前は import するモジュールが無い
+    （auto はバイナリが無いときだけ、always はあっても）。never は確かめもしない — #print はバイナリでなく olean を読み、無ければ import の誤りがそのまま理由になる。
+    meta は externalProtocol の callLean が先に build するので通さない。 */
+function buildForPrint() { if (build !== "never") ensureLeanBinary(cfg, build); }
+
+// 同じ #print を繰り返さない（meta は commands / observations / errors を何度も引く）
 const printed = new Map();
 function once(key, compute) { if (!printed.has(key)) printed.set(key, compute()); return printed.get(key); }
 function commands() { return once("commands", () => constructorsOf(`${cfg.lean.root}.Runtime.Command`)); }
 /** 内部入力（通知・worker からの観測）の合併型。持たないプロジェクトでは空。 */
 function observations() { return once("observations", () => existsSync(join(cfg.lean.modelDir, "Runtime", "Observation.lean")) ? constructorsOf(`${cfg.lean.root}.Runtime.Observation`) : { constructors: [] }); }
-function errors() { return constructorsOf(`${cfg.lean.root}.DomainError`); }
+function errors() { return once("errors", () => constructorsOf(`${cfg.lean.root}.DomainError`)); }
 
-/** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。 */
+/** 複数の宣言を 1 回の `lake env lean` で #print し、宣言名ごとの行ブロックに切る。error は評価が終わらなかった理由（leanEval の error）。 */
 function printMany(names) {
-  if (!names.length) return {};
+  if (!names.length) return { blocks: {} };
   const r = leanEval(cfg, `import ${cfg.lean.root}\n` + names.map(n => `#print ${n}`).join("\n") + "\n");
   const out = {};
   let cur = null;
@@ -98,7 +83,7 @@ function printMany(names) {
     if (m && names.includes(m[1])) { cur = m[1]; out[cur] = []; }
     if (cur) out[cur].push(raw);
   }
-  return out;
+  return { blocks: out, error: r.error };
 }
 
 /** Runtime/Json.lean の手書き `instance : FromJson <T>` と直前の docstring（人が打つ表記の注記）。`deriving instance` は手書きではない。
@@ -110,21 +95,34 @@ function wireHints() {
   return hints;
 }
 
-/** コマンドごとの入力の形: 構成子 → ペイロード構造体のフィールド（組み立ては schema.mjs。Lean を呼ぶのはここ）。 */
-function commandSchemas() {
-  const ctors = commands().constructors;
-  return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
+/** 構成子の列 → 入力の形（組み立ては schema.mjs。Lean を呼ぶのはここ）。#print が評価しきれなければ、出力に無かった宣言（ペイロードか 1 段展開する値オブジェクト）を
+    使う構成子に error を載せ、理由を error に返す — 載せなければ「構造体でない」「値オブジェクトでない」と同じ形に見える。 */
+function schemasOf(ctors) {
+  let error;
+  const missing = new Set();
+  const print = (names) => {
+    const r = printMany(names);
+    if (r.error !== undefined) { error ??= r.error; for (const n of names) if (!r.blocks[n]) missing.add(n); }
+    return r.blocks;
+  };
+  const specs = schemasFrom(ctors, print(payloadHeads(ctors)), wireHints(), cfg.lean.root, print);
+  for (const s of Object.values(specs)) {
+    if (s.error === undefined && [s.type, ...(s.fields ?? []).map(f => splitTypeApp(f.type).head)].some(n => missing.has(n))) s.error = `#print を評価できない: ${error}`;
+  }
+  return { specs, error };
 }
+
+/** コマンドごとの入力の形: 構成子 → ペイロード構造体のフィールド。 */
+function commandSchemas() { return schemasOf(commands().constructors); }
 
 /** 内部入力ごとの形（コマンドの入力欄とは別に出す — 利用者のフォームに観測を混ぜない）。 */
 function observationSchemas() {
   const ctors = observations().constructors;
-  if (!ctors.length) return {};
-  return schemasFrom(ctors, printMany(payloadHeads(ctors)), wireHints(), cfg.lean.root, printMany);
+  return ctors.length ? schemasOf(ctors) : { specs: {} };
 }
 
 async function outlets() {
-  const s = scenarios();
+  const s = scenarioNames(cfg);
   if (!s.length) return { error: "シナリオが見つかりません（scenarioByName）", outlets: [] };
   const res = await callLean(cfg, { cmd: "init", scenario: s[0] }, { build });
   if (!res.ok) return { error: res, outlets: [] };
@@ -191,22 +189,40 @@ function externalRequest(action) {
   return req;
 }
 
+// 腕は終了コードだけを置いて break する — process.exit はパイプにまだ書いていない stdout を捨てる（大きな応答や #print が 64KB 前後で切れる）
 try {
   switch (cmd) {
-    case "scenarios": printJson(scenarios()); break;
-    case "environments": printJson(environments()); break;
-    case "commands": printJson(commands()); break;
-    case "errors": printJson(errors()); break;
+    case "scenarios": printJson(scenarioNames(cfg)); break;
+    case "environments": printJson(environmentNames(cfg)); break;
+    case "commands": buildForPrint(); printJson(commands()); break;
+    case "errors": buildForPrint(); printJson(errors()); break;
     case "outlets": printJson(await outlets()); break;
-    case "schemas": printJson(commandSchemas()); break;
+    case "schemas": {
+      buildForPrint();
+      const { specs, error } = commandSchemas();
+      printJson(specs);
+      // 構成子かペイロードの #print が評価しきれなければ、空の・欠けた写像を「入力が無い」と読ませないよう理由を出して 0 で終えない
+      const reason = commands().error ?? error;
+      if (reason !== undefined) { process.stderr.write(`cradle: #print を評価できない: ${reason}\n`); process.exitCode = 1; }
+      break;
+    }
     case "meta": {
+      // 構成子・失敗語彙・入力の形の #print は、バイナリが無ければ externalProtocol が走らせる lake build のあとに引く（それまで import するモジュールが無く、
+      // once が build 前の失敗を覚えたまま evalErrors に出す）
+      const external = await externalProtocol();
       const obs = observations().constructors;
       // observations は内部入力（通知・worker）: 構成子名とペイロード型の完全名。公開受信の有無は OpenAPI 側（contract-check）が決める
-      printJson({ project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
-        scenarios: scenarios(), environments: environments(), external: await externalProtocol(),
+      const meta = { project: cfg.project, lean: { dir: cfg.lean.dir, root: cfg.lean.root, exe: cfg.lean.exe, bin: cfg.lean.bin },
+        scenarios: scenarioNames(cfg), environments: environmentNames(cfg), external,
         commands: commands().constructors.map(c => c.name), commandTypes: Object.fromEntries(commands().constructors.map(c => [c.name, payloadTypeOf(c)])),
         observations: obs.map(c => c.name), observationTypes: Object.fromEntries(obs.map(c => [c.name, payloadTypeOf(c)])),
-        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets(), schemas: commandSchemas(), observationSchemas: observationSchemas() });
+        ports: ports(cfg), errors: errors().constructors.map(c => c.name), views: await outlets() };
+      const schemas = commandSchemas(), obsSchemas = observationSchemas();
+      Object.assign(meta, { schemas: schemas.specs, observationSchemas: obsSchemas.specs });
+      // #print が通らなかった合併型と入力の形の理由は末尾の evalErrors に置き、空の一覧を「モデルに無い」と読ませない。全部通れば鍵ごと出さない。
+      // 終了コードは 0 のまま — モックアップは meta が 0 で終わらなければ全体を捨て、シナリオと画面の口まで失う
+      const evalErrors = Object.fromEntries(Object.entries({ commands: commands(), observations: observations(), errors: errors(), schemas, observationSchemas: obsSchemas }).filter(([, r]) => r.error !== undefined).map(([k, r]) => [k, r.error]));
+      printJson(Object.keys(evalErrors).length ? { ...meta, evalErrors } : meta);
       break;
     }
     case "external": {
@@ -214,7 +230,7 @@ try {
       if (!EXTERNAL_ACTIONS.includes(action)) fail(`external には ${EXTERNAL_ACTIONS.join(" | ")} のどれかが要ります`);
       const req = externalRequest(action);
       const res = await callLean(cfg, req, { build });
-      if (!res.ok) { printJson(res); process.exit(1); }
+      if (!res.ok) { printJson(res); process.exitCode = 1; break; }
       if (opts.full || opts.json || action === "init" || action === "views") { printJson(res); break; }
       if (action === "step") {
         // step の応答は入力の写しを持たないので、名前と当事者はリクエスト（入力の actor が無ければ既定の actor）から補う
@@ -231,11 +247,15 @@ try {
     }
     case "print": {
       if (!rest.length) fail("print には名前が要ります（例: MonoWa.Runtime.Command）");
+      buildForPrint();
       const src = `import ${cfg.lean.root}\n` + rest.map(n => `#print ${n}`).join("\n") + "\n";
       const r = leanEval(cfg, src);
       process.stdout.write(r.stdout);
       if (r.stderr.trim()) process.stderr.write(r.stderr);
-      process.exit(r.status ?? 0);
+      // lake を起動できない・時間切れなら出力は空なので、理由を出して 0 で終えない
+      if (r.error !== undefined) process.stderr.write(`cradle: \`lake env lean\` で評価できない: ${r.error}\n`);
+      process.exitCode = r.status ?? 1;
+      break;
     }
     case "init": {
       if (!opts.scenario) fail("--scenario が要ります");
@@ -246,7 +266,7 @@ try {
       const commandsArg = jsonArg(opts.commands);
       if (!Array.isArray(commandsArg)) fail("--commands は配列（JSON か @file）");
       const res = await callLean(cfg, { cmd: "flow", scenario: opts.scenario, commands: commandsArg, ...commonFields() }, { build });
-      if (!res.ok) { printJson(res); process.exit(1); }
+      if (!res.ok) { printJson(res); process.exitCode = 1; break; }
       const trace = res.ok.trace;
       if (opts.full || opts.json) { printJson(res); break; }
       for (const line of summarizeTrace(trace)) console.log(line);
@@ -268,8 +288,5 @@ try {
       const req = jsonArg(rest[0] ?? "-");
       printJson(await callLean(cfg, req, { build })); break;
     }
-    default:
-      console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").filter(l => l.startsWith("//")).map(l => l.slice(3)).join("\n"));
-      process.exit(cmd ? 1 : 0);
   }
 } catch (e) { fail(e.message, e.exitCode ?? 1); }

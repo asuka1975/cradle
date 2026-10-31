@@ -1,18 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode } from "./helpers.mjs";
 
 const leanCheck = fileURLToPath(new URL("../.apm/skills/cradle/scripts/lean-check.mjs", import.meta.url));
 
 // 一時プロジェクト: Port の操作モジュール 1 つだけの Lean モデル（lake build はしない）。runtime は Runtime/ に置く追加ファイル
 function fixture(t, findLean, runtime = {}, rule = "port") {
-  const root = mkdtempSync(join(tmpdir(), "cradle-lean-check-port-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+  const root = tempProject(t, "cradle-lean-check-port-");
   const port = join(root, "lean/Example/Application/Port/Directory");
   mkdirSync(port, { recursive: true });
   writeFileSync(join(port, "Find.lean"), findLean);
@@ -20,9 +17,7 @@ function fixture(t, findLean, runtime = {}, rule = "port") {
     mkdirSync(join(root, "lean/Example/Runtime"), { recursive: true });
     writeFileSync(join(root, "lean/Example/Runtime", name), text);
   }
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
-  const r = spawnSync(process.execPath, [leanCheck, "--json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+  const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
   return JSON.parse(r.stdout).findings.filter(f => f.rule === rule);
 }
 const pureFind = "namespace Example.Application.Port.Directory.Find\n\nstructure Request where\n  employee : Nat\n\ninductive Outcome where\n  | found (name : String)\n  | missing\n\nend Example.Application.Port.Directory.Find\n";
@@ -39,6 +34,9 @@ test("Runtime/Environment.lean を持つなら、Port の操作ごとに \"<Port
   assert.equal(missingOp.length, 1, JSON.stringify(missingOp));
   assert.match(missingOp[0].message, /^Port の往復 Directory\.find のワイヤ形式（"find"）が Json\.lean に無い/);
   assert.equal(missingOp[0].file, "lean/Example/Runtime/Json.lean");
+  // コメントの中の "find" はワイヤ形式に数えない
+  const commentedOp = fixture(t, pureFind, { "Environment.lean": environment, "Json.lean": json("Directory", "Find") + '-- 旧: "find"\n' }, "wiring");
+  assert.deepEqual(commentedOp.map(f => f.message), missingOp.map(f => f.message));
   const missingBoth = fixture(t, pureFind, { "Environment.lean": environment, "Json.lean": json("Gateway", "authorize") }, "wiring");
   assert.match(missingBoth[0].message, /（"Directory" と "find"）/);
   // Runtime/Environment.lean が無ければ文字列は見ない — 代わりに、Port の置き場があるのに環境が無いことが配線の誤り

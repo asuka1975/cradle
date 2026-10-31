@@ -1,24 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { tempProject, cleanEnv, runNode, commitAll } from "./helpers.mjs";
 
 const hook = fileURLToPath(new URL("../.apm/skills/cradle/scripts/hook.mjs", import.meta.url));
 
-function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), "cradle-hook-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, "cradle.json"), JSON.stringify({ project: "Example" }));
+function fixture(t, config) {
+  const root = tempProject(t, "cradle-hook-", config);
   mkdirSync(join(root, "documents/ddd"), { recursive: true });
-  const env = { ...process.env };
-  for (const key of ["CRADLE_PROJECT_DIR", "CRADLE_CONFIG", "CLAUDE_PROJECT_DIR"]) delete env[key];
   function invoke(mode, tool_name, tool_input = {}, extra = {}, claude = false) {
-    const result = spawnSync(process.execPath, [hook, mode], {
-      cwd: root, env: { ...env, ...(claude ? { CLAUDE_PROJECT_DIR: root } : {}) },
-      input: JSON.stringify({ cwd: root, tool_name, tool_input, ...extra }), encoding: "utf8", timeout: 10_000,
+    const result = runNode(hook, [mode], {
+      cwd: root, env: cleanEnv(claude ? { CLAUDE_PROJECT_DIR: root } : {}),
+      input: JSON.stringify({ cwd: root, tool_name, tool_input, ...extra }), timeout: 10_000,
     });
     assert.equal(result.error, undefined);
     assert.equal(result.status, 0, result.stderr);
@@ -91,4 +86,47 @@ test("編集後の促しとStop再入時の許可を維持する", (t) => {
   const api = invoke("post-edit", "Write", { file_path: "documents/codebase/openapi.yaml" });
   assert.match(api.hookSpecificOutput.additionalContext, /generateApi/);
   assert.equal(invoke("stop", "", {}, { stop_hook_active: true }), null);
+});
+
+test("protected・backend.generated・frontend.generated に文字列 1 つを書いても、1 要素の配列と同じく拒否する", (t) => {
+  const { invoke } = fixture(t, { project: "Example", protected: "documents/developer/**" });
+  denied(invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }));
+  denied(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }));
+  const generated = fixture(t, { project: "Example", backend: { generated: "api/out" }, frontend: { generated: "web/out" } });
+  denied(generated.invoke("pre-guard", "Write", { file_path: "api/out/A.kt" }));
+  denied(generated.invoke("pre-guard", "Write", { file_path: "web/out/a.ts" }));
+  denied(generated.invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }, {}, true));
+  assert.equal(generated.invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }), null);
+});
+
+test("cradle.json の型が文書と違えば（protected が数）、投げる検査から先は黙って通し、それより前の拒否は変えない", (t) => {
+  const { invoke } = fixture(t, { project: "Example", protected: 5 });
+  denied(invoke("pre-guard", "Write", { file_path: "backend/src/generated/A.kt" }));
+  assert.equal(invoke("pre-guard", "Edit", { file_path: "documents/developer/x.md" }), null);
+});
+
+test("骨格が置く ai-notes の TEMPLATE.md と README.md の編集には促さず、同じ中身でも名前の規則に合わないノートには促す", (t) => {
+  const { root, invoke } = fixture(t);
+  const scaffold = (name) => fileURLToPath(new URL(`../.apm/skills/cradle-init/assets/documents/ai-notes/${name}`, import.meta.url));
+  mkdirSync(join(root, "documents/ai-notes"), { recursive: true });
+  for (const name of ["TEMPLATE.md", "README.md"]) {
+    copyFileSync(scaffold(name), join(root, "documents/ai-notes", name));
+    assert.equal(invoke("post-edit", "Write", { file_path: `documents/ai-notes/${name}` }), null, name);
+  }
+  copyFileSync(scaffold("TEMPLATE.md"), join(root, "documents/ai-notes/memo.md"));
+  assert.equal(invoke("post-edit", "Write", { file_path: "documents/ai-notes/memo.md" }).hookSpecificOutput.additionalContext,
+    "ai-notes の規約: ファイル名は YYYYMMDD-NN-<topic>.md（いまは memo.md）。ai-notes は規約ではない — ユーザーが承認したものだけが規約になる。");
+});
+
+test("pre-guard は lake build が書いた lean/lake-manifest.json だけの差分では backend の本番コードの編集を確かめず、追跡している Lean の変更では確かめる", (t) => {
+  const { root, invoke } = fixture(t);
+  mkdirSync(join(root, "lean"), { recursive: true });
+  writeFileSync(join(root, "lean/Example.lean"), "def x := 1\n");
+  commitAll(root);
+  writeFileSync(join(root, "lean/lake-manifest.json"), "{}\n");
+  for (const claude of [true, false]) assert.equal(invoke("pre-guard", "Edit", { file_path: "backend/src/main/kotlin/A.kt" }, {}, claude), null);
+  writeFileSync(join(root, "lean/Example.lean"), "def x := 2\n");
+  const asked = invoke("pre-guard", "Edit", { file_path: "backend/src/main/kotlin/A.kt" }, {}, true);
+  assert.equal(asked?.hookSpecificOutput?.permissionDecision, "ask");
+  assert.match(asked.hookSpecificOutput.permissionDecisionReason, /^lean\/ に未コミットの差分があります/);
 });

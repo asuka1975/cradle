@@ -193,6 +193,13 @@ data class IrTypeDef(
 	}
 }
 
+/** 形が運ぶフィールドの型: structure はフィールドの順、sealed は構成子の順にその引数の順。enum は何も運ばない。 */
+fun IrTypeDef.fieldTypes(): List<IrType> = when (val s = shape) {
+	is IrShape.Structure -> s.fields.map { it.type }
+	is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.map { it.type } }
+	is IrShape.Enum -> emptyList()
+}
+
 /** QueryService / UseCase の interface 面(モジュール内 def の署名写し)。 */
 data class IrMethod(val name: String, val doc: String, val params: List<IrField>, val ret: IrType) {
 	companion object {
@@ -455,13 +462,7 @@ class Ir(
 			is IrType.WithDefault -> of.hasRat()
 			else -> false
 		}
-		val fieldTypes = types.flatMap { td ->
-			when (val s = td.shape) {
-				is IrShape.Structure -> s.fields.map { it.type }
-				is IrShape.Sealed -> s.ctors.flatMap { c -> c.fields.map { it.type } }
-				is IrShape.Enum -> emptyList()
-			}
-		}
+		val fieldTypes = types.flatMap { it.fieldTypes() }
 		val methods = (queryServices + useCases + domainServices + useCaseRules).flatMap { it.methods } + behaviors.flatMap { it.methods }
 		(fieldTypes + methods.flatMap { m -> m.params.map { it.type } + m.ret }).any { it.hasRat() }
 	}

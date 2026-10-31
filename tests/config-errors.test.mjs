@@ -1,0 +1,62 @@
+// 設定が読めない・git の外: 道具は `cradle: <理由>` の 1 行と exit 1 で止まり、スタックトレースを出さない。
+// spec-query はコマンドを渡す（コマンド無しは設定を読まずに使い方を出す）
+import test from "node:test";
+import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { tempDir, tempProject, cleanEnv, runNode, git } from "./helpers.mjs";
+
+const skill = (p) => fileURLToPath(new URL(`../.apm/skills/${p}`, import.meta.url));
+const cradle = skill("cradle/scripts/cradle.mjs");
+const entries = [
+  [cradle, ["status"]], [cradle, ["golden-check", "--build", "never"]], [cradle, ["spec-query", "scenarios"]], [cradle, ["lean-check"]],
+  [cradle, ["regen-impact", "--no-regen"]], [cradle, ["unslop", "--all"]], [cradle, ["ddd-clean-check"]], [cradle, ["doctor", "--local"]],
+  [skill("api-contract/scripts/contract-check.mjs"), []], [skill("e2e-parity/scripts/flows-from-golden.mjs"), []], [skill("ddd/scripts/ddd.mjs"), ["status"]],
+];
+
+test("cradle.json も lean/lakefile.toml も無い置き場では、どの道具も project が要る理由の 1 行で止まる", (t) => {
+  const root = tempDir(t, "cradle-config-missing-");
+  for (const [script, args] of entries) {
+    const r = runNode(script, args, { cwd: root, env: cleanEnv() });
+    const label = [script.split("/").pop(), ...args].join(" ");
+    assert.equal(r.status, 1, label);
+    assert.equal(r.stdout, "", label);
+    assert.equal(r.stderr, "cradle: cradle.json に project（Lean のルート名前空間）が要ります\n", label);
+  }
+});
+
+test("JSON として読めない cradle.json は、読めないファイルと理由の 1 行で止まる", (t) => {
+  const root = tempDir(t, "cradle-config-broken-");
+  writeFileSync(join(root, "cradle.json"), "{");
+  for (const [script, args] of entries) {
+    const r = runNode(script, args, { cwd: root, env: cleanEnv() });
+    const label = [script.split("/").pop(), ...args].join(" ");
+    assert.equal(r.status, 1, label);
+    assert.equal(r.stdout, "", label);
+    assert.match(r.stderr, /^cradle: cradle\.json を読めません: .*cradle\.json: [^\n]+\n$/, label);
+  }
+});
+
+test("git の外の regen-impact は失敗した git の呼び出しの 1 行で止まる", (t) => {
+  const root = tempProject(t, "cradle-config-nogit-");
+  // 一時ディレクトリの祖先に git の作業ツリーがあっても、そこまで上がらせない
+  const r = runNode(cradle, ["regen-impact", "--no-regen"], { cwd: root, env: cleanEnv({ GIT_CEILING_DIRECTORIES: dirname(root) }) });
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, "");
+  assert.equal(r.stderr, "cradle: Command failed: git status --porcelain --untracked-files=normal -- backend/src/generated\n");
+});
+
+test("コミットの無いリポジトリの regen-impact は再生成する前にその理由の 1 行で止まり、1 つコミットすれば回る", (t) => {
+  const root = tempProject(t, "cradle-config-nohead-");
+  git(root, "init", "-q");
+  const run = (...args) => runNode(cradle, ["regen-impact", ...args], { cwd: root, env: cleanEnv() });
+  for (const args of [["--no-regen", "--no-golden"], [], ["--dry-run"]]) {
+    const r = run(...args);
+    assert.deepEqual([r.status, r.stdout, r.stderr], [1, "", "cradle: まだコミットがありません。regen-impact は生成物を HEAD と比べるので、先にコミットしてから回す\n"], args.join(" "));
+  }
+  git(root, "commit", "-q", "--allow-empty", "-m", "init");
+  const r = run("--no-regen", "--no-golden");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, "");
+});

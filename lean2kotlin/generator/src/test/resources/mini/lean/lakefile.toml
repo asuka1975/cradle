@@ -1,0 +1,11 @@
+# 生成器の回帰素材（Sprout と Lobby のスナップショットに出ない生成の枝を通す最小ドメイン「貸出棚」）。
+# CLI は golden の採取用で、init だけを答える。
+name = "mini-lean"
+defaultTargets = ["Mini", "mini"]
+
+[[lean_lib]]
+name = "Mini"
+
+[[lean_exe]]
+name = "mini"
+root = "Main"

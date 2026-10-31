@@ -13,7 +13,7 @@ Lean のドメインモデルから Kotlin の型・interface・契約テスト�
 ```
 lean/            抽出器 — Lake パッケージ `lean2kotlin`（lib `Lean2Kotlin`）。#kotlin_ir が対象の環境を走査して IR JSON を書く
 generator/       Gradle plugin dev.lean2kotlin — IR + golden → .kt
-scaffold-check/  骨格（cradle-init の Sprout）を通す回帰検査。src/generated/ が生成物のスナップショット。port/ は外部能力の Port を持つ最小ドメイン（Lobby）を同じ経路で通す子プロジェクト
+scaffold-check/  骨格（cradle-init の Sprout）を通す回帰検査。src/generated/ が生成物のスナップショット。port/ は外部能力の Port を持つ最小ドメイン（Lobby）を同じ経路で通す子プロジェクト。extract-fixture/ は抽出だけを掛けて IR を expected-ir.json と突き合わせる子プロジェクト（診断を持つ IR なので生成には通さない）
 ```
 
 利用側の配線は backend-implement スキルの `references/gradle-wiring.md`。

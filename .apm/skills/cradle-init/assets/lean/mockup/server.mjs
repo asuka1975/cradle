@@ -63,7 +63,8 @@ function meta() {
   let value = null;
   for (const c of candidates) {
     if (!existsSync(c)) continue;
-    try { value = JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CRADLE_PROJECT_DIR: root } })); }
+    // 大きなモデルの meta は既定の maxBuffer（1MB）を超えるので、道具（lib の CHILD_OUTPUT_MAX）と同じ 256MB まで読む。骨格は利用側に写すので lib を import しない
+    try { value = JSON.parse(execFileSync(process.execPath, [c, "meta", "--build", "never"], { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CRADLE_PROJECT_DIR: root } })); }
     catch (e) { value = { error: String(e.message ?? e) }; }
     break;
   }
