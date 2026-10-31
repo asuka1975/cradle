@@ -388,6 +388,12 @@ internal fun EmitTests.emitDdlContractTest(projCs: List<IrContract>) {
 			val (rm, fields) = rms.firstOrNull { (_, fs) ->
 				fs.any { rowLeanOf(it.type) == rowTd.lean }
 			} ?: continue
+			// Retrieve フックは集約の列だけを受ける — ほかのフィールドに依る射影は入力に渡せず、矛盾するテストになりうる
+			val extra = (stateTd.shape as? IrShape.Structure)?.fields.orEmpty().map { it.name } - collField
+			if (extra.isNotEmpty()) {
+				log("  note: ${rowTd.kotlin}: 観測モデル ${stateTd.kotlin} の集約の列のほかのフィールド(${extra.joinToString("・")})は Retrieve フックに渡せないので、射影定理 ${c.theorem} のケースを生成できません")
+				continue
+			}
 			c.cases.forEachIndexed { i, case ->
 				if (case.kind != "projection" || case.ok == null) return@forEachIndexed
 				val stJson = case.args.values.singleOrNull() as? JsonObject ?: return@forEachIndexed

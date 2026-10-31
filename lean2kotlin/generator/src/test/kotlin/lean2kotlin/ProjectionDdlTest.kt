@@ -8,30 +8,43 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Retrieve テスト(DDL)の射影定理のケース: 集約の列は観測モデルの規約(rootCollectionOf の List<Root>)で引く —
- * 観測モデルが集約の列のほかに List を運んでも、射影定理のケースを落とさない。
- * 素材は Sprout の NoteRepositoryState に文字列の列を足したもの。
+ * Retrieve テスト(DDL)の射影定理のケース: Retrieve フックは集約の列だけを受ける — 観測モデルが集約の列のほかにフィールドを
+ * 運ぶと、射影がそれに依っていても入力に渡せないので、矛盾しうるテストを出さずに理由を言う(List でも List でなくても同じ)。
+ * 素材は Sprout の NoteRepositoryState にフィールドを足したもの。
  */
 class ProjectionDdlTest {
 
 	private val stateLean = "Sprout.Application.NoteRepositoryState"
 
-	@Test
-	fun `観測モデルが集約の列のほかに List を運んでも、射影定理のケースを出す`(@TempDir out: Path) {
+	private fun emitWithExtra(out: Path, extra: IrField): Pair<EmitTests, List<String>> {
 		val sprout = sproutIr()
 		val types = sprout.types.map { td ->
 			if (td.lean != stateLean) td
-			else td.copy(shape = IrShape.Structure((td.shape as IrShape.Structure).fields + IrField("tags", IrType.ListOf(IrType.Str))))
+			else td.copy(shape = IrShape.Structure((td.shape as IrShape.Structure).fields + extra))
 		}
 		val ir = Ir(sprout.rootNamespace, types, sprout.queryServices, sprout.useCases, sprout.domainServices,
 			sprout.useCaseRules, sprout.contracts, sprout.faultContracts, sprout.behaviors, sprout.ports, sprout.dropped)
 		val lines = mutableListOf<String>()
 		val tests = EmitTests(ir, Kotlinize(ir), Output(out, "t", "\t"), Output(out.resolve("adapter"), "t", "\t"), emptyList()) { lines += it }
 		tests.emitAll()
-		val ddl = out.resolve("application/ReadModelDdlContractTest.kt").readText()
-		for (i in 1..4) assertTrue("fun `retrieveNotesReadModel は NoteRow の定理 noteRows_ids を再現する($i)`()" in ddl, ddl)
-		assertEquals(listOf("  note: Retrieve テスト: ReadModel 1 種 — golden+射影定理で 4 ケース"),
-			lines.filter { "ReadModelDdlContractTest" in it || "Retrieve テスト" in it })
-		assertTrue("projection/$stateLean/noteRows_ids" in tests.emittedContracts)
+		return tests to lines
+	}
+
+	private fun assertNoProjectionCases(out: Path, extra: IrField) {
+		val (tests, lines) = emitWithExtra(out, extra)
+		assertTrue(out.resolve("application/ReadModelDdlContractTest.kt").readText().let { "noteRows_ids" !in it })
+		assertEquals(listOf("  note: NoteRow: 観測モデル NoteRepositoryState の集約の列のほかのフィールド(${extra.name})は Retrieve フックに渡せないので、射影定理 noteRows_ids のケースを生成できません"),
+			lines.filter { "noteRows_ids" in it && "NoteRepositoryState" in it })
+		assertTrue("projection/$stateLean/noteRows_ids" !in tests.emittedContracts)
+	}
+
+	@Test
+	fun `観測モデルが集約の列のほかに List を運ぶと、射影定理のケースを出さず理由を言う`(@TempDir out: Path) {
+		assertNoProjectionCases(out, IrField("tags", IrType.ListOf(IrType.Str)))
+	}
+
+	@Test
+	fun `観測モデルが集約の列のほかに List でないフィールドを運んでも、射影定理のケースを出さず理由を言う`(@TempDir out: Path) {
+		assertNoProjectionCases(out, IrField("archived", IrType.Bool))
 	}
 }
