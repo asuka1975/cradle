@@ -23,5 +23,5 @@ try { cfg = loadConfig(findProjectRoot(payload.cwd ?? process.cwd())); } catch {
 // stderr に書くか 0 以外で終わると、Claude Code は hook の失敗を毎回出し、Pi / OpenCode では hook-client が道具の呼び出しごとに例外を投げる
 let r = null;
 try { r = decide(mode, payload, { cfg, isClaude }); } catch {}
+// process.exit で終わらない: 理由は 15 件までだが 1 件の長さに上限は無く、パイプが受け切る前に書き込みが切れて差し戻せなくなる
 if (r) process.stdout.write(JSON.stringify(r));
-process.exit(0);

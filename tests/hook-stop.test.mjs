@@ -51,6 +51,17 @@ test("Stop は unslop --json が 1MB を超えても全部読んで差し戻す"
   assert.deepEqual(stop(), { decision: "block", reason: `作業ツリーの差分に unslop 違反（error）が 6000 件あります。止まる前に直すこと（規約は unslop と comments）:\n${lines}\n…（cradle unslop --diff で全件）` });
 });
 
+// 理由は 15 件までだが 1 件の長さに上限は無い（存在しないパスの文はそのパスを載せる）。process.exit で終わると書き切る前に応答が切れる
+test("Stop は理由の行が長くても、応答の JSON を切らずに差し戻す", (t) => {
+  const { root, stop } = fixture(t);
+  const paths = Array.from({ length: 15 }, (_, i) => `${"d/".repeat(5000)}x${i}.md`);
+  writeTree(root, { "e2e/flow.ts": paths.map(p => `// ${p}\n`).join("") + "export const y = 1;\n" });
+  const r = stop();
+  assert.equal(r.decision, "block");
+  for (const p of paths) assert.ok(r.reason.includes(p));
+  assert.ok(Buffer.byteLength(JSON.stringify(r)) > 150_000);
+});
+
 test("Stop は warn だけの差分や違反の無い差分では差し戻さない", (t) => {
   const { root, stop } = fixture(t);
   writeTree(root, { "e2e/flow.ts": "// たぶん動く\nexport const y = 1;\n" });
