@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, chmodSync } from "node:fs";
+import { existsSync, chmodSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
@@ -13,6 +13,16 @@ test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", (
   assert.equal(sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assert.equal(sha256(Buffer.from("探索", "utf8")), sha256("探索"));
   assert.equal(sha256(""), createHash("sha256").update("").digest("hex"));
+});
+
+test("walk は指す先の無いリンクと輪になったリンクを飛ばす", (t) => {
+  const root = tempDir(t, "cradle-walk-");
+  writeFileSync(join(root, "a.md"), "");
+  symlinkSync("user@host.1:2", join(root, ".#a.md"));
+  symlinkSync("loop", join(root, "loop"));
+  assert.deepEqual(walk(root), [join(root, "a.md")]);
+  // strict は投げる（台本の置き場の壊れたリンクを status が言う）
+  assert.throws(() => walk(root, { strict: true }), { code: /^(ENOENT|ELOOP)$/ });
 });
 
 test("walk の既定はビルド成果物と VCS の置き場を見ない。leanSnapshot はそれに lake-manifest.json を足す", (t) => {

@@ -319,36 +319,47 @@ test("--dry-run で再生成が失敗すれば、作りかけの出力を HEAD �
   assert.equal(porcelain(), "");
 });
 
-// 指す先の無いシンボリックリンク（Emacs のロックファイル .#X.kt など）は walk の statSync で ENOENT になる
-test("再生成の後の解析が例外で止まっても --dry-run は生成ディレクトリを HEAD に戻し、スタックトレースでなく cradle: の文と 2 で終わる", (t) => {
+// 読めない手書きの .kt は handTexts の readFileSync で EACCES になる（root はパーミッションを無視するので確かめられない）
+const unreadable = (root, rel) => { writeTree(root, { [rel]: "package p\n" }); chmodSync(join(root, rel), 0o000); };
+test("再生成の後の解析が例外で止まっても --dry-run は生成ディレクトリを HEAD に戻し、スタックトレースでなく cradle: の文と 2 で終わる", { skip: process.getuid?.() === 0 }, (t) => {
   for (const d of ["main", "test", "adapterTest"]) {
     const { root, run, porcelain } = fixture(t);
-    const link = `backend/src/${d}/kotlin/.#Broken.kt`;
-    symlinkSync("user@host.1234:5678", join(root, link));
+    const file = `backend/src/${d}/kotlin/Unreadable.kt`;
+    unreadable(root, file);
     const r = run("--no-golden", "--dry-run");
     assert.equal(r.status, 2, d);
     assert.equal(r.stdout, "", d);
-    assert.match(r.stderr, /^cradle: 影響の解析で止まりました: ENOENT/, d);
+    assert.match(r.stderr, /^cradle: 影響の解析で止まりました: EACCES/, d);
     assert.doesNotMatch(r.stderr, /^\s+at /m, d);
-    assert.equal(porcelain(), `?? ${link}\n`, d);
+    assert.equal(porcelain(), `?? ${file}\n`, d);
   }
   // --dry-run でなければ今回の出力は残す（いつもの再生成と同じ）
+  const file = "backend/src/main/kotlin/Unreadable.kt";
   const { root, run, porcelain } = fixture(t);
-  const link = "backend/src/main/kotlin/.#Broken.kt";
-  symlinkSync("user@host.1234:5678", join(root, link));
+  unreadable(root, file);
   const r = run("--no-golden");
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /^cradle: 影響の解析で止まりました: ENOENT/);
+  assert.match(r.stderr, /^cradle: 影響の解析で止まりました: EACCES/);
   assert.doesNotMatch(r.stderr, /^\s+at /m);
-  assert.equal(porcelain(), [...dirtyLines, `?? ${link}`].join("\n") + "\n");
+  assert.equal(porcelain(), [...dirtyLines, `?? ${file}`].join("\n") + "\n");
   // 戻せなければ解析の文の後ろに添える
   const { root: locked, run: lockedRun } = fixture(t, "cp -R ../regen/. src/generated/ && touch ../.git/index.lock");
-  symlinkSync("user@host.1234:5678", join(locked, link));
+  unreadable(locked, file);
   const l = lockedRun("--no-golden", "--dry-run");
   assert.equal(l.status, 2);
   assert.ok(l.stderr.includes("\n--dry-run の後始末で生成ディレクトリを HEAD に戻せませんでした"), l.stderr);
-  assert.match(l.stderr, /^cradle: 影響の解析で止まりました: ENOENT/);
+  assert.match(l.stderr, /^cradle: 影響の解析で止まりました: EACCES/);
   assert.doesNotMatch(l.stderr, /^\s+at /m);
+});
+
+test("指す先の無いシンボリックリンク（Emacs のロックファイル）があっても、手書きの .kt としては読まず最後まで解析する", (t) => {
+  const { root, run, porcelain } = fixture(t);
+  const link = "backend/src/main/kotlin/.#Broken.kt";
+  symlinkSync("user@host.1234:5678", join(root, link));
+  const r = run("--no-golden", "--dry-run", "--json");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).restored, true);
+  assert.equal(porcelain(), `?? ${link}\n`);
 });
 
 // 別の git が index.lock を持つと後始末の git checkout が断る（ls-files と diff はロックを取らずに読むので通る）。

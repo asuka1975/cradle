@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { symlinkSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +77,16 @@ test("読み手が stdout を先に閉じても、hook は stderr を空にし�
     p.stdin.end(JSON.stringify({ cwd: root }));
   });
   assert.deepEqual(r, { status: 0, stderr: "" });
+});
+
+// 指す先の無いリンク（Emacs のロックファイル）で unslop が落ちると、Stop は同じ差分の違反ごと黙って通していた
+test("Stop は指す先の無いリンクがあっても、無いパスを指す差分の unslop error で差し戻す", (t) => {
+  const { root, stop } = fixture(t);
+  symlinkSync("user@host.1:2", join(root, ".#x.md"));
+  writeTree(root, { "e2e/flow.ts": "// see backend/src/main/kotlin/Gone.kt\nexport const y = 1;\n" });
+  const r = stop();
+  assert.equal(r?.decision, "block");
+  assert.match(r.reason, /backend\/src\/main\/kotlin\/Gone\.kt/);
 });
 
 test("Stop は warn だけの差分や違反の無い差分では差し戻さない", (t) => {

@@ -181,7 +181,7 @@ export function git(root, args, opts = {}) {
 export function readJson(file) { return JSON.parse(readFileSync(file, "utf8")); }
 
 const DEFAULT_WALK_SKIP = Object.freeze([".lake", "node_modules", "build", ".git", "dist"]);
-export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP } = {}) {
+export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP, strict = false } = {}) {
   const out = [];
   if (!existsSync(dir)) return out;
   const stack = [dir];
@@ -190,7 +190,9 @@ export function walk(dir, { ext = null, skip = DEFAULT_WALK_SKIP } = {}) {
     for (const name of readdirSync(d)) {
       if (skip.includes(name)) continue;
       const p = join(d, name);
-      const st = statSync(p);
+      // 指す先に辿り着かないリンク（Emacs のロックファイル .#X など）は読むものが無い。ここで投げると道具ごと落ちる。strict はそれを知らせたい置き場（台本）
+      let st;
+      try { st = statSync(p); } catch (e) { if (!strict && (e.code === "ENOENT" || e.code === "ELOOP")) continue; throw e; }
       if (st.isDirectory()) stack.push(p);
       else if (!ext || ext.some(e => name.endsWith(e))) out.push(p);
     }
@@ -596,7 +598,7 @@ export function outcomeOf(traceEntry) {
 export function scenarioScripts(cfg, place) {
   const root = resolve(cfg.root, place);
   if (!existsSync(root)) return [];
-  const files = statSync(root).isDirectory() ? walk(root, { ext: [".json"] }) : [root];
+  const files = statSync(root).isDirectory() ? walk(root, { ext: [".json"], strict: true }) : [root];
   const out = [];
   for (const file of files) {
     let j; try { j = JSON.parse(readFileSync(file, "utf8")); } catch { continue; }
