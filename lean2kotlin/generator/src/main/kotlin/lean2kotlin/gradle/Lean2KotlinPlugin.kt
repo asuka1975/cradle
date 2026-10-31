@@ -2,6 +2,7 @@ package lean2kotlin.gradle
 
 import lean2kotlin.Lean2KotlinGeneration
 import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
@@ -155,7 +156,16 @@ abstract class ExtractLeanIrTask : DefaultTask() {
 			execOps.exec { it.workingDir(ws); it.commandLine(lake, "update", "--keep-toolchain") }
 		}
 		// lake env はビルドしない — 必要なライブラリ(対象 root と抽出器)を先に build する
-		execOps.exec { it.workingDir(ws); it.commandLine(lake, "build", ns, "Lean2Kotlin") }
+		val build = execOps.exec { it.workingDir(ws); it.commandLine(lake, "build", ns, "Lean2Kotlin"); it.isIgnoreExitValue = true }
+		if (build.exitValue != 0) {
+			// 抽出器は対象の Lean でビルドする(--keep-toolchain)。古い Lean で抽出器が通らないとき、Lean のエラーだけでは版のずれと分からない
+			val target = domain.resolve("lean-toolchain").readText().trim()
+			val own = extractor.resolve("lean-toolchain").takeIf { it.isFile }?.readText()?.trim()
+			if (own != null && own != target) {
+				throw GradleException("lake build が失敗しました。対象の Lean（$target）は抽出器の Lean（$own）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、対象の lean-toolchain を上げてください")
+			}
+			build.assertNormalExitValue()
+		}
 		execOps.exec { it.workingDir(ws); it.commandLine(lake, "env", "lean", driver.absolutePath) }
 		require(irFile.get().asFile.exists()) {
 			"抽出は成功しましたが IR がありません: ${irFile.get()}"

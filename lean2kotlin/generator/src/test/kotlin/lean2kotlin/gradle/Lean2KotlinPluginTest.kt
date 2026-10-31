@@ -1,5 +1,6 @@
 package lean2kotlin.gradle
 
+import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.tasks.SourceSetContainer
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -102,6 +105,32 @@ class Lean2KotlinPluginTest {
 		p.ext().irFile.get().asFile.apply { parentFile.mkdirs(); writeText("{}") }
 		p.extract().run()
 		assertEquals("update --keep-toolchain", calls.readLines().first())
+	}
+
+	@Test
+	@DisabledOnOs(OS.WINDOWS)
+	fun `対象と抽出器の Lean の版が違って lake build が落ちると、両方の版と直し方を言って止める`(@TempDir dir: File) {
+		val lake = dir.resolve("lake").apply {
+			writeText("#!/bin/sh\n[ \"\$1\" = update ] && echo '{}' > lake-manifest.json\n[ \"\$1\" = build ] && exit 1\nexit 0\n")
+			setExecutable(true)
+		}
+		val domain = dir.resolve("domain").apply { mkdirs() }
+		val extractor = dir.resolve("extractor").apply { mkdirs() }
+		domain.resolve("lakefile.toml").writeText("name = \"depot-lean\"\n")
+		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.31.0\n")
+		extractor.resolve("lakefile.toml").writeText("name = \"lean2kotlin\"\n")
+		extractor.resolve("lean-toolchain").writeText("leanprover/lean4:v4.33.0\n")
+		val p = project(dir.resolve("p"))
+		p.ext().leanRootNamespace.set("Depot")
+		p.ext().leanDomainDir.set(domain)
+		p.ext().leanExtractorDir.set(extractor)
+		p.ext().lakeCommand.set(lake.absolutePath)
+		p.ext().irFile.get().asFile.apply { parentFile.mkdirs(); writeText("{}") }
+		val e = assertFailsWith<GradleException> { p.extract().run() }
+		assertEquals("lake build が失敗しました。対象の Lean（leanprover/lean4:v4.31.0）は抽出器の Lean（leanprover/lean4:v4.33.0）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、対象の lean-toolchain を上げてください", e.message)
+		// 版が同じなら対象の Lean の失敗で、版の話はしない
+		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.33.0\n")
+		assertFalse("抽出器の Lean" in (assertFails { p.extract().run() }.message ?: ""))
 	}
 
 	@Test
