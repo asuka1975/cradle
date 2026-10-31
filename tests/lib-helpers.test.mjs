@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, chmodSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, chmodSync, rmSync, symlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
@@ -15,14 +15,42 @@ test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", (
   assert.equal(sha256(""), createHash("sha256").update("").digest("hex"));
 });
 
-test("walk は指す先の無いリンクと輪になったリンクを飛ばす", (t) => {
+test("walk は辿り着けないリンクを飛ばし、輪になるリンクでファイルを重ねて数えない", (t) => {
   const root = tempDir(t, "cradle-walk-");
-  writeFileSync(join(root, "a.md"), "");
+  writeTree(root, { "a.md": "", "sub/b.md": "" });
   symlinkSync("user@host.1:2", join(root, ".#a.md"));
   symlinkSync("loop", join(root, "loop"));
-  assert.deepEqual(walk(root), [join(root, "a.md")]);
-  // strict は投げる（台本の置き場の壊れたリンクを status が言う）
-  assert.throws(() => walk(root, { strict: true }), { code: /^(ENOENT|ELOOP)$/ });
+  symlinkSync("a.md/nope", join(root, "notdir"));
+  symlinkSync("..", join(root, "sub", "up"));
+  assert.deepEqual(walk(root), [join(root, "a.md"), join(root, "sub", "b.md")]);
+  // strict は辿り着けないリンクで投げる（台本の置き場の壊れたリンクを status が言う）
+  assert.throws(() => walk(root, { strict: true }), { code: /^(ENOENT|ELOOP|ENOTDIR)$/ });
+});
+
+test("walk はリンクの先のディレクトリも読むが、同じディレクトリを 2 度読まず、木の中のものは本来のパスで返す", (t) => {
+  const root = tempDir(t, "cradle-walk-");
+  const outside = tempDir(t, "cradle-walk-outside-");
+  writeTree(root, { "real/x.md": "" });
+  writeTree(outside, { "y.md": "" });
+  symlinkSync("real", join(root, "a-link"));
+  symlinkSync(outside, join(root, "shared"));
+  assert.deepEqual(walk(root), [join(root, "real", "x.md"), join(root, "shared", "y.md")]);
+});
+
+test("leanSnapshot は指す先の無いリンクを先の名前で数え、Emacs のロックファイルは数えない", (t) => {
+  const root = tempDir(t, "cradle-walk-");
+  writeTree(root, { "lean/A.lean": "x" });
+  const cfg = { lean: { rootDir: join(root, "lean") } };
+  const before = leanSnapshot(cfg);
+  symlinkSync("user@host.1:2", join(root, "lean", ".#A.lean"));
+  assert.deepEqual(leanSnapshot(cfg), before);
+  symlinkSync("/nowhere/gone.lean", join(root, "lean", "Gone.lean"));
+  const withLink = leanSnapshot(cfg);
+  assert.deepEqual(Object.keys(withLink).sort(), ["A.lean", "Gone.lean"]);
+  assert.equal(withLink["A.lean"], before["A.lean"]);
+  rmSync(join(root, "lean", "Gone.lean"));
+  symlinkSync("/nowhere/other.lean", join(root, "lean", "Gone.lean"));
+  assert.notEqual(leanSnapshot(cfg)["Gone.lean"], withLink["Gone.lean"]);
 });
 
 test("walk の既定はビルド成果物と VCS の置き場を見ない。leanSnapshot はそれに lake-manifest.json を足す", (t) => {

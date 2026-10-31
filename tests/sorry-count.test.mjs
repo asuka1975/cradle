@@ -1,6 +1,8 @@
 // sorry / axiom / partial / unsafe の行の規則はコメントを消した行で見る。status の sorry は lean-check の sorryMax と同じ数え方（行・Main.lean 込み）。
 import test from "node:test";
 import assert from "node:assert/strict";
+import { symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode, writeTree } from "./helpers.mjs";
 import { leanSorryLines } from "../.apm/skills/cradle/scripts/lib.mjs";
@@ -8,6 +10,7 @@ import { leanSorryLines } from "../.apm/skills/cradle/scripts/lib.mjs";
 const scripts = new URL("../.apm/skills/cradle/scripts/", import.meta.url);
 const leanCheck = fileURLToPath(new URL("lean-check.mjs", scripts));
 const status = fileURLToPath(new URL("status.mjs", scripts));
+const goldenCheck = fileURLToPath(new URL("golden-check.mjs", scripts));
 
 const model = [
   "namespace Example",
@@ -98,4 +101,32 @@ test("lean-check と status は、空白なしのブロックコメントに続�
   assert.equal(j.sorry, 1);
   const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
   assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 1"), s.stdout);
+});
+
+test("lean-check と status は親を指すリンクがあってもファイルを重ねて数えない", (t) => {
+  const root = tempProject(t, "cradle-sorry-");
+  writeTree(root, { "lean/Example/Domain/A.lean": "namespace Example\ntheorem t : True := sorry\nend Example\n" });
+  symlinkSync("..", join(root, "lean", "Example", "Domain", "up"));
+  const j = JSON.parse(runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() }).stdout);
+  assert.equal(j.sorry, 1);
+  const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.includes("sorry 1"), s.stdout);
+});
+
+// walk を通らず readdirSync で読む置き場（UseCase・Port・その操作）にも、編集中は Emacs のロックファイルが置かれる
+test("lean-check・status・golden-check は UseCase と Port の置き場の Emacs のロックファイルで落ちない", (t) => {
+  const root = tempProject(t, "cradle-sorry-");
+  writeTree(root, { "lean/Example/Application/UseCase/Foo/UseCase.lean": "namespace Example\nend Example\n", "lean/Example/Application/Port/Directory/Find.lean": "namespace Example\nstructure Request where\n  x : Nat\nstructure Outcome where\n  y : Nat\nend Example\n" });
+  const lock = "user@host.1:2";
+  symlinkSync(lock, join(root, "lean/Example/Application/UseCase/.#Foo.lean"));
+  symlinkSync(lock, join(root, "lean/Example/Application/Port/.#x"));
+  symlinkSync(lock, join(root, "lean/Example/Application/Port/Directory/.#Find.lean"));
+  const r = runNode(leanCheck, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.doesNotMatch(r.stderr, /^\s+at /m);
+  assert.deepEqual(JSON.parse(r.stdout).findings.filter(f => f.file?.includes(".#")), []);
+  const s = runNode(status, ["--json"], { cwd: root, env: cleanEnv() });
+  assert.equal(s.status, 0, s.stderr);
+  assert.ok(JSON.parse(s.stdout).phases.find(p => p.name === "Lean 実行可能仕様").facts.some(f => f.endsWith("/ UseCase 1 件")), s.stdout);
+  const g = runNode(goldenCheck, ["--json", "--build", "never"], { cwd: root, env: cleanEnv() });
+  assert.doesNotMatch(g.stderr, /^\s+at /m);
 });

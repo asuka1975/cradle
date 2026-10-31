@@ -2,7 +2,7 @@
 // 規則は ctx（設定・ファイルの一覧・読み方・add）を受けて指摘を足す。指摘の順は RULES の順と各規則の中の順で決まり、--json の findings と文章の行はその順のまま出る
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
-import { walk, rel, scaffoldSampleFiles, ports, readText, countEvents, stripLeanComments } from "./lib.mjs";
+import { walk, rel, scaffoldSampleFiles, ports, readText, readableEntries, countEvents, stripLeanComments } from "./lib.mjs";
 
 /** 規則の並び。行の規則・層の壁・CQRS は perFile がファイルごとに続けて見るので、ファイルをまたいで並べ替えない。 */
 const RULES = [perFile, actorContext, annotJson, wiring, usecase, port, scaffold, orphan];
@@ -148,7 +148,7 @@ function wiring({ cfg, modelDir, mainFile, src, add }) {
 function usecase({ modelDir, src, add }) {
   const ucDir = join(modelDir, "Application", "UseCase");
   if (!existsSync(ucDir)) return;
-  for (const name of readdirSync(ucDir)) {
+  for (const name of readableEntries(ucDir)) {
     const d = join(ucDir, name);
     if (!statSync(d).isDirectory()) continue;
     const has = (f) => existsSync(join(d, f));
@@ -174,11 +174,11 @@ function port({ modelDir, src, add }) {
   for (const layer of ["Application", "Domain"]) {
     const portDir = join(modelDir, layer, "Port");
     if (!existsSync(portDir)) continue;
-    for (const name of readdirSync(portDir)) {
+    for (const name of readableEntries(portDir)) {
       const d = join(portDir, name);
       if (!statSync(d).isDirectory()) { add("port", "error", d, 1, `${layer}/Port/ の直下は Port 名のディレクトリだけ（${name} は <Port>/<操作>.lean の形にする）`); continue; }
       if (/Repository$/.test(name)) add("port", "error", d, 1, `Port 名 ${name} は Repository で終えない（Repository は自システムの集約の取得・保存）`);
-      for (const f of readdirSync(d).filter(f => f.endsWith(".lean"))) {
+      for (const f of readableEntries(d).filter(f => f.endsWith(".lean"))) {
         const file = join(d, f);
         const { code } = src(file);
         if (!/\b(structure|inductive)\s+Request\b/.test(code)) add("port", "error", file, 1, "固定名 Request（要求）が無い");

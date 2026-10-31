@@ -21,9 +21,9 @@
 // 形の違う golden（ok がオブジェクトでない・ok.trace / ok.env.script / 手の interactions が配列でない・手と往復がオブジェクトでない）と sidecar（init / flow のリクエストが無い・オブジェクトでない・
 // flow.inputs が配列でない・手がオブジェクトでない）はファイル名つきの error にして再生しない。
 // --update が書くのは init / flow の応答だけで、トップが ok でない応答（error / harnessError）は書かない。chain は書くものを持たない。
-import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfigOrFail, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, readManifest, isExternalGolden, readGoldenTrace, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
+import { loadConfigOrFail, readableEntries, buildMode, callLean, parseArgs, blankArg, diffJson, fail, readSidecar, readManifest, isExternalGolden, readGoldenTrace, traceInputOf, ports, hasPortOperation, SIDECAR_VERSION, goldenDirOf, goldenRowLines } from "./lib.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { update: "bool", json: "bool", name: "list" });
 if (opts.name?.some(n => n === true || n === "")) fail("--name には golden の名前が要ります（--name N を繰り返せば複数）");
@@ -37,7 +37,7 @@ if (!existsSync(goldenDir)) fail(`golden ディレクトリがありません: $
 // 読めない・形の違う manifest は読んだところでパスと理由の 1 行で止める（ENOENT や TypeError のスタックトレースにしない）
 let manifest = {};
 if (opts.manifest) { try { manifest = readManifest(opts.manifest); } catch (e) { fail(e.message); } }
-const names = [...new Set(readdirSync(goldenDir).filter(f => /-(init|flow)\.json$/.test(f)).map(f => f.replace(/-(init|flow)\.json$/, "")))].sort();
+const names = [...new Set(readableEntries(goldenDir).filter(f => /-(init|flow)\.json$/.test(f)).map(f => f.replace(/-(init|flow)\.json$/, "")))].sort();
 // --name の順に、同じ名前は 1 度だけ
 const wanted = opts.name ? [...new Set(opts.name)] : names;
 const portList = ports(cfg);

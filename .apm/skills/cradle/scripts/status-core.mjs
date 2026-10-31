@@ -1,8 +1,8 @@
 // status-core — status の中身。collectStatus がフェーズごとの事実と次の一手を集め、renderStatus がそれを文章の行にする（引数・設定の読み込み・出力は status.mjs）。
 // フェーズは ctx（設定・読み方・フェーズをまたいで使う数）を受けて { name, state, facts, next } を返す。
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { walk, rel, scaffoldSampleFiles, tableRows, e2eCoverage, goldenFlows, productLine, readText, DDD_FILES, DDD_QUESTION_IDS, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
+import { walk, rel, readableEntries, scaffoldSampleFiles, tableRows, e2eCoverage, goldenFlows, productLine, readText, DDD_FILES, DDD_QUESTION_IDS, countEvents, countStatusRows, goldenDirOf, goldenFlowFiles, leanSorryLines, leanVocabulary, contractTestWiring } from "./lib.mjs";
 
 const phase = (name, state, facts, next) => ({ name, state, facts, next });
 
@@ -25,7 +25,7 @@ export function collectStatus(cfg) {
     deploy: deployTable(read(`${cfg.documents.infraDesign}/README.md`)),
   };
   const s = { project: cfg.project, phases: PHASES.map(p => p(ctx)) };
-  s.aiNotes = existsSync(R(cfg.documents.aiNotes)) ? readdirSync(R(cfg.documents.aiNotes)).filter(f => f.endsWith(".md")).length : 0;
+  s.aiNotes = existsSync(R(cfg.documents.aiNotes)) ? readableEntries(R(cfg.documents.aiNotes)).filter(f => f.endsWith(".md")).length : 0;
   return s;
 }
 
@@ -78,7 +78,7 @@ function leanModel({ cfg, R, ddd: { events } }) {
   // lean-check が sorryMax で止める数と同じ: モデルのファイルと lean/Main.lean の、sorry を含むコードの行
   const mainFile = join(cfg.lean.rootDir, "Main.lean");
   const sorry = [...leanFiles, ...(existsSync(mainFile) ? [mainFile] : [])].reduce((n, f) => n + leanSorryLines(readFileSync(f, "utf8")), 0);
-  const useCases = existsSync(join(cfg.lean.modelDir, "Application", "UseCase")) ? readdirSync(join(cfg.lean.modelDir, "Application", "UseCase")).length : 0;
+  const useCases = existsSync(join(cfg.lean.modelDir, "Application", "UseCase")) ? readableEntries(join(cfg.lean.modelDir, "Application", "UseCase")).length : 0;
   const goldenDir = goldenDirOf(cfg);
   const goldens = existsSync(goldenDir) ? goldenFlowFiles(goldenDir).length : 0;
   const bin = existsSync(cfg.lean.bin);
