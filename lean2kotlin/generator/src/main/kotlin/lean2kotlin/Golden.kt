@@ -188,7 +188,7 @@ object Golden {
 		val colliding = mutableSetOf<String>()
 		for ((safe, group) in snapshots.map { it.first }.distinct().groupBy(::testNameSafe)) {
 			if (group.size < 2) continue
-			errors += "golden ${group.sorted().joinToString("・")} はテスト名にすると同じ $safe になる（`. ; [ ] / < > : \\` は _ にする）— どれかを改名する"
+			errors += "golden ${group.sorted().joinToString("・")} はテスト名にすると同じ $safe になる（`. ; [ ] / < > : \\` とバッククォート・改行は _ にする）— どれかを改名する"
 			colliding += group
 		}
 		return GoldenLoad(snapshots.filter { it.first !in colliding }.map { it.second }, notes, errors)

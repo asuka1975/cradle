@@ -332,7 +332,7 @@ class GoldenTest {
 		val g = Golden.load(dir)
 		assertEquals(listOf("basic-init", "basic-flow #0", "basic-flow #1"), g.snapshots.map { it.source })
 		assertTrue(g.notes.isEmpty())
-		assertEquals(listOf("golden basic.v2・basic_v2 はテスト名にすると同じ basic_v2 になる（`. ; [ ] / < > : \\` は _ にする）— どれかを改名する"), g.errors)
+		assertEquals(listOf("golden basic.v2・basic_v2 はテスト名にすると同じ basic_v2 になる（`. ; [ ] / < > : \\` とバッククォート・改行は _ にする）— どれかを改名する"), g.errors)
 	}
 
 	@Test
