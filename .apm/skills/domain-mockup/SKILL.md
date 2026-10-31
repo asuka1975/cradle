@@ -47,7 +47,8 @@ node <skills>/cradle/scripts/cradle.mjs mockup-build   # lake build → lean/moc
 
 `lean/mockup/public/index.html` をブラウザで開く。サーバーは要らない（`file://` のままでよい）。エキスパートに渡すなら `public/` を静的ホストに置くか、丸ごと渡す。
 モデルを変えたら作り直す（`cradle doctor` がモデルより古い `lean.js` を STALE と言う）。用語集だけ直したなら `mockup-build --meta-only`。
-要るのは Emscripten（emsdk）だけで、Lean のランタイムと標準ライブラリの wasm は初回に作って `~/.cache/cradle/lean-wasm` に残す。`mockup-build` は golden のリクエストと全シナリオをネイティブの CLI にも流し、応答が 1 バイトでも違えば `lean.js` を置かずに止まる。
+要るのは Emscripten（emsdk）と、初回に Lean のランタイムのソースを GitHub から取るネットワークと `tar`。ランタイムと標準ライブラリの wasm は初回に作って `~/.cache/cradle/lean-wasm` に残す。`mockup-build` は golden のリクエストと全シナリオをネイティブの CLI にも流し、応答が 1 バイトでも違えば `lean.js` を置かずに止まる。
+CLI と同じ応答を返すのはブラウザの限界の内側だけ。JSON のネストが深すぎる入力（5000 段は一致、2 万段で JS のスタックが尽きる）と、応答が巨大になる長い flow（1000 手は一致、3000 手でメモリが尽きる）では wasm が止まり、プロトコルエラーの形（`{"error":…}`）で返って、次の呼び出しで作り直す。golden はこの範囲の流れで採る。
 
 ## golden の採取
 

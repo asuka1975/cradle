@@ -2,7 +2,7 @@
   Cradle 標準プロトコル — モックアップ・golden・仕様問い合わせの実行エンジンの中身。
 
     `handle`: リクエスト（JSON の文字列）1 つ → 応答（JSON）1 つ。入出力を持たない純粋な関数。
-    ネイティブの CLI（Main.lean: stdin / stdout）もブラウザの wasm（cradle mockup-build）もこの 1 本を通るので、同じリクエストに同じ応答を返す。
+    ネイティブの CLI（Main.lean: stdin / stdout）もブラウザの wasm（cradle mockup-build）もこの 1 本を通るので、同じリクエストに同じ応答を返す（wasm のスタックとメモリの限界を超える入力を除く）。
 
     {"cmd":"init","scenario":"basic","viewer":…,"actor":…,"today":"2026-01-01"}
       → {"ok":{"state":…,"views":…}}
