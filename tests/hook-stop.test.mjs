@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, git } from "./helpers.mjs";
@@ -60,6 +61,21 @@ test("Stop は理由の行が長くても、応答の JSON を切らずに差し
   assert.equal(r.decision, "block");
   for (const p of paths) assert.ok(r.reason.includes(p));
   assert.ok(Buffer.byteLength(JSON.stringify(r)) > 150_000);
+});
+
+test("読み手が stdout を先に閉じても、hook は stderr を空にして 0 で終わる（fail-open）", async (t) => {
+  const { root } = fixture(t);
+  writeTree(root, { "e2e/flow.ts": "// 手 1 は未決\nexport const y = 1;\n" });
+  const r = await new Promise((resolve, reject) => {
+    const p = spawn(process.execPath, [hook, "stop"], { cwd: root, env: cleanEnv(), stdio: ["pipe", "pipe", "pipe"] });
+    p.stdout.destroy();
+    let stderr = "";
+    p.stderr.setEncoding("utf8"); p.stderr.on("data", d => { stderr += d; });
+    p.on("error", reject);
+    p.on("close", status => resolve({ status, stderr }));
+    p.stdin.end(JSON.stringify({ cwd: root }));
+  });
+  assert.deepEqual(r, { status: 0, stderr: "" });
 });
 
 test("Stop は warn だけの差分や違反の無い差分では差し戻さない", (t) => {
