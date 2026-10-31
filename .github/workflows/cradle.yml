@@ -63,7 +63,7 @@ jobs:
           mkdir -p "$W/ws" && cp -r "$M/lean" "$W/mini-lean" && cp "$M/lean/lean-toolchain" "$W/ws/lean-toolchain"
           printf 'name = "mini-extraction"\n\n[[require]]\nname = "mini-lean"\npath = "%s"\n\n[[require]]\nname = "lean2kotlin"\npath = "%s"\n' "$W/mini-lean" "$GITHUB_WORKSPACE/lean2kotlin/lean" > "$W/ws/lakefile.toml"
           printf 'import Mini\nimport Lean2Kotlin.Extract\n\nset_option maxHeartbeats 4000000 in\n#kotlin_ir "Mini" "%s"\n' "$W/ir.json" > "$W/ws/Driver.lean"
-          cd "$W/ws" && lake build Mini Lean2Kotlin && lake env lean Driver.lean
+          cd "$W/ws" && lake update --keep-toolchain && lake build Mini Lean2Kotlin && lake env lean Driver.lean
           cmp "$W/ir.json" "$M/ir.json"
           cd "$W/mini-lean" && lake build mini
           jq -c .init "$M/golden/basic.request.json" | lake exe mini > "$W/basic-init.json"

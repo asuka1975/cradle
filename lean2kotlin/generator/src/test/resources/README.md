@@ -34,7 +34,7 @@ CLI（`mini/lean/Main.lean`）は golden の採取用で、init だけを答え�
 採り直し（`$M` = `lean2kotlin/generator/src/test/resources/mini`、`$L` = このリポジトリの `lean2kotlin/lean`、`$W` はリポジトリの外の作業ディレクトリ — `mini/lean` の下に `.lake` を作らない）:
 1. `cp -r $M/lean $W/mini-lean`
 2. `$W/ws/lakefile.toml` に `name`（任意の名前）と、`mini-lean`（path `$W/mini-lean`）・`lean2kotlin`（path `$L`）の `[[require]]`、`$W/ws/lean-toolchain` に `$M/lean/lean-toolchain` の写し、`$W/ws/Driver.lean` に `import Mini` / `import Lean2Kotlin.Extract` / `set_option maxHeartbeats 4000000 in` に続けて `#kotlin_ir "Mini" "$W/ir.json"`（binder の上書きは無い — `Mini.Runtime` が全 binder を持つ）。
-3. `cd $W/ws && lake build Mini Lean2Kotlin && lake env lean Driver.lean` のあと `$W/ir.json` を `$M/ir.json` へ写す。
+3. `cd $W/ws && lake update --keep-toolchain && lake build Mini Lean2Kotlin && lake env lean Driver.lean` のあと `$W/ir.json` を `$M/ir.json` へ写す。
 4. `cd $W/mini-lean && lake build mini && jq -c .init $M/golden/basic.request.json | lake exe mini > $M/golden/basic-init.json`
 5. `cd lean2kotlin/generator && ./gradlew --no-daemon test --tests lean2kotlin.MiniGenerationTest -Dlean2kotlin.updateMiniSnapshot=true` — `MiniGenerationTest` が生成した `kotlin-main` / `kotlin-test` で `generated/` を置き換えてから突き合わせる（Port が無いので `kotlin-adapter-test` は出ない）。生成器の出力だけが変わったときは 5 だけでよい。
 
