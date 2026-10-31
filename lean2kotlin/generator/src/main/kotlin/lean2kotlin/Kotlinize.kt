@@ -568,9 +568,9 @@ class Kotlinize(private val ir: Ir) {
 			val (ctor, bo) = sealedCtorOf(td, shape, j)
 			if (bo == null) "$base.${ctorClassName(ctor.name)}"
 			else {
-				val args = ctor.fields.joinToString(", ") { f ->
+				val args = readingCtorArgs(td, ctor, j) { ctor.fields.joinToString(", ") { f ->
 					"${ident(f.name)} = ${literal(f.type, fieldJson(td, bo, f))}"
-				}
+				} }
 				"$base.${ctorClassName(ctor.name)}($args)"
 			}
 		}
@@ -598,6 +598,15 @@ class Kotlinize(private val ir: Ir) {
 		val ctor = shape.ctors.find { it.name == name }
 			?: error("${td.lean}: 不明なコンストラクタ $name")
 		return ctor to (if (ctor.fields.isEmpty()) null else ctorArgs(td, ctor, body))
+	}
+
+	/** 名前の無い引数を持つ ctor の引数を読む。単一の引数は何でも欄名の鍵に包むので(ctorArgs)、形違いは中の読み手の kotlinx の例外になる —
+	    型と構成子の文にして止める(単一の引数が arg0 という欄を持つ structure の derive の形もここに来る)。 */
+	fun <T> readingCtorArgs(td: IrTypeDef, ctor: IrCtor, j: JsonElement, read: () -> T): T {
+		if (ctor.fields.withIndex().none { (i, f) -> f.name == "arg$i" }) return read()
+		return try { read() } catch (e: IllegalArgumentException) {
+			error("${td.lean}.${ctor.name}: 構成子の引数の JSON が不正です: ${j.jsonObject.values.single()}(${e.message})")
+		}
 	}
 
 	/** 構成子の引数の JSON を欄名の鍵の object に揃える。名前の無い引数(欄名 arg<序数>)を持つ ctor は、抽出器の ctor 分解と

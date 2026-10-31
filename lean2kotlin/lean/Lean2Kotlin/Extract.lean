@@ -451,7 +451,8 @@ def ctorFieldTypes (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr)
     形は derived ToJson と同一規約(golden 互換): structure = object、
     引数なし ctor = "名前"、引数つき ctor = {"名前": {...}}、Option = null / 中身。
     ただし名前の無い引数は {"名前": {arg<序数>: ...}} で、derived(裸の値・配列)と違う。
-    インスタンスを使った型はそのインスタンスの形のままで、生成器はどちらも読む(Kotlinize.ctorArgs)。
+    インスタンスを使った型はそのインスタンスの形のままで、名前の無い引数は生成器がどちらも読む(Kotlinize.ctorArgs)。
+    extends の親と x? の欄は derived だと形の欄名と合わず(平坦化・? 落ち)、生成器は「JSON に無い」で止まる。
     合成した式はコンパイル実行(evalExpr)される — WF 再帰も評価できる。 -/
 partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
   let ty ← whnf ty0
@@ -553,7 +554,7 @@ def jsonViaInstance (e : Expr) : MetaM (Option Json) := do
     return some (← evalJsonExpr (mkApp ser e))
   catch _ => return none
 
-/-- ctor 正規形の値 → golden 互換 JSON(名前の無い引数の鍵 arg<序数> だけ derived の形と違う — mkSerializer)。
+/-- ctor 正規形の値 → golden 互換 JSON(derived の形との違いは mkSerializer)。
     structure = フィールドの object、引数なし ctor = "名前"、
     引数つき ctor = {"名前": {引数: 値}}、Option = null / 中身、
     List = 配列、Prod = [fst, snd]。 -/
@@ -570,7 +571,8 @@ partial def valueToJson (e : Expr) : MetaM Json := do
     -- 単一フィールドの structure(Id 等の値ラッパ)は対象の ToJson インスタンスを
     -- 優先する — 表現のワイヤ(例: Id の canonical UUID 文字列)
     -- をそのまま写す(golden 互換を構造で保証 — 標準時間型と同じ手筋)。derived の
-    -- インスタンスは ctor 分解と同形なので、挙動が変わるのは手書きワイヤだけ。
+    -- インスタンスは ctor 分解と同形なので、挙動が変わるのは手書きワイヤだけ(中に名前の無い引数の sealed を
+    -- 運ぶと、その値は derived の形になる — 生成器はどちらも読む)。
     -- コンパイル実行は値ノードごとに走るため、(型, Nat 値) でキャッシュする
     let env ← getEnv
     if isStructure env tyN && (getStructureFields env tyN).size == 1 then

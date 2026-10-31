@@ -96,7 +96,8 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 | UseCase X の request … / execute が観測を … / Port の操作 … に Request がありません | Port を使う固定形（`request` / `mkRequest` / `apply`、観測は 1 種 1 回、操作ごとに `Request` と `Outcome`）に揃える（lean-conventions §4b） |
 | golden が無視された | flow に対の `<name>-init.json` があるか、名前が `<name>-init.json` / `<name>-flow.json` か、トップレベルが `{"ok": …}` か（`cradle golden-check`） |
 | `Key <field> is missing in the map` | 読み取りの golden 回帰テストで、Row のフィールドが状態の要素に無い。同梱の生成器は合成できない Row を入れ子まで note で飛ばす（この例外は古い生成器の文言） |
-| `<型>.<field>: JSON に無い` | fixture・入力リテラルの経路で JSON に無いフィールド → golden か fixture を採り直す |
+| `<型>.<field>: JSON に無い` | fixture・入力リテラルの経路で JSON に無いフィールド → golden か fixture を採り直す。`extends` の親や `x?` の欄を持つ型に ToJson を derive していると、採り直しても直らない（derive の形が平坦化・`?` 落ちで欄名と合わない）→ derive を外すか欄を素の名前にする |
+| `<型>.<構成子>: 構成子の引数の JSON が不正です` | 名前の無い引数の値の形が合わない → golden か fixture を採り直す。単一の引数が `arg0` という欄を持つ structure なら、欄を改名する |
 
 ## 生成ログ note のトリアージ
 

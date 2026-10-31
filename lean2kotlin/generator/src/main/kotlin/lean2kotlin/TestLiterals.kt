@@ -67,9 +67,9 @@ internal fun EmitTests.inputRefLiteral(td: IrTypeDef, j: JsonElement): String = 
 		val (ctor, bo) = k.sealedCtorOf(td, shape, j)
 		if (bo == null) "${k.name(td.lean)}.${k.ctorClassName(ctor.name)}"
 		else {
-			val args = ctor.fields.joinToString(", ") { f ->
+			val args = k.readingCtorArgs(td, ctor, j) { ctor.fields.joinToString(", ") { f ->
 				"${ident(f.name)} = ${inputLiteral(f.type, k.fieldJson(td, bo, f))}"
-			}
+			} }
 			"${k.name(td.lean)}.${k.ctorClassName(ctor.name)}($args)"
 		}
 	}

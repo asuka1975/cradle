@@ -69,6 +69,15 @@ class SealedUnnamedArgTest {
 	}
 
 	@Test
+	fun `単一の名前の無い引数の中の値が形に合わなくても、型と構成子を言って止める`(@TempDir out: Path) {
+		for (render in renderers(out)) for ((j, body) in listOf(
+			"""{"onDock":{"wrong":5}}""" to """{"wrong":5}""", """{"onDock":[5]}""" to "[5]", """{"onDock":"x"}""" to "\"x\"")) {
+			val e = assertFailsWith<IllegalStateException>(j) { render(hold, j) }
+			assertTrue(e.message!!.startsWith("T.Hold.onDock: 構成子の引数の JSON が不正です: $body("), e.message)
+		}
+	}
+
+	@Test
 	fun `golden が derive の形で運ぶ名前の無い引数も、生成を止めずに読む`(@TempDir tmp: Path) {
 		// Mini の Place.box の引数を名前の無いものにした形。golden は derive の形(裸の値)で、オラクルは欄名の鍵で書く
 		val ir = Ir.parse(Json.parseToJsonElement(testResources.resolve("mini/ir.json").readText()).toString()
