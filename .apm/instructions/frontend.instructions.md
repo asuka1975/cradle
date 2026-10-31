@@ -1,5 +1,5 @@
 ---
-description: フロントエンドの規約 — 画面はモデルの映し、口は契約 1 枚、dev の相手は Lean CLI
+description: フロントエンドの規約 — 画面はモデルの映し、口は契約 1 枚、dev の相手はブラウザの中の Lean（wasm）
 applyTo: "frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.css,frontend/**/*.json"
 ---
 
@@ -7,7 +7,7 @@ applyTo: "frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.css,frontend/**/*.jso
 
 ## ドメインの判断を画面に書かない
 
-- 画面はモデル（Lean CLI / REST）の映し。並べ替え・絞り込み・集計・可否判定・遷移先の予測を画面で行わない。
+- 画面はモデル（Lean / REST）の映し。並べ替え・絞り込み・集計・可否判定・遷移先の予測を画面で行わない。
 - 出し分けの根拠は View が運んでいる事実だけ。View に無い事実を画面で導出しない。足りなければ Lean の View に足す → 契約に写す → `pnpm gen:api`。
 - 業務としてできない操作は出さない。ただし可否の権威はモデルで、出したボタンが拒否されたら理由をそのまま出す。
 - コマンド後の遷移先・次の状態を画面で予測しない。読み直した View から決める。
@@ -18,7 +18,7 @@ applyTo: "frontend/**/*.ts,frontend/**/*.tsx,frontend/**/*.css,frontend/**/*.jso
 ## 口は契約 1 枚
 
 - 外と話す口は `openapi.yaml` から生成したクライアント 1 枚（openapi-fetch + 生成型）。手書きの包み・手書きの型を置かない。契約を変えたら生成し直し、写し漏れはコンパイルエラーで出す。
-- dev の相手は Lean CLI（契約を browser 内で実装する fetch を注入）。ビルドでは分岐ごと消え、dist に Lean 側のコードを入れない。
+- dev の相手はブラウザの中で動く Lean の wasm（`cradle mockup-build` が作る `lean/mockup/public/lean.js`。契約を browser 内で実装する fetch を注入し、その内側で呼ぶ）。サーバーは立てない。ビルドでは分岐ごと消え、dist に Lean 側のコードを入れない。
 - Lean ↔ 契約の詰め替えは形の違いだけ。値の整合は golden 再生 × スキーマ検証で縛る。要求方向（コマンド）も golden の trace と突き合わせる（内部入力 `observation` の手は画面の操作ではないので含めない）。
 - 拒否語彙（4xx の code）は契約から導出する。手書きの一覧を契約と突き合わせるテストを持つ。
 - Lean が返す `state` は dev の fetch の外に出さない（React に渡さない）。外部能力の環境（`env`）も同じ — `external` の `step` は fetch 注入の内側で往復し、画面は環境を知らない。「世界をやり直す」ボタンを置かない — ドメインに無い操作だから。

@@ -1,11 +1,11 @@
 ---
 name: frontend
-description: Use for the frontend phase after the API contract exists — deciding the screens as units of work (one job a person finishes in one go, per actor of the event timeline), collecting the views and commands each screen needs, keeping the screen map in frontend/README.md, building against the Lean CLI, then handing over to frontend-ux-review and the human screen check. Not for the spec-animation mockup (domain-mockup).
+description: Use for the frontend phase after the API contract exists — deciding the screens as units of work (one job a person finishes in one go, per actor of the event timeline), collecting the views and commands each screen needs, keeping the screen map in frontend/README.md, building against the Lean model compiled to wasm, then handing over to frontend-ux-review and the human screen check. Not for the spec-animation mockup (domain-mockup).
 ---
 
 # フロントエンド
 
-現場の人が仕事を終わらせる画面を `frontend/` に作る。相手は Lean CLI（frontend 規約）。
+現場の人が仕事を終わらせる画面を `frontend/` に作る。相手はブラウザの中で動く Lean の wasm（frontend 規約）。
 順序の確認から始める: `cradle status` で API 契約が着手済（操作がある）で、モックアップが作り込み済であること。
 open の HS / MQ を見て、典型的な 1 件を最初から最後まで歩ける流れが `documents/ddd/event-timeline.md` にあり、open の HS / MQ がその流れを止めていないこと。止めているなら ddd スキルに戻る。材料が無いまま始めない。
 
@@ -31,10 +31,30 @@ open の HS / MQ を見て、典型的な 1 件を最初から最後まで歩け
 2. 画面ごとに使う口（Views）とコマンドを `cradle spec-query meta` から集める（`observations` は内部入力で画面の操作ではないので集めない）。足りない口は Lean に戻す（frontend 規約）。
 3. `frontend/README.md` に「画面 ↔ 仕事（主体）↔ 口・コマンド」の対応表を持つ。
 4. `frontend/` の package（openapi-fetch と `gen:api`）が無ければ先に作り、`pnpm gen:api` で契約クライアントを生成する。口はその生成物 1 枚（frontend 規約）。
-5. 相手は Lean CLI。dev は `node lean/mockup/server.mjs` の `/api/lean` を fetch 注入で使う。
+5. 相手は Lean の wasm。dev の fetch 注入の内側で `cradle mockup-build` が作る `lean/mockup/public/lean.js` を読み、`createCradleLean()` の関数にプロトコルのリクエストを渡す（下の「dev の Lean の読み方」）。サーバーは立てない。Lean を変えたら `mockup-build` で作り直す。
 6. `pnpm lint` / `pnpm test` → frontend-ux-review → 人間による画面確認（ゲート）。
 
 ## 決めごと
 
 - モックアップの口ごとのタブ・コマンドごとのフォームを持ち込まない。名義は画面で選ばない（frontend 規約）。
 - 判断を画面に書かない・未決をデザインで埋めない（frontend 規約）。
+
+## dev の Lean の読み方
+
+`lean.js` は 1 枚で完結する classic script で、ES module として import しない。dev の分岐からだけ読むモジュールに閉じ込め、dist に入れない。Vite なら:
+
+```ts
+// frontend/src/dev/lean.ts — import.meta.env.DEV の分岐から動的 import する
+import leanJsUrl from "../../../lean/mockup/public/lean.js?url";
+
+export async function openLean(): Promise<(requestText: string) => Promise<string>> {
+  await new Promise((ok, ng) => {
+    const s = document.createElement("script");
+    s.src = leanJsUrl; s.onload = ok; s.onerror = ng;
+    document.head.append(s);
+  });
+  return (globalThis as any).createCradleLean();
+}
+```
+
+`lean/` は `frontend/` の外なので、`vite.config` の `server.fs.allow` に `".."` を足す。

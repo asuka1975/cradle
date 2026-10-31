@@ -1,11 +1,11 @@
 # Lean CLI プロトコル（Cradle 標準）
 
 実行可能仕様は `lake exe <exe>` で JSON stdin → JSON stdout の CLI になる。1 リクエスト 1 プロセス。
-モックアップ（仕様アニメーション）・golden・`cradle spec-query`・E2E 台本生成はすべてこの 1 本の口だけを使う。
+golden・`cradle spec-query`・E2E 台本生成はこの CLI を使う。モックアップとフロントエンドの dev は同じプロトコルをブラウザの wasm（`cradle mockup-build` の `lean.js`）で呼ぶ。どちらも `Runtime/Protocol.lean` の `handle` 1 本を通るので、同じリクエストに同じ応答を返す。
 CLI を持たない Lean 仕様は Cradle のハーネスに乗らない。
 口は 2 つの経路を持つ: 5 つの cmd（Port を使わない手）と、外部能力と内部入力を扱う `cmd: "external"`（version 1）。
 既存の 5 cmd の形と意味は変えず、拡張は `external` だけで行う。`external` を知らない実行器は未知の cmd として拒否する — それが未移行の印。
-CLI の `Main.lean` は骨格の持ち物で作り込まない（Cradle の更新で敷き直す）。プロジェクトが書くのは `Runtime/` の配線だけ。
+`Main.lean` と `Runtime/Protocol.lean` は骨格の持ち物で作り込まない（Cradle の更新で敷き直す）。プロジェクトが書くのは `Runtime/` の配線だけ。
 
 ## リクエスト（5 cmd）
 

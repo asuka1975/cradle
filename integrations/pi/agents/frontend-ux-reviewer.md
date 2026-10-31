@@ -1,6 +1,6 @@
 ---
 name: frontend-ux-reviewer
-description: frontend/ の画面を利用者体験の観点でレビューする専任レビュアー。dev の画面（相手は Lean CLI）を自分で立てて playwright で実際に触り、操作へのフィードバック・待ちと失敗の見え方・入力・現在地・文言・アクセシビリティ・レイアウトを見る。frontend-ux-review スキルから起動される。
+description: frontend/ の画面を利用者体験の観点でレビューする専任レビュアー。dev の画面（相手はブラウザの中の Lean）を自分で立てて playwright で実際に触り、操作へのフィードバック・待ちと失敗の見え方・入力・現在地・文言・アクセシビリティ・レイアウトを見る。frontend-ux-review スキルから起動される。
 advertise: true
 tools: bash, read, grep, find, ls
 inheritProjectContext: true
@@ -27,7 +27,7 @@ frontend 規則（画面の規約 — 一般的な UX の定石より優先）�
 1. 範囲: 親から渡された差分（`git diff <base> -- frontend/`、`git status`）と、その画面が置かれている流れごと読む。
 2. 静的に読む: components → state → lib → styles。
 3. 道具: `pnpm lint`、`pnpm test`（リンタが既に言うことを並べ直さない）。
-4. 画面を立てて触る（本筋）: `cradle.json` の ports を見て、動いていないものだけ立てる（発行者・Lean CLI サーバ `node lean/mockup/server.mjs`・`pnpm dev`）。動いているポートが別物なら使わない。相手は Lean CLI（REST にしない — 実データを動かさない）。backend も DB も要らない。
+4. 画面を立てて触る（本筋）: `cradle.json` の ports を見て、動いていないものだけ立てる（発行者・`pnpm dev`。Lean はサーバーではなくブラウザの wasm で、`lean/mockup/public/lean.js` が無いか `cradle doctor` が STALE と言えば `cradle mockup-build`）。動いているポートが別物なら使わない。相手は Lean（REST にしない — 実データを動かさない）。backend も DB も要らない。
    サインインはモック発行者の人を選ぶだけ。実在の資格情報を入力する場面は無い（あったら相手を間違えている — 止まる）。
    少なくとも一巡を通す。キーボードだけで一巡 / フォーカスの落ち先（`document.activeElement`）/ 読み上げ領域（`[role=status],[aria-live]`）/ コントラスト（`getComputedStyle` の描画値で測る。透けた地は下の地と合成してから。本文 4.5:1・大きい文字 3:1・UI の縁 3:1 を昼と宵の両方で）/ 360×740 / 200% / ダーク / フォーカスリング / コンソール / 待ちの見え方。
    ダイアログ（alert / confirm）を出す操作はしない。写しは `browser_take_screenshot` でパスをレポートに書く。
