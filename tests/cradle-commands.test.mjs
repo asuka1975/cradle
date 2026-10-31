@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, git, gitConfigEnv } from "./helpers.mjs";
@@ -194,7 +194,7 @@ const doctorLines = (owned) => [
   ...["node", "lake", "elan", "java", "pnpm", "apm", "claude", "codex", "git", "docker", "terraform"].map(bin => `missing ${bin.padEnd(10)} `),
 ].join("\n") + "\n";
 
-test("doctor は init した直後の骨格のモックアップと Main.lean を ok と言い、手を入れると STALE と敷き直しのコマンドを出す", (t) => {
+test("doctor は init した直後の骨格のモックアップと Main.lean と Protocol.lean を ok と言い、手を入れると STALE と敷き直しのコマンドを出す", (t) => {
   const root = tempDir(t, "cradle-doctor-");
   const noTools = tempDir(t, "cradle-no-tools-");
   assert.equal(runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env: cleanEnv() }).status, 0);
@@ -204,13 +204,18 @@ test("doctor は init した直後の骨格のモックアップと Main.lean �
     assert.equal(r.stderr, "");
     return r.stdout;
   };
-  assert.equal(doctor(), doctorLines(["ok      mockup     lean/mockup/server.mjs", "ok      lean-main  lean/Main.lean"]));
+  assert.equal(doctor(), doctorLines(["ok      mockup     lean/mockup/server.mjs", "ok      lean-main  lean/Main.lean", "ok      protocol   lean/Demo/Runtime/Protocol.lean"]));
   appendFileSync(join(root, "lean/mockup/server.mjs"), "// 手を入れた\n");
   appendFileSync(join(root, "lean/Main.lean"), "-- 手を入れた\n");
   assert.equal(doctor(), doctorLines([
     "STALE   mockup     lean/mockup/server.mjs が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project Demo --only lean/mockup/server.mjs --force）",
     "STALE   lean-main  lean/Main.lean が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project Demo --only lean/Main.lean --force）",
+    "ok      protocol   lean/Demo/Runtime/Protocol.lean",
   ]));
+  // Protocol.lean の無い移行前のプロジェクトにも敷き直しの案内を出す
+  rmSync(join(root, "lean/Demo/Runtime/Protocol.lean"));
+  assert.match(doctor(), /^STALE {3}protocol {3}lean\/Demo\/Runtime\/Protocol\.lean が骨格の最新版と違う/m);
+  assert.equal(runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/Demo/Runtime/Protocol.lean", "--force"], { cwd: root, env: cleanEnv() }).status, 0);
   // 案内どおりに敷き直せば ok に戻る
   assert.equal(runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/Main.lean", "--force"], { cwd: root, env: cleanEnv() }).status, 0);
   assert.match(doctor(), /^ok {6}lean-main {2}lean\/Main\.lean$/m);

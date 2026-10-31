@@ -131,7 +131,9 @@ function wiring({ cfg, modelDir, mainFile, src, add }) {
   const hasEnv = existsSync(envFile);
   if (!hasEnv && ["Application", "Domain"].some(l => existsSync(join(modelDir, l, "Port")))) add("wiring", "error", envFile, 1, "Port の置き場（Application/Port か Domain/Port）があるのに Runtime/Environment.lean（外部能力の script と cursor）が無い");
   if (existsSync(mainFile)) {
-    const mainExternal = src(mainFile).code.includes('"external"');
+    // 骨格では cmd の振り分けは Runtime/Protocol.lean にある（Main.lean は入出力だけ）。移行前の Main.lean は自分で持つ
+    const protocolFile = join(modelDir, "Runtime", "Protocol.lean");
+    const mainExternal = [mainFile, protocolFile].some(f => existsSync(f) && src(f).code.includes('"external"'));
     if (hasEnv && !mainExternal) add("wiring", "error", mainFile, 1, "Runtime/Environment.lean があるのに Main.lean が cmd external を受けない — 移行が半分（骨格の Main.lean で敷き直す。cradle doctor が差を出す）");
     if (!hasEnv && mainExternal) add("wiring", "error", envFile, 1, "Main.lean が cmd external を受けるのに Runtime/Environment.lean が無い — 移行が半分");
   }

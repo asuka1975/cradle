@@ -32,7 +32,7 @@ const fullInit = [
   ...under("lean/Demo/Domain", ["Annotations.lean", "Entity/Note.lean", "Error.lean", "ValueObject.lean"]),
   "lean/Demo/Laws/Properties.lean",
   "lean/Demo/Prelude.lean",
-  ...under("lean/Demo/Runtime", ["Command.lean", "Environment.lean", "Ids.lean", "Json.lean", "Machine.lean", "Observation.lean", "Reachable.lean", "Scenarios.lean", "Views.lean"]),
+  ...under("lean/Demo/Runtime", ["Command.lean", "Environment.lean", "Ids.lean", "Json.lean", "Machine.lean", "Observation.lean", "Protocol.lean", "Reachable.lean", "Scenarios.lean", "Views.lean"]),
   "lean/Demo.lean",
   ...under("lean/golden", ["basic-flow.json", "basic-init.json", "basic.request.json", "external-flow.json", "external-init.json", "external.request.json"]),
   ...under("lean", ["lakefile.toml", "lean-toolchain", "mockup/public/index.html", "mockup/server.mjs"]),
