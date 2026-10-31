@@ -604,7 +604,7 @@ class Kotlinize(private val ir: Ir) {
 	    型と構成子の文にして止める(単一の引数が arg0 という欄を持つ structure の derive の形もここに来る)。 */
 	fun <T> readingCtorArgs(td: IrTypeDef, ctor: IrCtor, j: JsonElement, read: () -> T): T {
 		if (ctor.fields.withIndex().none { (i, f) -> f.name == "arg$i" }) return read()
-		return try { read() } catch (e: IllegalArgumentException) {
+		return try { read() } catch (e: RuntimeException) {
 			error("${td.lean}.${ctor.name}: 構成子の引数の JSON が不正です: ${j.jsonObject.values.single()}(${e.message})")
 		}
 	}

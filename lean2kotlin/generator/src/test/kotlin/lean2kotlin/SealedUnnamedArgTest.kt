@@ -78,6 +78,23 @@ class SealedUnnamedArgTest {
 	}
 
 	@Test
+	fun `中の読み手の例外の種類によらず、型と構成子を言って止める`(@TempDir out: Path) {
+		val sealed = IrTypeDef("T.Arg", "Arg", "valueObject", IrShape.Sealed(listOf(
+			IrCtor("rat", listOf(IrField("arg0", IrType.Rat))),
+			IrCtor("pair", listOf(IrField("arg0", IrType.PairOf(IrType.Nat, IrType.Nat)))),
+			IrCtor("bool", listOf(IrField("arg0", IrType.Bool))),
+			IrCtor("inner", listOf(IrField("arg0", IrType.Ref(hold.lean)))),
+		)), null, module = "T.Domain.ValueObject")
+		val k = Kotlinize(Ir("T", listOf(hold, slot, sealed), emptyList(), emptyList(), emptyList()))
+		for (j in listOf("""{"rat":{"wrong":1}}""", """{"pair":[1]}""", """{"bool":"x"}"""))
+			assertTrue(assertFailsWith<IllegalStateException>(j) { k.refLiteral(sealed, Json.parseToJsonElement(j)) }.message!!
+				.startsWith("T.Arg.${j.substringAfter('"').substringBefore('"')}: 構成子の引数の JSON が不正です: "), j)
+		// 中の sealed の文も括弧の中に残る
+		val e = assertFailsWith<IllegalStateException> { k.refLiteral(sealed, Json.parseToJsonElement("""{"inner":{"atBay":[1]}}""")) }
+		assertTrue(e.message!!.startsWith("T.Arg.inner: 構成子の引数の JSON が不正です: ") && "T.Hold.atBay: 構成子の引数の JSON が不正です: [1]" in e.message!!, e.message)
+	}
+
+	@Test
 	fun `golden が derive の形で運ぶ名前の無い引数も、生成を止めずに読む`(@TempDir tmp: Path) {
 		// Mini の Place.box の引数を名前の無いものにした形。golden は derive の形(裸の値)で、オラクルは欄名の鍵で書く
 		val ir = Ir.parse(Json.parseToJsonElement(testResources.resolve("mini/ir.json").readText()).toString()
