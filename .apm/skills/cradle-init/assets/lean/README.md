@@ -15,7 +15,7 @@
 lean/
 ├── Main.lean                  JSON stdin/stdout CLI の入出力（中身は Runtime/Protocol.lean。骨格の持ち物 — 作り込まない）
 ├── golden/                    <name>-init.json / <name>-flow.json / <name>.request.json
-├── mockup/                    仕様アニメーション（汎用の描画。public/lean.js と meta.js は cradle mockup-build の生成物）
+├── mockup/                    仕様アニメーション（汎用の描画。Lean の wasm と meta は cradle mockup-build の生成物で、コミットしない）
 └── <Root>/
     ├── Prelude.lean           層に依存しない汎用補題
     ├── Domain/                ドメイン層 = ドメインモデルの家（Application も Runtime も import しない）

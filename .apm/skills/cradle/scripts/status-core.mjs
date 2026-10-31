@@ -116,7 +116,7 @@ function apiContract({ cfg, R, read }) {
 // 5. フロントエンド（材料: 業務の流れを止めている問いが無いこと）
 function frontend({ cfg, R, ddd: { hsOpen, mqOpen } }) {
   const flowFact = hsOpen || mqOpen ? `open の HS ${hsOpen} / MQ ${mqOpen}（業務の流れを止めている問いがあれば先に閉じる）` : "open の HS / MQ なし";
-  if (!existsSync(R(cfg.frontend.dir))) return phase("フロントエンド", "未着手", [flowFact], "frontend スキルで画面を業務のまとまりごとに作る（相手は Lean CLI）");
+  if (!existsSync(R(cfg.frontend.dir))) return phase("フロントエンド", "未着手", [flowFact], "frontend スキルで画面を業務のまとまりごとに作る（相手はブラウザの中の Lean）");
   const src = walk(R(`${cfg.frontend.dir}/src`), { ext: [".ts", ".tsx"] });
   const tests = src.filter(f => /\.test\.tsx?$/.test(f)).length;
   return phase("フロントエンド", "着手済", [`src ${src.length} ファイル（テスト ${tests}）`, flowFact], "/frontend-ux-review で体験を確かめる");
