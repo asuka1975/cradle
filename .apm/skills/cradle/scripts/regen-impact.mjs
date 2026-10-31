@@ -54,58 +54,70 @@ if (!opts["no-regen"]) {
   }
 }
 
-// -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、cfg.root に繋いでも git show に渡しても読めない。
-// --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対にする。
-// -z の --name-status は状態とパスを NUL で区切り、改名・複写（R / C）だけ元と先の 2 つのパスが続く。出すのは先のパス
-const nameStatus = [];
-for (let f = git(cfg.root, ["diff", "--name-status", "-z", "--relative", "HEAD", "--", ...gens]).split("\0"), i = 0; f[i];) {
-  const status = f[i][0], paths = "RC".includes(status) ? 2 : 1;
-  nameStatus.push({ status, path: f[i + paths] });
-  i += 1 + paths;
-}
-const untracked = git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard", "--", ...gens]).split("\0").filter(Boolean).map(path => ({ status: "A", path }));
-const changed = [...nameStatus, ...untracked];
-
-function textAt(path, which) {
-  // HEAD:<path> は git のルートから引くので、cfg.root からの相対のパスは ./ を付けて cwd から引く
-  if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:./${path}`]); } catch { return ""; } }
-  return readText(join(cfg.root, path));
-}
-// 同じシンボルが複数のファイルで変わり、その変わり方がファイルごとに違えば「変更」
-const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }
-for (const c of changed) {
-  for (const d of diffDecls(textAt(c.path, "HEAD"), textAt(c.path, "WT"))) {
-    const key = `${d.owner ?? ""}.${d.name}`;
-    const e = symbols.get(key) ?? { name: d.name, owner: d.owner, kind: d.kind, files: new Set(), change: d.change };
-    e.files.add(c.path); if (e.change !== d.change) e.change = "changed";
-    symbols.set(key, e);
+// 差分の読み取りから golden の回帰までの解析。投げれば（読めない手書き .kt・指す先の無いシンボリックリンクなど）--dry-run の後始末を飛ばさない
+function analyze() {
+  // -z: core.quotePath（既定 true）は非 ASCII のパスを引用符と 8 進で返し、cfg.root に繋いでも git show に渡しても読めない。
+  // --relative: diff は git のルートからのパスを出す。cradle.json が git のルートより下にあっても ls-files と同じく cfg.root からの相対にする。
+  // -z の --name-status は状態とパスを NUL で区切り、改名・複写（R / C）だけ元と先の 2 つのパスが続く。出すのは先のパス
+  const nameStatus = [];
+  for (let f = git(cfg.root, ["diff", "--name-status", "-z", "--relative", "HEAD", "--", ...gens]).split("\0"), i = 0; f[i];) {
+    const status = f[i][0], paths = "RC".includes(status) ? 2 : 1;
+    nameStatus.push({ status, path: f[i + paths] });
+    i += 1 + paths;
   }
-}
+  const untracked = git(cfg.root, ["ls-files", "-z", "--others", "--exclude-standard", "--", ...gens]).split("\0").filter(Boolean).map(path => ({ status: "A", path }));
+  const changed = [...nameStatus, ...untracked];
 
-// 参照元を探す手書き: src/main・src/test・src/adapterTest（Adapter の適合テストの具象クラス）のうち生成ディレクトリの外
-const handFiles = ["main", "test", "adapterTest"].flatMap(d => walk(join(cfg.root, cfg.backend.dir, "src", d), { ext: [".kt"] }))
-  .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
-const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
-const impact = impactOf(symbols.values(), handTexts);
-
-// 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）。
-// 再生成で消えた（D）抽象テストは配線するものが無い。残った具象クラスは消えたシンボルの参照元に出る
-const abstractTests = changed.filter(c => c.status !== "D" && /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
-const unwired = contractTestWiring(cfg, abstractTests).filter(w => !w.wired).map(w => w.name);
-
-let golden = null;
-if (!opts["no-golden"]) {
-  const args = [cradleScript("golden-check.mjs"), "--json"];
-  if (opts.manifest) args.push("--manifest", opts.manifest);
-  const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
-  // 読み切れなかった出力（上限を超えた・起動できない）は判定にしない。golden 回帰は「実行できず」で出す
-  if (r.error) {
-    golden = { error: `golden-check の出力を読めませんでした: ${r.error.message}` };
-    process.stderr.write(`cradle: ${golden.error}\n`);
-  } else {
-    try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+  function textAt(path, which) {
+    // HEAD:<path> は git のルートから引くので、cfg.root からの相対のパスは ./ を付けて cwd から引く
+    if (which === "HEAD") { try { return git(cfg.root, ["show", `HEAD:./${path}`]); } catch { return ""; } }
+    return readText(join(cfg.root, path));
   }
+  // 同じシンボルが複数のファイルで変わり、その変わり方がファイルごとに違えば「変更」
+  const symbols = new Map(); // key -> { name, owner, kind, files:Set, change }
+  for (const c of changed) {
+    for (const d of diffDecls(textAt(c.path, "HEAD"), textAt(c.path, "WT"))) {
+      const key = `${d.owner ?? ""}.${d.name}`;
+      const e = symbols.get(key) ?? { name: d.name, owner: d.owner, kind: d.kind, files: new Set(), change: d.change };
+      e.files.add(c.path); if (e.change !== d.change) e.change = "changed";
+      symbols.set(key, e);
+    }
+  }
+
+  // 参照元を探す手書き: src/main・src/test・src/adapterTest（Adapter の適合テストの具象クラス）のうち生成ディレクトリの外
+  const handFiles = ["main", "test", "adapterTest"].flatMap(d => walk(join(cfg.root, cfg.backend.dir, "src", d), { ext: [".kt"] }))
+    .filter(f => !gens.some(g => rel(cfg.root, f).startsWith(g.replace(/\/$/, "") + "/")));
+  const handTexts = handFiles.map(f => ({ file: rel(cfg.root, f), text: readFileSync(f, "utf8") }));
+  const impact = impactOf(symbols.values(), handTexts);
+
+  // 契約テスト: 変わった生成物のうちの抽象テストと具象の配線（Adapter の適合テストは src/adapterTest、ほかは src/test — status と同じ数え方）。
+  // 再生成で消えた（D）抽象テストは配線するものが無い。残った具象クラスは消えたシンボルの参照元に出る
+  const abstractTests = changed.filter(c => c.status !== "D" && /ContractTest\.kt$/.test(c.path)).map(c => c.path.replace(/.*\//, "").replace(/\.kt$/, ""));
+  const unwired = contractTestWiring(cfg, abstractTests).filter(w => !w.wired).map(w => w.name);
+
+  let golden = null;
+  if (!opts["no-golden"]) {
+    const args = [cradleScript("golden-check.mjs"), "--json"];
+    if (opts.manifest) args.push("--manifest", opts.manifest);
+    const r = spawnSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], cwd: cfg.root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_MAX });
+    // 読み切れなかった出力（上限を超えた・起動できない）は判定にしない。golden 回帰は「実行できず」で出す
+    if (r.error) {
+      golden = { error: `golden-check の出力を読めませんでした: ${r.error.message}` };
+      process.stderr.write(`cradle: ${golden.error}\n`);
+    } else {
+      try { golden = JSON.parse(r.stdout); } catch { golden = { error: (r.stderr || r.stdout).slice(-2000) }; }
+    }
+  }
+  return { changed, impact, unwired, golden };
 }
+
+let analysis;
+try { analysis = analyze(); }
+catch (e) {
+  const unrestored = opts["dry-run"] ? restoreGenerated() : "";
+  fail(`影響の解析で止まりました: ${e.message.trimEnd()}${unrestored && `\n${unrestored}`}`, 2);
+}
+const { changed, impact, unwired, golden } = analysis;
 
 // 戻せなければ結果を出さない（--json の restored: true が嘘になる）。再生成の失敗と同じく途中で止まった 2
 if (opts["dry-run"]) { const unrestored = restoreGenerated(); if (unrestored) fail(unrestored, 2); }
