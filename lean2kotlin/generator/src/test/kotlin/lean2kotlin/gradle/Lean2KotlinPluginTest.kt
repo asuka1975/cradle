@@ -127,10 +127,12 @@ class Lean2KotlinPluginTest {
 		p.ext().lakeCommand.set(lake.absolutePath)
 		p.ext().irFile.get().asFile.apply { parentFile.mkdirs(); writeText("{}") }
 		val e = assertFailsWith<GradleException> { p.extract().run() }
-		assertEquals("lake build が失敗しました。対象の Lean（leanprover/lean4:v4.31.0）は抽出器の Lean（leanprover/lean4:v4.33.0）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、対象の lean-toolchain を上げてください", e.message)
-		// 版が同じなら対象の Lean の失敗で、版の話はしない
-		domain.resolve("lean-toolchain").writeText("leanprover/lean4:v4.33.0\n")
-		assertFalse("抽出器の Lean" in (assertFails { p.extract().run() }.message ?: ""))
+		assertEquals("lake build が失敗しました。対象の Lean（leanprover/lean4:v4.31.0）は抽出器の Lean（leanprover/lean4:v4.33.0）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、2 つの版を揃えてください", e.message)
+		// 版が同じなら対象の Lean の失敗で、版の話はしない（v の有無は同じ版）
+		for (same in listOf("leanprover/lean4:v4.33.0\n", "leanprover/lean4:4.33.0\n")) {
+			domain.resolve("lean-toolchain").writeText(same)
+			assertFalse("抽出器の Lean" in (assertFails { p.extract().run() }.message ?: ""), same)
+		}
 	}
 
 	@Test

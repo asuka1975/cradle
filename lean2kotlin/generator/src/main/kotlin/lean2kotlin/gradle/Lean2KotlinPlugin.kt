@@ -161,8 +161,8 @@ abstract class ExtractLeanIrTask : DefaultTask() {
 			// 抽出器は対象の Lean でビルドする(--keep-toolchain)。古い Lean で抽出器が通らないとき、Lean のエラーだけでは版のずれと分からない
 			val target = domain.resolve("lean-toolchain").readText().trim()
 			val own = extractor.resolve("lean-toolchain").takeIf { it.isFile }?.readText()?.trim()
-			if (own != null && own != target) {
-				throw GradleException("lake build が失敗しました。対象の Lean（$target）は抽出器の Lean（$own）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、対象の lean-toolchain を上げてください")
+			if (own != null && own.replace(":v", ":") != target.replace(":v", ":")) {
+				throw GradleException("lake build が失敗しました。対象の Lean（$target）は抽出器の Lean（$own）と違います — 抽出器（Lean2Kotlin/Extract.lean）でエラーが出ているなら、2 つの版を揃えてください")
 			}
 			build.assertNormalExitValue()
 		}

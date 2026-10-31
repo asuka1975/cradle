@@ -88,7 +88,7 @@ CI では `apm_modules/` が無いので、`./gradlew build` の前に `apm inst
 
 | エラー | 対処 |
 |---|---|
-| `lake build が失敗しました。対象の Lean（…）は抽出器の Lean（…）と違います` | 抽出器は対象の `lean-toolchain` でビルドする。抽出器（`Lean2Kotlin/Extract.lean`）でエラーが出ているなら、対象の `lean-toolchain` を上げる |
+| `lake build が失敗しました。対象の Lean（…）は抽出器の Lean（…）と違います` | 抽出器は対象の `lean-toolchain` でビルドする。抽出器（`Lean2Kotlin/Extract.lean`）でエラーが出ているなら、2 つの版を揃える（対象が古ければ対象を上げ、新しければ抽出器を更新する） |
 | 型 X に区分がありません | 置き場（Domain/ValueObject・Domain/Entity）か `@[valueObject]` / `@[aggregateRoot]` の印を与える |
 | 型引数 G に対応する `<Root>.Runtime.G` がありません | binder 名を Runtime の型名に合わせるか、`binderOverrides` で対応づける |
 | Kotlin 名 X が衝突 / 識別子として不正 | Lean 側で改名する |
