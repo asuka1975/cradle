@@ -7,7 +7,7 @@ import { tempDir, cleanEnv, runNode } from "./helpers.mjs";
 
 const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs", import.meta.url));
 const next = "\n次: apm install（固有の事実を rules に写す。Codex は apm compile --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める\n";
-const mockupLines = "  + lean/mockup/public/index.html\n  + lean/mockup/server.mjs\n";
+const mockupLines = "  + lean/mockup/public/index.html\n";
 
 test("init は --k=v も --k v と同じに読み、--only=lean/mockup --force はモックアップだけを敷き直して残りを据え置く", (t) => {
   const root = tempDir(t, "cradle-init-eq-");

@@ -35,7 +35,7 @@ const fullInit = [
   ...under("lean/Demo/Runtime", ["Command.lean", "Environment.lean", "Ids.lean", "Json.lean", "Machine.lean", "Observation.lean", "Protocol.lean", "Reachable.lean", "Scenarios.lean", "Views.lean"]),
   "lean/Demo.lean",
   ...under("lean/golden", ["basic-flow.json", "basic-init.json", "basic.request.json", "external-flow.json", "external-init.json", "external.request.json"]),
-  ...under("lean", ["lakefile.toml", "lean-toolchain", "mockup/public/index.html", "mockup/server.mjs"]),
+  ...under("lean", ["lakefile.toml", "lean-toolchain", "mockup/public/index.html"]),
   ...under("backend", [".editorconfig", "gradle.properties", "ktlint-rules/build.gradle.kts"]),
   ...ktlint("main", ""),
   "backend/ktlint-rules/src/main/resources/META-INF/services/com.pinterest.ktlint.cli.ruleset.core.api.RuleSetProviderV3",
@@ -44,7 +44,7 @@ const fullInit = [
 const next = "\n次: apm install（固有の事実を rules に写す。Codex は apm compile --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める\n";
 const noDomain = "\nプロダクトの一言は書いていない（documents/ddd/event-timeline.md 冒頭の「プロダクト:」行）。ddd.mjs start --domain \"<一言>\" が書く。\n";
 
-test("init は骨格を決まった順に敷いて + で並べ、--only lean/mockup --force はモックアップの 2 ファイルだけを敷き直す", (t) => {
+test("init は骨格を決まった順に敷いて + で並べ、--only lean/mockup --force はモックアップの画面だけを敷き直す", (t) => {
   const root = tempDir(t, "cradle-init-order-");
   const env = cleanEnv();
   const full = runNode(init, ["--project", "Demo", "--dir", root, "--backend", "com.example.demo"], { cwd: root, env });
@@ -53,7 +53,7 @@ test("init は骨格を決まった順に敷いて + で並べ、--only lean/moc
   assert.equal(full.stdout, `Cradle init — Demo (${root})\n${fullInit.map(p => `  + ${p}`).join("\n")}\n${noDomain}${next}`);
   const mockup = runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/mockup", "--force"], { cwd: root, env });
   assert.equal(mockup.status, 0, mockup.stderr);
-  assert.equal(mockup.stdout, `Cradle init — Demo (${root})\n  + lean/mockup/public/index.html\n  + lean/mockup/server.mjs\n${next}`);
+  assert.equal(mockup.stdout, `Cradle init — Demo (${root})\n  + lean/mockup/public/index.html\n${next}`);
 });
 
 test("init の --backend はパッケージ名を骨格を敷く前に確かめ、名前が誤っていれば何も書かずに 1 で終わる", (t) => {

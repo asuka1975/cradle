@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, chmodSync, copyFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { tempProject, cleanEnv, runNode, writeTree, commitAll } from "./helpers.mjs";
 
@@ -258,39 +257,6 @@ for (const [, n] of require("fs").readFileSync(process.argv[4], "utf8").matchAll
   assert.equal(r.status, 1, r.stderr);
   assert.equal(r.stderr, "");
   assert.deepEqual(JSON.parse(r.stdout).commandsWithoutOp, commands);
-});
-
-/** 空いているポートを 1 つ引いて閉じ、その番号を返す（モックアップのサーバーは PORT=0 だと引いた番号を出さない） */
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const s = createServer().once("error", reject).listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => resolve(port)); });
-  });
-}
-
-test("モックアップのサーバーは spec-query meta が 1MB を超えても /api/meta に全部のコマンドを返す", async (t) => {
-  const root = tempProject(t, "cradle-large-mockup-meta-");
-  mkdirSync(join(root, "lean/mockup"), { recursive: true });
-  copyFileSync(script("cradle-init/assets/lean/mockup/server.mjs"), join(root, "lean/mockup/server.mjs"));
-  // 偽の spec-query: 長い名前のコマンドを 6000 個並べた meta を出す
-  const commands = Array.from({ length: 6000 }, (_, i) => long(i));
-  writeTree(root, { "tools/spec-query.mjs": `process.stdout.write(JSON.stringify({ scenarios: ["basic"], commands: ${JSON.stringify(commands)} }));\n` });
-  const port = await freePort();
-  const p = spawn(process.execPath, [join(root, "lean/mockup/server.mjs")], { cwd: root, env: cleanEnv({ PORT: String(port), CRADLE_SPEC_QUERY: join(root, "tools/spec-query.mjs") }), stdio: ["ignore", "pipe", "pipe"] });
-  t.after(() => p.kill());
-  // 起動の 1 行を待ってから問い合わせる（20 秒で出なければ止めて落とす）
-  await new Promise((resolve, reject) => {
-    let out = "", err = "";
-    const kill = setTimeout(() => p.kill(), 20_000);
-    p.stdout.setEncoding("utf8").on("data", d => { out += d; if (out.includes("spec animation:")) { clearTimeout(kill); resolve(); } });
-    p.stderr.setEncoding("utf8").on("data", d => { err += d; });
-    p.on("exit", (code) => reject(new Error(`サーバーが ${code} で終わった: ${out}${err}`)));
-  });
-  const body = await (await fetch(`http://127.0.0.1:${port}/api/meta`)).text();
-  const meta = JSON.parse(body);
-  assert.equal(meta.error, undefined);
-  huge({ stdout: body });
-  assert.deepEqual(meta.scenarios, ["basic"]);
-  assert.deepEqual(meta.commands, commands);
 });
 
 test("mockup-build --meta-only は meta が 1MB を超えても meta.js に全部を書き、手元の絶対パスを持ち込まない", (t) => {

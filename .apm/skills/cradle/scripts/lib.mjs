@@ -71,7 +71,7 @@ export function loadConfig(root = findProjectRoot(), env = process.env) {
     e2e: { dir: raw.e2e?.dir ?? "e2e", scenarios: `${raw.e2e?.dir ?? "e2e"}/scenarios`, ...(raw.e2e ?? {}) },
     api: { outletsWithoutEndpoint: [], ...(raw.api ?? {}) },
     infra: { dir: "infra", ...(raw.infra ?? {}) },
-    ports: { mockup: 8787, frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
+    ports: { frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
     protected: raw.protected ?? ["documents/developer/**"],
     unslop: { ...(raw.unslop ?? {}) },
     raw,

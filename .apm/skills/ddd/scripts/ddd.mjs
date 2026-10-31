@@ -75,7 +75,7 @@ switch (cmd) {
     if (j.preface) lines.push(j.preface, "");
     if (scaffold) lines.push("モデルはまだ骨格のサンプル（実ドメインは未形式化）なので、この巡にプローブは無い。業務の事実として答えてください。", "");
     else lines.push("## 確かめ方", "", "選択肢ごとに「選ぶとどうなるか」をモデルで動かせます。", "", "```bash",
-      `cd ${cfg.lean.dir} && lake build && node mockup/server.mjs   # → http://localhost:${cfg.ports.mockup}`, "```", "",
+      `node <skills>/cradle/scripts/cradle.mjs mockup-build   # → ${cfg.lean.mockup}/public/index.html をブラウザで開く`, "```", "",
       "画面の「シナリオ」から、下の表の「モックアップ」欄の名前を選んでください。表示されるのはモデルを実際に動かした結果です。", "");
     j.questions.forEach((q, i) => {
       const n = i + 1;

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, rmSync } from "node:fs";
+import { appendFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tempDir, tempProject, cleanEnv, runNode, writeTree, commitAll, git, gitConfigEnv } from "./helpers.mjs";
@@ -182,7 +182,7 @@ test("refs は非 ASCII の名前のファイルも、引用符と 8 進にせ�
   ].join("\n") + "\n" + refsTail);
 });
 
-// init した直後の doctor の全行。owned は骨格の持ち物（モックアップのサーバーと CLI の Main.lean）の行。
+// init した直後の doctor の全行。owned は骨格の持ち物（CLI の Main.lean とプロトコル）と wasm の行。
 // PATH を空にし LEAN2KOTLIN_HOME を落として、道具と生成器の行を host に依らない missing に揃える
 const doctorLines = (owned) => [
   "missing harness    （apm install で配る）",
@@ -191,10 +191,10 @@ const doctorLines = (owned) => [
   "info    opencode   opencode.json(c) に Cradle の integrations/opencode を plugin として追加",
   ...owned,
   "missing lean2kotlin （backend フェーズで要る。apm install で apm_modules に配られる。別のチェックアウトを使うなら LEAN2KOTLIN_HOME）",
-  ...["node", "lake", "elan", "java", "pnpm", "apm", "claude", "codex", "git", "docker", "terraform"].map(bin => `missing ${bin.padEnd(10)} `),
+  ...["node", "lake", "elan", "java", "pnpm", "emcc", "apm", "claude", "codex", "git", "docker", "terraform"].map(bin => `missing ${bin.padEnd(10)} `),
 ].join("\n") + "\n";
 
-test("doctor は init した直後の骨格のモックアップと Main.lean と Protocol.lean を ok と言い、手を入れると STALE と敷き直しのコマンドを出す", (t) => {
+test("doctor は init した直後の骨格の Main.lean と Protocol.lean を ok と言い、手を入れると STALE と敷き直しのコマンドを出す。wasm は無ければ missing、モデルより古ければ STALE で、置き土産の server.mjs も知らせる", (t) => {
   const root = tempDir(t, "cradle-doctor-");
   const noTools = tempDir(t, "cradle-no-tools-");
   assert.equal(runNode(init, ["--project", "Demo", "--dir", root], { cwd: root, env: cleanEnv() }).status, 0);
@@ -204,18 +204,31 @@ test("doctor は init した直後の骨格のモックアップと Main.lean �
     assert.equal(r.stderr, "");
     return r.stdout;
   };
-  assert.equal(doctor(), doctorLines(["ok      mockup     lean/mockup/server.mjs", "ok      lean-main  lean/Main.lean", "ok      protocol   lean/Demo/Runtime/Protocol.lean"]));
-  appendFileSync(join(root, "lean/mockup/server.mjs"), "// 手を入れた\n");
+  const fresh = ["ok      lean-main  lean/Main.lean", "ok      protocol   lean/Demo/Runtime/Protocol.lean"];
+  const noWasm = "missing wasm       lean/mockup/public/lean.js（cradle mockup-build で作る。Emscripten が要る）";
+  assert.equal(doctor(), doctorLines([...fresh, noWasm]));
+  appendFileSync(join(root, "lean/Demo/Runtime/Protocol.lean"), "-- 手を入れた\n");
   appendFileSync(join(root, "lean/Main.lean"), "-- 手を入れた\n");
   assert.equal(doctor(), doctorLines([
-    "STALE   mockup     lean/mockup/server.mjs が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project Demo --only lean/mockup/server.mjs --force）",
     "STALE   lean-main  lean/Main.lean が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project Demo --only lean/Main.lean --force）",
-    "ok      protocol   lean/Demo/Runtime/Protocol.lean",
+    "STALE   protocol   lean/Demo/Runtime/Protocol.lean が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project Demo --only lean/Demo/Runtime/Protocol.lean --force）",
+    noWasm,
   ]));
-  // Protocol.lean の無い移行前のプロジェクトにも敷き直しの案内を出す
+  // Protocol.lean の無い移行前のプロジェクトにも同じ案内を出す
   rmSync(join(root, "lean/Demo/Runtime/Protocol.lean"));
   assert.match(doctor(), /^STALE {3}protocol {3}lean\/Demo\/Runtime\/Protocol\.lean が骨格の最新版と違う/m);
   assert.equal(runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/Demo/Runtime/Protocol.lean", "--force"], { cwd: root, env: cleanEnv() }).status, 0);
+  // lean.js の鮮度: モデルより新しければ ok、古ければ STALE。server.mjs が残っていれば知らせる
+  const leanJs = join(root, "lean/mockup/public/lean.js");
+  writeFileSync(leanJs, "");
+  utimesSync(leanJs, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
+  assert.match(doctor(), /^ok {6}wasm {7}lean\/mockup\/public\/lean\.js$/m);
+  utimesSync(leanJs, new Date(0), new Date(0));
+  assert.match(doctor(), /^STALE {3}wasm {7}lean\/mockup\/public\/lean\.js がモデルより古い（\.lean \d+ 本。cradle mockup-build で作り直す）$/m);
+  rmSync(leanJs);
+  writeFileSync(join(root, "lean/mockup/server.mjs"), "");
+  assert.match(doctor(), /^STALE {3}mockup {5}lean\/mockup\/server\.mjs はもう使わない/m);
+  rmSync(join(root, "lean/mockup/server.mjs"));
   // 案内どおりに敷き直せば ok に戻る
   assert.equal(runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/Main.lean", "--force"], { cwd: root, env: cleanEnv() }).status, 0);
   assert.match(doctor(), /^ok {6}lean-main {2}lean\/Main\.lean$/m);

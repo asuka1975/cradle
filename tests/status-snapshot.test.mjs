@@ -40,7 +40,7 @@ const files = {
   "lean/Example/Domain/Book.lean": "namespace Example\n-- sorry は行コメントなら数えない\n/- ブロックの中の sorry -/\ntheorem lent : True := sorry\ndef pair : Nat × Nat := ⟨sorry, sorry⟩\nend Example\n",
   "lean/Example/Runtime/Views.lean": "namespace Example.Runtime\nstructure Views where\n  books : List Nat\n  loans : List Nat\n  deriving Repr\nend Example.Runtime\n",
   "lean/.lake/build/bin/example": "",
-  "lean/mockup/server.mjs": "export {};\n",
+  "lean/mockup/public/lean.js": "",
   "lean/mockup/public/index.html": "<!doctype html><title>図書の貸出</title>\n",
   "lean/golden/basic-flow.json": flow({ lendBook: { book: { id: 0 } } }),
   "lean/golden/basic-init.json": JSON.stringify({ ok: { state: {}, views: { notes: [] } } }),
