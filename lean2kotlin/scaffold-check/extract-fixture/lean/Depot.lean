@@ -2,6 +2,7 @@
 import Depot.Domain.Annotations
 import Depot.Domain.Error
 import Depot.Domain.ValueObject
+import Depot.Runtime.Json
 import Depot.Domain.Entity.Order
 import Depot.Domain.DomainService.Refund
 import Depot.Application.UseCase.PlaceOrderUseCase.Command

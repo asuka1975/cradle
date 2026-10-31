@@ -582,7 +582,8 @@ class Kotlinize(private val ir: Ir) {
 	}
 
 	/** sealed 値の JSON を構成子とその引数の object に分ける。引数なし ctor は "name"(文字列)、
-	    引数あり ctor は {"name": {"arg": ...}}。引数の無い ctor の引数は null(JSON の中身を読まない)。 */
+	    引数あり ctor は {"name": {"arg": ...}}。引数の無い ctor の引数は null(JSON の中身を読まない)。
+	    名前の無い引数を持つ ctor は Lean の derive した ToJson の形でも来る(ctorArgs)。 */
 	fun sealedCtorOf(td: IrTypeDef, shape: IrShape.Sealed, j: JsonElement): Pair<IrCtor, JsonObject?> {
 		if (j is JsonPrimitive) {
 			val ctor = shape.ctors.find { it.name == j.content }
@@ -595,7 +596,19 @@ class Kotlinize(private val ir: Ir) {
 		val (name, body) = o.entries.single()
 		val ctor = shape.ctors.find { it.name == name }
 			?: error("${td.lean}: 不明なコンストラクタ $name")
-		return ctor to (if (ctor.fields.isEmpty()) null else body.jsonObject)
+		return ctor to (if (ctor.fields.isEmpty()) null else ctorArgs(td, ctor, body))
+	}
+
+	/** 構成子の引数の JSON を欄名の鍵の object に揃える。名前の無い引数(欄名 arg<序数>)を持つ ctor は、抽出器の ctor 分解と
+	    合成シリアライザなら欄名の鍵で、derive した ToJson(golden と、インスタンスを通ったオラクル)なら
+	    引数 1 つは裸の値、2 つ以上は(名前のある引数が混ざっても)配列で書かれる。 */
+	private fun ctorArgs(td: IrTypeDef, ctor: IrCtor, body: JsonElement): JsonObject {
+		val fields = ctor.fields
+		val unnamed = fields.withIndex().any { (i, f) -> f.name == "arg$i" }
+		if (body is JsonObject && (!unnamed || fields.all { it.name in body })) return body
+		if (unnamed && fields.size == 1) return JsonObject(mapOf(fields.single().name to body))
+		if (unnamed && body is JsonArray && body.size == fields.size) return JsonObject(fields.map { it.name }.zip(body).toMap())
+		error("${td.lean}.${ctor.name}: 構成子の引数の JSON が不正です: $body")
 	}
 
 	// ───────────────────────── Arb(Kotest ジェネレータ)

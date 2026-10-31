@@ -39,6 +39,31 @@ def Quantity.reserve (q : Quantity) (stock : Nat) : Except DomainError Quantity 
     q.shortage stock = .outOfStock (q.count - stock) := by
   unfold Quantity.shortage; rfl
 
+/-- 預かり場所。名前の無い引数の構成子に ToJson を derive する（Runtime/Json.lean）— 引数が 1 つなら裸の値、2 つ以上なら（名前のある引数が混ざっても）配列で書かれるのを固定する。 -/
+inductive Hold where
+  | onDock : Nat → Hold
+  | atBay : Nat → Nat → Hold
+  | mixed (row : Nat) : Nat → Hold
+deriving Repr, DecidableEq
+
+/-- 岸壁で預かる。irreducible なので期待値は ToJson インスタンスで直列化する。 -/
+@[irreducible] def Quantity.dockHold (q : Quantity) : Hold := .onDock q.count
+
+@[contract] theorem Quantity.dockHold_eq (q : Quantity) : q.dockHold = .onDock q.count := by
+  unfold Quantity.dockHold; rfl
+
+/-- 区画で預かる。 -/
+@[irreducible] def Quantity.bayHold (q : Quantity) (bay : Nat) : Hold := .atBay bay q.count
+
+@[contract] theorem Quantity.bayHold_eq (q : Quantity) (bay : Nat) : q.bayHold bay = .atBay bay q.count := by
+  unfold Quantity.bayHold; rfl
+
+/-- 列で預かる。 -/
+@[irreducible] def Quantity.mixedHold (q : Quantity) (row : Nat) : Hold := .mixed row q.count
+
+@[contract] theorem Quantity.mixedHold_eq (q : Quantity) (row : Nat) : q.mixedHold row = .mixed row q.count := by
+  unfold Quantity.mixedHold; rfl
+
 /-- 数量のサンプル（4〜10）は仮定 100 < count を満たさない — ケースを演繹できない指名。 -/
 @[contract] theorem Quantity.reserve_huge (q : Quantity) (stock : Nat) (h : stock < q.count)
     (_ : 100 < q.count) : q.reserve stock = .error (.outOfStock q.count) :=

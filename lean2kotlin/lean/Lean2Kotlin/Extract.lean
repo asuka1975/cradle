@@ -450,10 +450,12 @@ def ctorFieldTypes (ctorName : Name) (lvls : List Level) (typeArgs : Array Expr)
     依存しない(対象は読み取り専用でインスタンスを足せない)。
     形は derived ToJson と同一規約(golden 互換): structure = object、
     引数なし ctor = "名前"、引数つき ctor = {"名前": {...}}、Option = null / 中身。
+    ただし名前の無い引数は {"名前": {arg<序数>: ...}} で、derived(裸の値・配列)と違う。
+    インスタンスを使った型はそのインスタンスの形のままで、生成器はどちらも読む(Kotlinize.ctorArgs)。
     合成した式はコンパイル実行(evalExpr)される — WF 再帰も評価できる。 -/
 partial def mkSerializer (ty0 : Expr) : MetaM Expr := do
   let ty ← whnf ty0
-  -- 既存インスタンスがあればそれを使う(derived と同形)
+  -- 既存インスタンスがあればそれを使う
   try
     let inst ← synthInstance (mkApp (mkConst ``Lean.ToJson [.zero]) ty)
     return mkApp2 (mkConst ``Lean.toJson [.zero]) ty inst
@@ -551,7 +553,7 @@ def jsonViaInstance (e : Expr) : MetaM (Option Json) := do
     return some (← evalJsonExpr (mkApp ser e))
   catch _ => return none
 
-/-- ctor 正規形の値 → golden 互換 JSON。
+/-- ctor 正規形の値 → golden 互換 JSON(名前の無い引数の鍵 arg<序数> だけ derived の形と違う — mkSerializer)。
     structure = フィールドの object、引数なし ctor = "名前"、
     引数つき ctor = {"名前": {引数: 値}}、Option = null / 中身、
     List = 配列、Prod = [fst, snd]。 -/
