@@ -13,7 +13,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameS
 import { availableParallelism, homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHILD_OUTPUT_MAX, callLeanText, cradleScript, fail, glossaryEnglish, goldenDirOf, headerUsage, lakeBuild, loadConfigOrFail, parseArgs, readSidecar, readableEntries, sha256, walk } from "./lib.mjs";
+import { CHILD_OUTPUT_MAX, callLeanText, cradleScript, fail, glossaryEnglish, goldenDirOf, headerUsage, lakeBuild, loadConfigOrFail, parseArgs, publishDir, readSidecar, readableEntries, sha256, walk } from "./lib.mjs";
 import { initSchedule, initSource, localPathIn, prunedSource, reach, symbolIndex } from "./wasm-closure.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { help: "bool", "meta-only": "bool" });
@@ -30,6 +30,10 @@ const OPTIMIZE = ["-O2", "-w", "-DNDEBUG", "-ffp-contract=off"];
 // タスクの管理・libuv・OpenSSL は使わない。uv/* と openssl.cpp は要らない（libuv.cpp は初期化の入口だけ）
 const RUNTIME_SOURCES = ["debug", "thread", "mpz", "utf8", "object", "apply", "exception", "interrupt", "memory", "stackinfo", "compact", "init_module", "io", "hash", "byteslice", "platform", "alloc", "allocprof", "sharecommon", "stack_overflow", "process", "object_ref", "mpn", "mutex", "libuv"];
 const ASSETS = fileURLToPath(new URL("../assets/wasm/", import.meta.url));
+const GENERATED_HEADERS = {
+  "lean/config.h": "#pragma once\n#include <lean/version.h>\n#define LEAN_IS_STAGE0 0\n",
+  "githash.h": '#define LEAN_GITHASH "cradle-wasm"\n',
+};
 
 const cfg = loadConfigOrFail();
 const publicDir = join(cfg.root, cfg.lean.mockup, "public");
@@ -81,7 +85,8 @@ function emccVersion() {
 /** このコミットの Lean のランタイムのソースをキャッシュに取る。 */
 async function runtimeSource(cache, commit) {
   const dir = join(cache, "src");
-  if (existsSync(join(dir, "src", "runtime", "object.cpp"))) return join(dir, "src");
+  const marker = join(dir, "src", "runtime", "object.cpp");
+  if (existsSync(marker)) return join(dir, "src");
   const url = `https://github.com/leanprover/lean4/archive/${commit}.tar.gz`;
   console.log(`  Lean のランタイムのソースを取得: ${url}`);
   let res;
@@ -94,19 +99,21 @@ async function runtimeSource(cache, commit) {
   const top = `lean4-${commit}`;
   await run("tar", ["-xzf", tmp, "-C", part, "--strip-components=1", `${top}/src/runtime`, `${top}/src/util`], { what: "tar" });
   rmSync(tmp);
-  rmSync(dir, { recursive: true, force: true });
-  renameSync(part, dir);
+  publishDir(part, dir);
+  if (!existsSync(marker)) fail(`キャッシュの ${dir} が壊れている（消してやり直す）`);
   return join(dir, "src");
 }
 
-/** lean.h と、mimalloc を使わない config.h（ブラウザの wasm は標準の malloc で足りる）。 */
+/** lean.h と、mimalloc を使わない config.h（ブラウザの wasm は標準の malloc で足りる）。使用中のビルドがあるので、一度置いたら書き換えない。 */
 function includeDir(cache, prefix) {
   const inc = join(cache, "include");
-  mkdirSync(join(inc, "lean"), { recursive: true });
-  for (const f of ["lean.h", "version.h"]) copyFileSync(join(prefix, "include", "lean", f), join(inc, "lean", f));
-  writeFileSync(join(inc, "lean", "config.h"), "#pragma once\n#include <lean/version.h>\n#define LEAN_IS_STAGE0 0\n");
-  writeFileSync(join(inc, "githash.h"), '#define LEAN_GITHASH "cradle-wasm"\n');
-  copyFileSync(join(ASSETS, "uv.h"), join(inc, "uv.h"));
+  if (existsSync(inc)) return inc;
+  const part = `${inc}.${process.pid}`;
+  mkdirSync(join(part, "lean"), { recursive: true });
+  for (const f of ["lean.h", "version.h"]) copyFileSync(join(prefix, "include", "lean", f), join(part, "lean", f));
+  for (const [f, text] of Object.entries(GENERATED_HEADERS)) writeFileSync(join(part, f), text);
+  copyFileSync(join(ASSETS, "uv.h"), join(part, "uv.h"));
+  publishDir(part, inc);
   return inc;
 }
 
@@ -114,7 +121,7 @@ function includeDir(cache, prefix) {
 async function runtimeArchive(cache, src, inc) {
   const ar = join(cache, "libleanrt.a");
   if (existsSync(ar)) return ar;
-  const objDir = join(cache, "rt-obj");
+  const objDir = join(cache, `rt-obj.${process.pid}`);
   mkdirSync(objDir, { recursive: true });
   const objects = await pool(RUNTIME_SOURCES, async (name) => {
     const o = join(objDir, `${name}.o`);
@@ -124,6 +131,7 @@ async function runtimeArchive(cache, src, inc) {
   const part = `${ar}.${process.pid}.a`;
   await run("emar", ["rcs", part, ...objects], { what: "emar" });
   renameSync(part, ar);
+  rmSync(objDir, { recursive: true, force: true });
   return ar;
 }
 
@@ -277,7 +285,7 @@ async function buildLeanJs(meta) {
   console.log(`Lean ${version} / Emscripten ${emcc}`);
   const cacheBase = process.env.CRADLE_WASM_CACHE ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "cradle", "lean-wasm");
   // 同じ Lean・同じ Emscripten・同じ旗・同じ shim なら再利用する
-  const cache = join(cacheBase, `${version}-${sha256([commit, emcc, TARGET, OPTIMIZE, RUNTIME_SOURCES, readFileSync(join(ASSETS, "uv.h"), "utf8")].join("\n")).slice(0, 16)}`);
+  const cache = join(cacheBase, `${version}-${sha256([commit, emcc, TARGET, OPTIMIZE, RUNTIME_SOURCES, readFileSync(join(ASSETS, "uv.h"), "utf8"), JSON.stringify(GENERATED_HEADERS)].join("\n")).slice(0, 16)}`);
   mkdirSync(cache, { recursive: true });
 
   const inc = includeDir(cache, prefix);

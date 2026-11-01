@@ -1,6 +1,6 @@
 // Cradle 共通ライブラリ — 設定の読み込み・Lean CLI 呼び出し・小道具。
 // 依存は Node 標準ライブラリだけ（配布先に何も入れさせない）。
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, resolve, relative, sep } from "node:path";
@@ -694,6 +694,18 @@ export function glossaryEnglish(cfg) {
 
 /** 中身（文字列か Buffer）の sha256 の 16 進。 */
 export function sha256(data) { return createHash("sha256").update(data).digest("hex"); }
+
+/**
+ * 作り終えたディレクトリ part を dir として一度で公開する。別の処理が先に置いていればそちらを使い、part を捨てる。
+ * dir を消してから置き直さない — 同じキャッシュを使う別のビルドが読んでいる最中かもしれない。
+ */
+export function publishDir(part, dir) {
+  try { renameSync(part, dir); }
+  catch (e) {
+    if (e.code !== "ENOTEMPTY" && e.code !== "EEXIST") throw e;
+    rmSync(part, { recursive: true, force: true });
+  }
+}
 
 /** テキストファイルを読む。無ければ fallback。ディレクトリや読めないファイルは投げる（無いのとは別の事故）。 */
 export function readText(path, fallback = "") { return existsSync(path) ? readFileSync(path, "utf8") : fallback; }
