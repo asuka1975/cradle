@@ -147,6 +147,18 @@ test("parseInitBody は import の連鎖を捨て、定数ごとの組に切り�
   assert.throws(() => parseInitBody("LEAN_EXPORT lean_object* initialize_X(uint8_t builtin) {\nsomething_new();\nreturn lean_io_result_mk_ok(lean_box(0));\n}"), /文を読めない: .*something_new/);
 });
 
+test("parseInitBody はスカラーの定数を箱から出す形も定数の組として読み、知らない受け方は投げる", () => {
+  const body = (assign) => `LEAN_EXPORT lean_object* initialize_X(uint8_t builtin) {\nres = l_initFn();\nif (lean_io_result_is_error(res)) return res;\n${assign}\nlean_dec_ref(res);\nreturn lean_io_result_mk_ok(lean_box(0));\n}`;
+  for (const op of ["lean_unbox", "lean_unbox_usize", "lean_unbox_uint32", "lean_unbox_uint64", "lean_unbox_float", "lean_unbox_float32"]) {
+    const line = `l_flag = ${op}(lean_io_result_get_value(res));`;
+    const { groups } = parseInitBody(body(line));
+    assert.deepEqual(groups.map(g => g.var), ["l_flag"], op);
+    assert.ok(groups[0].lines.includes(line), op);
+  }
+  assert.throws(() => parseInitBody(body("l_flag = lean_something(lean_io_result_get_value(res));")), /の結果/);
+  assert.throws(() => parseInitBody(body("l_flag = lean_unbox(lean_io_result_get_value(res))")), /の結果/);
+});
+
 test("reach は入口から届く関数と定数だけを集め、足りないモジュールを読みに行き、届かないものは呼ばない", async () => {
   const loaded = [];
   const r = await reach({

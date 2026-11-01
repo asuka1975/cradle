@@ -91,7 +91,8 @@ export function parseInitBody(item) {
       if (lines[i] !== ERROR) throw new Error(`初期化子の形を読めない（${call[1]} のあと）: ${headLine}: ${lines[i]}`);
       body.push(lines[i++]);
       let v = null;
-      const get = lines[i]?.match(/^([A-Za-z_]\w*) = lean_io_result_get_value\(res\);$/);
+      // スカラーの定数は箱から出して受ける（Lean の Expr.unboxOpName の名前だけ）
+      const get = lines[i]?.match(/^([A-Za-z_]\w*) = (?:lean_io_result_get_value\(res\)|lean_unbox(?:_usize|_uint32|_uint64|_float32|_float)?\(lean_io_result_get_value\(res\)\));$/);
       if (get) {
         v = get[1]; body.push(lines[i++]);
         if (lines[i] === `lean_mark_persistent(${v});`) body.push(lines[i++]);
