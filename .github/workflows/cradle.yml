@@ -135,3 +135,4 @@ jobs:
           node .claude/skills/cradle/scripts/cradle.mjs mockup-build
           test -s lean/mockup/public/lean.js
           test -s lean/mockup/public/meta.js
+          node .claude/skills/cradle/scripts/cradle.mjs unslop --all   # 生成物が置かれた状態でも通る
