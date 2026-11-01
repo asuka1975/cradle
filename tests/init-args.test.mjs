@@ -42,6 +42,18 @@ test("init は値の無い --dir と --only を何も書かずに 1 で止め、
   assert.deepEqual(readdirSync(cwd), []);
 });
 
+test("init は骨格のどのファイルにも当たらない --only を成功と言わず、何も書かずに 1 で止める", (t) => {
+  const env = cleanEnv();
+  const root = tempDir(t, "cradle-init-nomatch-");
+  for (const extra of [[], ["--force"], ["--dry-run"]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/mockup/server.mjs", ...extra], { cwd: root, env });
+    assert.equal(r.status, 1, r.stdout);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /--only に一致する骨格のファイルがありません: lean\/mockup\/server\.mjs/);
+  }
+  assert.deepEqual(readdirSync(root), []);
+});
+
 test("init は値を付けた --force / --dry-run（--force=false など）と値の無い --backend を何も書かずに 1 で止め、手で書いた内容を上書きしない", (t) => {
   const env = cleanEnv();
   const root = tempDir(t, "cradle-init-flagval-");

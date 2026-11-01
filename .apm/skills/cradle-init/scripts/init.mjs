@@ -38,9 +38,11 @@ for (const k of ["force", "dry-run"]) if (typeof opts[k] === "string") { console
 const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
 
 const written = [], skipped = [], failed = [];
+let matched = false;
 // 書けない場所（Codex のサンドボックスでは .codex/ など）があっても止まらず、残りを敷いてから最後に報告する
 function put(rel, content, { exec = false } = {}) {
   if (only && !rel.startsWith(only)) return;
+  matched = true;
   const dest = join(target, rel);
   if (existsSync(dest) && !force) { skipped.push(rel); return; }
   if (dryRun) { written.push(rel); return; }
@@ -90,6 +92,8 @@ if (backendPkg) {
     put(join("backend", relPath), rename(readFileSync(f, "utf8")).replace(/__PACKAGE__/g, backendPkg));
   }
 }
+// 何も敷かずに成功と言わない（もう配らないファイルを指す古い手順や綴りの誤りを、敷いたつもりのまま進めない）
+if (only && !matched) { console.error(`--only に一致する骨格のファイルがありません: ${only}（パスの綴りと、もう配っていないファイルでないかを確かめる。backend は --backend が要る）`); process.exit(1); }
 console.log(`Cradle init — ${project} (${target})${dryRun ? " [dry-run]" : ""}`);
 for (const w of written) console.log(`  + ${w}`);
 for (const s of skipped) console.log(`  = ${s}（既存のため据え置き）`);
