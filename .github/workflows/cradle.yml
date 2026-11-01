@@ -116,3 +116,23 @@ jobs:
           node "$CRADLE/scripts/cradle.mjs" lean-check
           node "$CRADLE/scripts/cradle.mjs" golden-check
           node "$CRADLE/scripts/cradle.mjs" unslop --all
+      # モックアップの Lean をブラウザの wasm に束ねる。mockup-build は golden と全シナリオで CLI と 1 バイトずつ突き合わせ、違えば置かずに落ちる
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/emsdk
+            ~/.cache/cradle/lean-wasm
+          key: emsdk-6.0.13-${{ hashFiles('.apm/skills/cradle-init/assets/lean/lean-toolchain', '.apm/skills/cradle/assets/wasm/uv.h') }}
+      - name: install emsdk
+        run: |
+          [ -d ~/emsdk ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 6.0.13
+          ~/emsdk/emsdk activate 6.0.13
+      - name: mockup wasm
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          cd "$RUNNER_TEMP/smoke"
+          node .claude/skills/cradle/scripts/cradle.mjs mockup-build
+          test -s lean/mockup/public/lean.js
+          test -s lean/mockup/public/meta.js
+          node .claude/skills/cradle/scripts/cradle.mjs unslop --all   # 生成物が置かれた状態でも通る

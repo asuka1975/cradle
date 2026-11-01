@@ -4,7 +4,7 @@
 
 - 検証: `lake build` = 型検査・証明検査・`#guard` シナリオ表明の一括検査。`cradle lean-check` が層の壁を検査する
 - 問い合わせ: `cradle spec-query`（仕様に関する問いは推測せず、モデルを動かして答える）
-- モックアップ: `mockup/`（このモデルをそのまま実行エンジンにする仕様アニメーション）
+- モックアップ: `mockup/`（このモデルを wasm にしてブラウザで動かす仕様アニメーション。`cradle mockup-build` で作り、`mockup/public/index.html` を開く）
 - `golden/`: モデルから吐いた入出力例（CLI の応答そのもの）。バックエンドの契約テストの期待値。`cradle golden-check` が回帰を検査する
 
 ドメインの事実の出どころは `documents/ddd/`。決まっていないことはモデル化せず、問いは `documents/ddd/model-review.md` に預ける。
@@ -13,9 +13,9 @@
 
 ```
 lean/
-├── Main.lean                  JSON stdin/stdout CLI（init / step / views / flow / dump と external。骨格の持ち物 — 作り込まない。プロトコルエラーの形は #guard がビルドで検査）
+├── Main.lean                  JSON stdin/stdout CLI の入出力（中身は Runtime/Protocol.lean。骨格の持ち物 — 作り込まない）
 ├── golden/                    <name>-init.json / <name>-flow.json / <name>.request.json
-├── mockup/                    仕様アニメーション（無知なサーバー + 汎用の描画）
+├── mockup/                    仕様アニメーション（汎用の描画。Lean の wasm と meta は cradle mockup-build の生成物で、コミットしない）
 └── <Root>/
     ├── Prelude.lean           層に依存しない汎用補題
     ├── Domain/                ドメイン層 = ドメインモデルの家（Application も Runtime も import しない）
@@ -44,6 +44,7 @@ lean/
     │   ├── Reachable.lean     可到達性（applied / fault の結果が check を保つことの証明）と flow（連続する step の定義）
     │   ├── Views.lean         射影と画面の束（viewer と today を受け取る）
     │   ├── Json.lean          JSON の後付け（ワイヤ形式はここで固定）
+    │   ├── Protocol.lean      プロトコルの本体 handle（init / step / views / flow / dump と external。CLI と wasm が通る。骨格の持ち物 — 作り込まない。プロトコルエラーの形は #guard がビルドで検査）
     │   └── Scenarios.lean     名前付き初期状態 + #guard
     └── Laws/Properties.lean   保証の境界への転送（仮定は Reachable が放電）
 ```

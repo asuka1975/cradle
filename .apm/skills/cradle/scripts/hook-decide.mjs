@@ -94,7 +94,7 @@ export function decide(mode, payload, {
     if (isFrontendCheck && !failed && !/error|failed|✗/i.test(text)) {
       let touched = false;
       try { touched = gitStatus(cfg.frontend.dir).length > 0; } catch {}
-      if (touched) return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "frontend に未コミットの変更があります。画面・文言・操作を変えたなら frontend-ux-review スキルで、Lean CLI 相手の画面を実際に触って確かめること（相手を REST にしない）。" } };
+      if (touched) return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "frontend に未コミットの変更があります。画面・文言・操作を変えたなら frontend-ux-review スキルで、Lean 相手の画面を実際に触って確かめること（相手を REST にしない）。" } };
     }
     if (isRegen && !failed) {
       return { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "生成物が更新されました。`cradle regen-impact --report` で、変わった生成シンボルとそれを参照する手書き実装・契約テストの一覧（影響範囲）を確認してから実装に着手すること。" } };

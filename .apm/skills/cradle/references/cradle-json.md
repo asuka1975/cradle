@@ -33,7 +33,7 @@
   "e2e": { "dir": "e2e", "scenarios": "e2e/scenarios" },
   "api": { "outletsWithoutEndpoint": [] },
   "infra": { "dir": "infra", "up": "docker compose --project-directory infra/local up -d --build", "containers": ["myapp-local-backend", "myapp-local-frontend"] },
-  "ports": { "mockup": 8787, "frontend": 5173, "backend": 8080, "idp": 8090 },
+  "ports": { "frontend": 5173, "backend": 8080, "idp": 8090 },
   "protected": ["documents/developer/**"],
   "unslop": { "disable": [], "extraHedges": [], "ignorePaths": [], "skipFiles": [] }
 }

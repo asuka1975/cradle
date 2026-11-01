@@ -131,7 +131,9 @@ function wiring({ cfg, modelDir, mainFile, src, add }) {
   const hasEnv = existsSync(envFile);
   if (!hasEnv && ["Application", "Domain"].some(l => existsSync(join(modelDir, l, "Port")))) add("wiring", "error", envFile, 1, "Port の置き場（Application/Port か Domain/Port）があるのに Runtime/Environment.lean（外部能力の script と cursor）が無い");
   if (existsSync(mainFile)) {
-    const mainExternal = src(mainFile).code.includes('"external"');
+    // 骨格では cmd の振り分けは Runtime/Protocol.lean にある（Main.lean は入出力だけ）。移行前の Main.lean は自分で持つ
+    const protocolFile = join(modelDir, "Runtime", "Protocol.lean");
+    const mainExternal = [mainFile, protocolFile].some(f => existsSync(f) && src(f).code.includes('"external"'));
     if (hasEnv && !mainExternal) add("wiring", "error", mainFile, 1, "Runtime/Environment.lean があるのに Main.lean が cmd external を受けない — 移行が半分（骨格の Main.lean で敷き直す。cradle doctor が差を出す）");
     if (!hasEnv && mainExternal) add("wiring", "error", envFile, 1, "Main.lean が cmd external を受けるのに Runtime/Environment.lean が無い — 移行が半分");
   }
@@ -198,19 +200,20 @@ function scaffold({ cfg, add }) {
   if (sample.length && events) for (const f of sample) add("scaffold", "warn", f, 1, `骨格のサンプルドメイン（メモ）が残っている。documents/ddd に出来事 ${events} 件の事実があるので、lean-domain-model スキルで実ドメインに丸ごと置き換える`);
 }
 
-// orphan: ルートから import で辿れないモジュール
+// orphan: lake build の入口（ルートと CLI の Main.lean）のどちらからも import で辿れないモジュール
 function orphan({ cfg, root, modelDir, files, src, add }) {
   const rootFile = join(cfg.lean.rootDir, `${root}.lean`);
   if (!existsSync(rootFile)) return;
   const seen = new Set();
   const modOf = (f) => `${root}.${rel(modelDir, f).replace(/\.lean$/, "").split("/").join(".")}`;
   const fileOf = (mod) => join(cfg.lean.rootDir, ...mod.split(".")) + ".lean";
-  const stack = [rootFile];
+  // Runtime/Protocol.lean はルートを import するので Main.lean からしか辿れない
+  const stack = [rootFile, join(cfg.lean.rootDir, "Main.lean")];
   while (stack.length) {
     const f = stack.pop();
     if (!existsSync(f) || seen.has(f)) continue;
     seen.add(f);
     for (const m of src(f).code.matchAll(/^import\s+(\S+)/gm)) if (m[1].startsWith(root + ".")) stack.push(fileOf(m[1]));
   }
-  for (const f of files) if (!seen.has(f)) add("orphan", "warn", f, 1, `${modOf(f)} は ${root}.lean から辿れない（lake build が検査しない）`);
+  for (const f of files) if (!seen.has(f)) add("orphan", "warn", f, 1, `${modOf(f)} は ${root}.lean からも Main.lean からも辿れない（lake build が検査しない）`);
 }

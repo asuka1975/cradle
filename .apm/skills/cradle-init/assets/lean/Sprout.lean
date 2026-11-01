@@ -1,4 +1,5 @@
 -- ライブラリルート。モジュールを追加したらここに import を足す。
+-- Runtime/Protocol.lean だけは足さない: CLI と wasm の入口で、モデルが知らなくてよい（import すると循環する）。
 -- 層の壁（cradle lean-check が検査する）:
 --   Domain      ← 何も import しない（Prelude のみ）
 --   Application ← Domain だけ（Runtime を知らない）。Composition は UseCase を数珠つなぎにした保証の定理だけ

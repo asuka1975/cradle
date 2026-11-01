@@ -16,7 +16,7 @@
 選択肢ごとに「選ぶとどうなるか」をモデルで動かせます。
 
 ```bash
-cd lean && lake build && node mockup/server.mjs   # → http://localhost:8787
+node <skills>/cradle/scripts/cradle.mjs mockup-build   # → lean/mockup/public/index.html をブラウザで開く
 ```
 
 画面の「シナリオ」から、下の表の「モックアップ」欄の名前を選んでください。表示されるのはモデルを実際に動かした結果です。

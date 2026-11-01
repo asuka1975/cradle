@@ -81,6 +81,26 @@ test("start の後の変更・追加・削除は end で出て、手で戻すま
   assert.equal(existsSync(marker), false);
 });
 
+test("start の後に mockup-build が lean.js と meta.js を作っても end は通り、モックアップの画面の変更は出る", (t) => {
+  const { run, lean, marker } = fixture(t);
+  mkdirSync(lean("mockup/public"), { recursive: true });
+  writeFileSync(lean("mockup/public/index.html"), "<!doctype html>\n");
+  assert.equal(run(ddd, "start").status, 0);
+  writeFileSync(lean("mockup/public/lean.js"), "wasm\n");
+  writeFileSync(lean("mockup/public/meta.js"), "meta\n");
+  writeFileSync(lean("mockup/public/index.html"), "<!doctype html><p>edited\n");
+  const ng = run(ddd, "end", "--no-build");
+  assert.equal(ng.status, 1);
+  assert.match(ng.stdout, /^ M lean\/mockup\/public\/index\.html$/m);
+  assert.doesNotMatch(ng.stdout, /lean\.js|meta\.js/);
+  assert.equal(existsSync(marker), true);
+  writeFileSync(lean("mockup/public/index.html"), "<!doctype html>\n");
+  writeFileSync(lean("mockup/public/lean.js"), "rebuilt\n");
+  const ok = run(ddd, "end", "--no-build");
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.equal(existsSync(marker), false);
+});
+
 test("ベースライン無しの ddd-clean-check は HEAD と比べていると言う", (t) => {
   const { run, lean } = fixture(t);
   writeFileSync(lean("Example/Runtime/Command.lean"), COMMAND + "  | bar\n");

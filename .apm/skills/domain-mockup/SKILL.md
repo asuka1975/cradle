@@ -1,11 +1,11 @@
 ---
 name: domain-mockup
-description: Use to create, update or run the spec-animation mockup under lean/mockup — "run the mockup", "show the model on a screen", "try this scenario", "demo for the expert", "save a golden" — and to build the domain-language screens that let the expert review the model without reading JSON. The mockup executes the Lean model as-is; no logic in JS.
+description: Use to create, update or run the spec-animation mockup under lean/mockup — "run the mockup", "show the model on a screen", "try this scenario", "demo for the expert", "save a golden" — and to build the domain-language screens that let the expert review the model without reading JSON. The mockup executes the Lean model as-is, compiled to wasm in the browser; no server and no logic in JS.
 ---
 
 # 仕様アニメーション（モックアップ）
 
-`lean/mockup/` は Lean モデルをそのまま実行エンジンにする使い捨ての検証 UI。本番 frontend ではない。
+`lean/mockup/` は Lean モデルをそのまま実行エンジンにする使い捨ての検証 UI。本番 frontend ではない。Lean は wasm になってブラウザの中で動き、サーバーは無い。
 狙いは 2 つ: 開発前にモデルの帰結をエキスパートが画面で確かめる（Lean が読めない人への読める化）と、golden の採取。
 このフェーズの成果物は **エキスパートが JSON を読まずに主要な流れを一巡できる画面**。骨格の汎用 UI で終わらせない。
 
@@ -14,15 +14,15 @@ description: Use to create, update or run the spec-animation mockup under lean/m
 - 合計・並び替え・フィルタ・可否判定を JS で書かない。表示に必要な加工は Lean の `Runtime/Views.lean` に足す。
 - state は Lean が返した JSON をそのまま持ち、そのまま送り返す。UI で変形しない。
 - シナリオはベタ書きせず `{"cmd":"init"}` で取る。増やすなら `Runtime/Scenarios.lean`。
-- サーバー（`server.mjs`）の役割は 4 つだけ: 静的配信・`/api/lean` の素通し・`/api/golden`（init と flow を Lean に流し、応答をそのまま保存。脇書きは version 1。トップに `ok` の無い応答は保存しない）・`/api/meta`（spec-query の結果と用語集）。判断を書かない。
+- 画面の相手は `public/lean.js`（Lean の wasm。リクエストの文字列を受けて応答の文字列を返す `createCradleLean()`）と `public/meta.js`（spec-query の結果と用語集）の 2 本だけ。どちらも `cradle mockup-build` の生成物で、手で直さない。判断を書かない。
 - ボタンを段階で隠さない。可否は validate が決め、拒否は domainError としてその場に出す。
 - 「誰として」の切り替えはセッションの切り替え。viewer と actor は必ず同時に動く。
 
 ## 土台（骨格の汎用 UI）
 
-cradle-init スキルが敷く `public/index.html` は、views の口ごとの表、`/api/meta` の schemas（Lean の Command 構造体の型）から生成した入力欄、用語集（`ubiquitous-language.md` の英語候補 → 用語）による表示名を持つ。判断は持たない。
+cradle-init スキルが敷く `public/index.html` は、views の口ごとの表、`meta.js` の schemas（Lean の Command 構造体の型）から生成した入力欄、用語集（`ubiquitous-language.md` の英語候補 → 用語）による表示名を持つ。判断は持たない。
 人が打つ表記が内部表現と違う値オブジェクトは、`Runtime/Json.lean` の手書き `FromJson`（文字列 1 本を受ける）と docstring の注記で欄になる（schemas の `hint`）。型名の特別扱いを index.html に書かない。
-外部能力を持つモデル（`/api/meta` の `external`）では、環境（`environments` の名前か script そのもの）の選択、`external` の init / step、コマンドと内部入力（`observationSchemas`）のフォーム、障害契約の指名（def 名）、applied / refused / fault / `harnessError` の描き分け、手ごとの外部能力の往復（interactions）と環境の cursor の記録も骨格が持つ。`harnessError` は環境と入力列の不一致で、拒否（domainError）ともプロトコルエラーとも別の見た目。
+外部能力を持つモデル（`meta.js` の `external`）では、環境（`environments` の名前か script そのもの）の選択、`external` の init / step、コマンドと内部入力（`observationSchemas`）のフォーム、障害契約の指名（def 名）、applied / refused / fault / `harnessError` の描き分け、手ごとの外部能力の往復（interactions）と環境の cursor の記録も骨格が持つ。`harnessError` は環境と入力列の不一致で、拒否（domainError）ともプロトコルエラーとも別の見た目。
 これは「動く」が「読める」ではない。集約と操作の関係、誰が何をできるかは、ドメインの語彙で並べて初めて見える。
 
 ## 作り込み（必須）
@@ -37,20 +37,23 @@ cradle-init スキルが敷く `public/index.html` は、views の口ごとの�
 
 作り込みは `index.html` の描画を口ごと・コマンドごとに足す形で行う（骨格の `lean()`・`send()`・`renderAll()` の骨は残す）。JS でこしらえるのは描画と入力欄だけ。
 作り込んだら冒頭の注記「Cradle 標準の汎用モックアップ」を、この画面が何を映すかの一文に置き換える（`cradle status` はその注記で「汎用 UI のまま」かを見る）。
-Cradle を更新したあと骨格を敷き直すのは `server.mjs`（`cradle-init` の `--only lean/mockup/server.mjs --force`）と CLI の `Main.lean`（`--only lean/Main.lean --force`）。`index.html` は作り込み後のものが正本。
+Cradle を更新したあと骨格を敷き直すのは CLI の `Main.lean`（`cradle-init` の `--only lean/Main.lean --force`）とプロトコルの `Runtime/Protocol.lean`（`--only lean/<Root>/Runtime/Protocol.lean --force`）。`index.html` は作り込み後のものが正本。
 
 ## 起動
 
 ```bash
-cd lean && lake build && node mockup/server.mjs   # → http://localhost:8787（cradle.json の ports.mockup）
+node <skills>/cradle/scripts/cradle.mjs mockup-build   # lake build → lean/mockup/public/lean.js と meta.js を作る
 ```
 
-すでに動いているポートを使い回す前に、それがこのプロジェクトのものか確かめる（`curl -s http://localhost:8787/api/meta`）。
+`lean/mockup/public/index.html` をブラウザで開く。サーバーは要らない（`file://` のままでよい）。エキスパートに渡すなら `public/` を静的ホストに置くか、丸ごと渡す。
+モデルを変えたら作り直す（`cradle doctor` がモデルより古い `lean.js` を STALE と言う）。用語集だけ直したなら `mockup-build --meta-only`。
+要るのは Emscripten（emsdk）と、初回に Lean のランタイムのソースを GitHub から取るネットワークと `tar`。ランタイムと標準ライブラリの wasm は初回に作って `~/.cache/cradle/lean-wasm` に残す。`mockup-build` は golden のリクエストと全シナリオをネイティブの CLI にも流し、応答が 1 バイトでも違えば `lean.js` を置かずに止まる。
+CLI と同じ応答を返すのはブラウザの限界の内側だけ。JSON のネストが深すぎる入力（5000 段は一致、2 万段で JS のスタックが尽きる）と、応答が巨大になる長い flow（1000 手は一致、3000 手でメモリが尽きる）では wasm が止まり、プロトコルエラーの形（`{"error":…}`）で返って、次の呼び出しで作り直す。golden はこの範囲の流れで採る。
 
 ## golden の採取
 
-操作ログを「golden として保存」→ `golden/<name>-init.json` / `<name>-flow.json` / `<name>.request.json`（脇書き `{"version":1,"init","flow"}`）。中身を作るのは Lean。
-外部能力を使う流れは環境を選んで `external` で採る。環境を尽くさなくてよい — 途中で止めた流れは最後の cursor が `stopAt` として脇書きに自動で入る（Cradle の回帰素材では `payment-partial` がその例）。直前の応答が `ok` でなければ保存できない。
+操作ログを「golden として保存」→ `<name>-init.json` / `<name>-flow.json` / `<name>.request.json`（脇書き `{"version":1,"init","flow"}`）の 3 ファイルがダウンロードされる（ブラウザからプロジェクトのフォルダには書けない）。`lean/golden/` に置く。中身を作るのは Lean。
+外部能力を使う流れは環境を選んで `external` で採る。環境を尽くさなくてよい — 途中で止めた流れは最後の cursor が `stopAt` として脇書きに自動で入る（Cradle の回帰素材では `payment-partial` がその例）。直前の応答が `ok` でなければ保存できない。トップに `ok` の無い応答はダウンロードしない。
 採ったら `cradle golden-check` が通ることを確かめ、名前と流れの一言を PR / コミットに書く（README に表を手で保つのではなく、`<name>.request.json` が正）。
 
 ## 動作確認

@@ -82,9 +82,10 @@ function leanModel({ cfg, R, ddd: { events } }) {
   const goldenDir = goldenDirOf(cfg);
   const goldens = existsSync(goldenDir) ? goldenFlowFiles(goldenDir).length : 0;
   const bin = existsSync(cfg.lean.bin);
-  const mockup = existsSync(R(`${cfg.lean.mockup}/server.mjs`));
-  const outlets = viewOutlets(cfg);
   const uiFile = R(`${cfg.lean.mockup}/public/index.html`);
+  const mockup = existsSync(uiFile);
+  const wasm = existsSync(R(`${cfg.lean.mockup}/public/lean.js`));
+  const outlets = viewOutlets(cfg);
   // 骨格の注記が残っていれば汎用のまま（作り込みは注記をこの画面の一文に置き換える — domain-mockup スキル）
   const genericUi = existsSync(uiFile) && readFileSync(uiFile, "utf8").includes("Cradle 標準の汎用モックアップ");
   const sample = scaffoldSampleFiles(cfg);
@@ -94,6 +95,7 @@ function leanModel({ cfg, R, ddd: { events } }) {
     !bin ? "cd lean && lake build"
       : outlets === 0 ? "lean-domain-model スキルで集約ごとの一覧の口を Views に足す（口が無いと画面でも golden でも観測できない）"
       : !mockup ? "domain-mockup スキルで仕様アニメーションを作る"
+      : !wasm ? "cradle mockup-build でモデルをブラウザの wasm にする（Emscripten が要る）"
       : genericUi ? "domain-mockup スキルでドメインの語彙の画面に作り込む（口ごとの画面・対象の横のフォーム・登場人物の切り替え）"
       : goldens === 0 ? "モックアップで流れを確かめ golden を採る" : "cradle golden-check で回帰を確かめ、次フェーズへ");
 }
@@ -114,7 +116,7 @@ function apiContract({ cfg, R, read }) {
 // 5. フロントエンド（材料: 業務の流れを止めている問いが無いこと）
 function frontend({ cfg, R, ddd: { hsOpen, mqOpen } }) {
   const flowFact = hsOpen || mqOpen ? `open の HS ${hsOpen} / MQ ${mqOpen}（業務の流れを止めている問いがあれば先に閉じる）` : "open の HS / MQ なし";
-  if (!existsSync(R(cfg.frontend.dir))) return phase("フロントエンド", "未着手", [flowFact], "frontend スキルで画面を業務のまとまりごとに作る（相手は Lean CLI）");
+  if (!existsSync(R(cfg.frontend.dir))) return phase("フロントエンド", "未着手", [flowFact], "frontend スキルで画面を業務のまとまりごとに作る（相手はブラウザの中の Lean）");
   const src = walk(R(`${cfg.frontend.dir}/src`), { ext: [".ts", ".tsx"] });
   const tests = src.filter(f => /\.test\.tsx?$/.test(f)).length;
   return phase("フロントエンド", "着手済", [`src ${src.length} ファイル（テスト ${tests}）`, flowFact], "/frontend-ux-review で体験を確かめる");

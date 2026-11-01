@@ -1,6 +1,6 @@
 // Cradle 共通ライブラリ — 設定の読み込み・Lean CLI 呼び出し・小道具。
 // 依存は Node 標準ライブラリだけ（配布先に何も入れさせない）。
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join, resolve, relative, sep } from "node:path";
@@ -71,7 +71,7 @@ export function loadConfig(root = findProjectRoot(), env = process.env) {
     e2e: { dir: raw.e2e?.dir ?? "e2e", scenarios: `${raw.e2e?.dir ?? "e2e"}/scenarios`, ...(raw.e2e ?? {}) },
     api: { outletsWithoutEndpoint: [], ...(raw.api ?? {}) },
     infra: { dir: "infra", ...(raw.infra ?? {}) },
-    ports: { mockup: 8787, frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
+    ports: { frontend: 5173, backend: 8080, idp: 8090, ...(raw.ports ?? {}) },
     protected: raw.protected ?? ["documents/developer/**"],
     unslop: { ...(raw.unslop ?? {}) },
     raw,
@@ -113,9 +113,15 @@ function guessProject(root) {
 }
 
 /** Lean CLI を 1 リクエスト 1 プロセスで呼ぶ（Promise）。stdin に JSON、stdout に JSON。stdin は非同期に流す — Codex のサンドボックスでは spawnSync に input を渡すと EOF が届かず固まる。 */
-export function callLean(cfg, request, { build = "auto" } = {}) {
+export async function callLean(cfg, request, { build = "auto" } = {}) {
   ensureLeanBinary(cfg, build);
-  const input = typeof request === "string" ? request : JSON.stringify(request);
+  const text = await callLeanText(cfg, typeof request === "string" ? request : JSON.stringify(request));
+  try { return JSON.parse(text); }
+  catch { throw new Error(`Lean CLI の応答が JSON ではありません: ${text.slice(0, 400)}`); }
+}
+
+/** Lean CLI の応答の文字列（前後の空白を除いたもの）。読み手のあるバイト列の比較に使う — mockup-build は wasm の応答と 1 バイトずつ突き合わせる。 */
+export function callLeanText(cfg, input) {
   return new Promise((resolve, reject) => {
     const p = spawn(cfg.lean.bin, [], { stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
@@ -125,8 +131,7 @@ export function callLean(cfg, request, { build = "auto" } = {}) {
     p.on("close", (status) => {
       const text = out.trim();
       if (!text) return reject(new Error(`Lean CLI が何も返しませんでした (exit ${status}): ${err}`));
-      try { resolve(JSON.parse(text)); }
-      catch { reject(new Error(`Lean CLI の応答が JSON ではありません: ${text.slice(0, 400)}`)); }
+      resolve(text);
     });
     p.stdin.on("error", () => {});
     p.stdin.end(input);
@@ -215,7 +220,10 @@ export function rel(root, p) { return relative(root, p).split(sep).join("/"); }
 /** lean/ の全ファイルの sha256（lean/ からの相対パス → ハッシュ）。lake-manifest.json は lake build が書く（初回のビルドで現れる）ので数えない。 */
 export function leanSnapshot(cfg) {
   const out = {};
+  // mockup-build の生成物はモデルの編集ではない（探索の途中で作り直してよい）。置き場で決め打ちする — 同じ名前の手書きのファイルは比べる
+  const generated = cfg.lean.mockup ? ["lean.js", "meta.js"].map(f => join(cfg.root, cfg.lean.mockup, "public", f)) : [];
   for (const f of walk(cfg.lean.rootDir, { skip: [...DEFAULT_WALK_SKIP, "lake-manifest.json"] })) {
+    if (generated.includes(f)) continue;
     out[rel(cfg.lean.rootDir, f)] = sha256(readFileSync(f));
   }
   return out;
@@ -686,6 +694,18 @@ export function glossaryEnglish(cfg) {
 
 /** 中身（文字列か Buffer）の sha256 の 16 進。 */
 export function sha256(data) { return createHash("sha256").update(data).digest("hex"); }
+
+/**
+ * 作り終えたディレクトリ part を dir として一度で公開する。別の処理が先に置いていればそちらを使い、part を捨てる。
+ * dir を消してから置き直さない — 同じキャッシュを使う別のビルドが読んでいる最中かもしれない。
+ */
+export function publishDir(part, dir) {
+  try { renameSync(part, dir); }
+  catch (e) {
+    if (e.code !== "ENOTEMPTY" && e.code !== "EEXIST") throw e;
+    rmSync(part, { recursive: true, force: true });
+  }
+}
 
 /** テキストファイルを読む。無ければ fallback。ディレクトリや読めないファイルは投げる（無いのとは別の事故）。 */
 export function readText(path, fallback = "") { return existsSync(path) ? readFileSync(path, "utf8") : fallback; }

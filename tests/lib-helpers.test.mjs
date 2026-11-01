@@ -2,11 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, chmodSync, symlinkSync } from "node:fs";
+import { existsSync, chmodSync, readFileSync, symlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { tempDir, writeTree } from "./helpers.mjs";
-import { sha256, walk, leanSnapshot, readableEntries, ports, readText, DDD_FILES, countEvents, countStatusRows,
+import { sha256, walk, leanSnapshot, publishDir, readableEntries, ports, readText, DDD_FILES, countEvents, countStatusRows,
   goldenDirOf, goldenFlowFiles, stepOutcome, nominatedFault, cradleScript, renameScaffold, PRODUCT_PLACEHOLDER, findProjectRoot, loadConfig, aiNoteProblems, headerUsage, leanEval, contractTestWiring, goldenRowLines } from "../.apm/skills/cradle/scripts/lib.mjs";
 
 test("sha256 は文字列と同じ中身の Buffer に同じ 16 進を返す", () => {
@@ -81,6 +81,29 @@ test("walk の既定はビルド成果物と VCS の置き場を見ない。lean
   });
   assert.deepEqual(walk(join(root, "lean")), [join(root, "lean", "A.lean"), join(root, "lean", "lake-manifest.json")]);
   assert.deepEqual(leanSnapshot({ lean: { rootDir: join(root, "lean") } }), { "A.lean": sha256("a") });
+});
+
+test("publishDir は置き場が無ければ移し、先に置かれていれば既存を残して自分の分を捨てる", (t) => {
+  const root = tempDir(t, "cradle-publish-");
+  writeTree(root, { "a.1/x": "first", "a.2/x": "second" });
+  const dir = join(root, "a");
+  publishDir(join(root, "a.1"), dir);
+  assert.equal(readFileSync(join(dir, "x"), "utf8"), "first");
+  assert.equal(existsSync(join(root, "a.1")), false);
+  publishDir(join(root, "a.2"), dir);
+  assert.equal(readFileSync(join(dir, "x"), "utf8"), "first");     // 使用中かもしれないものを置き換えない
+  assert.equal(existsSync(join(root, "a.2")), false);
+  assert.throws(() => publishDir(join(root, "missing"), join(root, "b")), { code: "ENOENT" });
+});
+
+test("leanSnapshot は mockup-build の生成物だけを外し、同じ名前の手書きのファイルと画面は比べる", (t) => {
+  const root = tempDir(t, "cradle-snapshot-");
+  writeTree(root, {
+    "lean/A.lean": "a", "lean/mockup/public/lean.js": "wasm", "lean/mockup/public/meta.js": "meta", "lean/mockup/public/index.html": "html",
+    "lean/tools/meta.js": "hand", "lean/lean.js": "hand",
+  });
+  const cfg = { root, lean: { rootDir: join(root, "lean"), mockup: "lean/mockup" } };
+  assert.deepEqual(Object.keys(leanSnapshot(cfg)).sort(), ["A.lean", "lean.js", "mockup/public/index.html", "tools/meta.js"]);
 });
 
 test("readText は無いファイルで fallback（既定は空文字）を返し、ディレクトリは無いものとして扱わず投げる", (t) => {

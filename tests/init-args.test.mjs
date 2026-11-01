@@ -7,7 +7,7 @@ import { tempDir, cleanEnv, runNode } from "./helpers.mjs";
 
 const init = fileURLToPath(new URL("../.apm/skills/cradle-init/scripts/init.mjs", import.meta.url));
 const next = "\n次: apm install（固有の事実を rules に写す。Codex は apm compile --single-agents）  →  cd lean && lake build  →  cradle status  →  ddd スキルで探索を始める\n";
-const mockupLines = "  + lean/mockup/public/index.html\n  + lean/mockup/server.mjs\n";
+const mockupLines = "  + lean/mockup/public/index.html\n";
 
 test("init は --k=v も --k v と同じに読み、--only=lean/mockup --force はモックアップだけを敷き直して残りを据え置く", (t) => {
   const root = tempDir(t, "cradle-init-eq-");
@@ -40,6 +40,18 @@ test("init は値の無い --dir と --only を何も書かずに 1 で止め、
   const only = runNode(init, ["--project", "Demo", "--dir", cwd, "--only", "--force"], { cwd, env });
   assert.deepEqual([only.status, only.stdout, only.stderr], [1, "", "--only <prefix> が要ります（例: lean/mockup）\n"]);
   assert.deepEqual(readdirSync(cwd), []);
+});
+
+test("init は骨格のどのファイルにも当たらない --only を成功と言わず、何も書かずに 1 で止める", (t) => {
+  const env = cleanEnv();
+  const root = tempDir(t, "cradle-init-nomatch-");
+  for (const extra of [[], ["--force"], ["--dry-run"]]) {
+    const r = runNode(init, ["--project", "Demo", "--dir", root, "--only", "lean/mockup/server.mjs", ...extra], { cwd: root, env });
+    assert.equal(r.status, 1, r.stdout);
+    assert.equal(r.stdout, "");
+    assert.match(r.stderr, /--only に一致する骨格のファイルがありません: lean\/mockup\/server\.mjs/);
+  }
+  assert.deepEqual(readdirSync(root), []);
 });
 
 test("init は値を付けた --force / --dry-run（--force=false など）と値の無い --backend を何も書かずに 1 で止め、手で書いた内容を上書きしない", (t) => {

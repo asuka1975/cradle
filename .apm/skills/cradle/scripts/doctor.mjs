@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, loadConfigOrFail, findProjectRoot, readText, renameScaffold } from "./lib.mjs";
+import { loadConfig, loadConfigOrFail, findProjectRoot, readText, renameScaffold, walk } from "./lib.mjs";
 const args = process.argv.slice(2);
 if (args.includes("--local")) {
   // local env の鮮度: cradle.json の infra.containers（コンテナ名の配列）の Created と HEAD のコミット時刻を比べる
@@ -49,16 +49,29 @@ if (existsSync(join(root, ".codex/hooks.json"))) {
   console.log(`${trusted ? "ok     " : "STALE  "} hooks-trust codex: ${trusted}/${expected} 件を信頼済み${trusted ? "" : "（Codex の起動時レビューで信頼するまで hook は動かない。codex exec なら --dangerously-bypass-hook-trust）"}`);
 }
 {
-  // モックアップのサーバーと CLI（Main.lean）は骨格の持ち物。Cradle を更新したら --only <path> --force で敷き直す（index.html は作り込みの正本なので触らない）
+  // CLI（Main.lean）とプロトコル（Runtime/Protocol.lean）は骨格の持ち物。Cradle を更新したら --only <path> --force で敷き直す（index.html は作り込みの正本なので触らない）
   let cfg = null; try { cfg = loadConfig(root); } catch {}
   // import.meta の dirname は Node 20.11 から（init.mjs と同じく URL から引く）
   const assets = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "cradle-init", "assets", "lean");
-  const owned = cfg ? [["mockup", `${cfg.lean.mockup}/server.mjs`, join(assets, "mockup", "server.mjs")], ["lean-main", `${cfg.lean.dir}/Main.lean`, join(assets, "Main.lean")]] : [];
+  const hasCli = cfg && existsSync(join(root, cfg.lean.dir, "Main.lean"));
+  const owned = hasCli ? [["lean-main", `${cfg.lean.dir}/Main.lean`, join(assets, "Main.lean")], ["protocol", `${cfg.lean.dir}/${cfg.lean.root}/Runtime/Protocol.lean`, join(assets, "Sprout", "Runtime", "Protocol.lean")]] : [];
   for (const [label, relPath, shipped] of owned) {
     const cur = join(root, relPath);
-    if (!existsSync(cur) || !existsSync(shipped)) continue;
-    const same = readFileSync(cur, "utf8") === renameScaffold(readFileSync(shipped, "utf8"), { project: cfg.project });
+    if (!existsSync(shipped)) continue;
+    const same = existsSync(cur) && readFileSync(cur, "utf8") === renameScaffold(readFileSync(shipped, "utf8"), { project: cfg.project });
     console.log(`${same ? "ok     " : "STALE  "} ${label.padEnd(10)} ${relPath}${same ? "" : ` が骨格の最新版と違う（node <skills>/cradle-init/scripts/init.mjs --project ${cfg.project} --only ${relPath} --force）`}`);
+  }
+  // モックアップは Lean をブラウザの wasm で動かす。server.mjs の時代の置き土産と、モデルより古い lean.js を知らせる
+  if (cfg && existsSync(join(root, cfg.lean.mockup, "server.mjs"))) console.log(`STALE   mockup     ${cfg.lean.mockup}/server.mjs はもう使わない（Lean はブラウザの wasm で動く。docs/adopting.md の手順で移す）`);
+  if (cfg && existsSync(join(root, cfg.lean.mockup, "public", "index.html"))) {
+    const leanJs = join(root, cfg.lean.mockup, "public", "lean.js");
+    const shown = `${cfg.lean.mockup}/public/lean.js`;
+    if (!existsSync(leanJs)) console.log(`missing wasm       ${shown}（cradle mockup-build で作る。Emscripten が要る）`);
+    else {
+      const built = statSync(leanJs).mtimeMs;
+      const newer = walk(join(root, cfg.lean.dir), { ext: [".lean"] }).filter(f => statSync(f).mtimeMs > built).length;
+      console.log(`${newer ? "STALE  " : "ok     "} wasm       ${shown}${newer ? ` がモデルより古い（.lean ${newer} 本。cradle mockup-build で作り直す）` : ""}`);
+    }
   }
 }
 if (existsSync(join(root, "AGENTS.md"))) {
@@ -74,7 +87,7 @@ if (existsSync(join(root, "AGENTS.md"))) {
   const l2k = [process.env.LEAN2KOTLIN_HOME, ...shipped].filter(Boolean).find(d => existsSync(join(d, "generator")) && existsSync(join(d, "lean")));
   console.log(`${l2k ? "ok     " : "missing"} lean2kotlin ${l2k ?? "（backend フェーズで要る。apm install で apm_modules に配られる。別のチェックアウトを使うなら LEAN2KOTLIN_HOME）"}`);
 }
-const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["apm", ["--version"]], ["claude", ["--version"]], ["codex", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
+const tools = [["node", ["--version"]], ["lake", ["--version"]], ["elan", ["--version"]], ["java", ["-version"]], ["pnpm", ["--version"]], ["emcc", ["--version"]], ["apm", ["--version"]], ["claude", ["--version"]], ["codex", ["--version"]], ["git", ["--version"]], ["docker", ["--version"]], ["terraform", ["--version"]]];
 for (const [bin, args] of tools) {
   const r = spawnSync(bin, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
   const v = ((r.stdout || "") + (r.stderr || "")).split("\n")[0].trim();

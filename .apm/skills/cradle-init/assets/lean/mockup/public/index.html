@@ -10,20 +10,25 @@
     - 環境（外部能力の台本 script と cursor）も Lean の返答そのもの。台本との不一致（harnessError）は業務の拒否と別の見た目で出す。
 
   この画面が自分で持つのは表示の都合だけ:
-    - views の口ごとの表。列名は /api/meta の glossary（ユビキタス言語の英語候補 → 用語）で引く。
-    - 入力欄。/api/meta の schemas（Command 構造体）と observationSchemas（内部入力の構造体）から生成する。
+    - views の口ごとの表。列名は meta.js の glossary（ユビキタス言語の英語候補 → 用語）で引く。
+    - 入力欄。meta.js の schemas（Command 構造体）と observationSchemas（内部入力の構造体）から生成する。
       wire の規約: id は {"id": n}、列挙は構成子名、値オブジェクトはフィールド名のオブジェクト、Option の未指定は null。
       手書きの FromJson を持つ値オブジェクトは文字列 1 本（schemas の hint に人が打つ表記。出どころは Runtime/Json.lean）。
       生成した JSON は下の欄に見え、手で直せる（型から決められない形はそこで直す）。
-    - 外部能力の経路（/api/meta の external）では、環境の選択（名前か script そのもの）・内部入力の手・障害契約の指名・
+    - 外部能力の経路（meta.js の external）では、環境の選択（名前か script そのもの）・内部入力の手・障害契約の指名・
       手ごとの外部とのやり取り（interactions）の表示。golden は送った入力の列をそのまま flow に組んで保存する。
   domain-mockup スキルはこれを土台に、ドメインの語彙の画面（口ごとの画面・対象の横のフォーム・登場人物の切り替え）を作り込む。
   「誰として」の切り替えはセッションの切り替えであって名義の選択ではない — viewer と actor は必ず同時に動く。
+
+  Lean はサーバーではなくブラウザの中で動く: lean.js は Lean のモデルを wasm にしたもの、meta.js は spec-query meta の結果。
+  どちらも cradle mockup-build が作る（モデルを変えたら作り直す）。サーバーは要らず、このファイルを直接開いてもよい。
 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <title>仕様アニメーション</title>
+<script src="lean.js"></script>
+<script src="meta.js"></script>
 <style>
   :root { color-scheme: light; }
   body { font-family: system-ui, sans-serif; margin: 0; font-size: 14px; color: #222; background: #fbfaf7; }
@@ -110,9 +115,10 @@ let meta = { scenarios: [], environments: [], external: null, commands: [], obse
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, props); e.append(...kids); return e; };
 const external = () => !!meta.external;   // 外部能力の経路（cmd external）を CLI が持つか
+let engine = null;     // Lean の wasm（lean.js の createCradleLean）。リクエストの文字列を受けて応答の文字列を返す
 async function lean(req) {
-  const res = await fetch("/api/lean", { method: "POST", body: JSON.stringify(req) });
-  return res.json();
+  engine ??= await createCradleLean();
+  return JSON.parse(await engine(JSON.stringify(req)));
 }
 function actorOf() {
   const t = $("who").value.trim();
@@ -348,8 +354,9 @@ function buildForm() {
 }
 
 // ---- 配線 ----
-async function loadMeta() {
-  try { meta = await (await fetch("/api/meta")).json(); } catch { meta = { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {} }; }
+function loadMeta() {
+  const built = typeof createCradleLean === "function" && globalThis.CRADLE_META;
+  meta = built ? globalThis.CRADLE_META : { scenarios: [], commands: [], errors: [], schemas: {}, glossary: {}, error: "lean.js か meta.js がありません。cradle mockup-build を走らせてから開き直してください" };
   const sel = $("scenario"); sel.replaceChildren(...(meta.scenarios ?? []).map(s => el("option", { value: s, textContent: s })));
   if (!sel.options.length) sel.append(el("option", { value: "basic", textContent: "basic" }));
   // 環境の選択は外部能力の経路を持つ CLI だけ。名前があれば最初の名前を既定にする（無ければ空の環境）
@@ -366,8 +373,9 @@ async function loadMeta() {
   } else cmd.append(...opts("command", meta.commands ?? []));
   $("faultLabel").hidden = !external();
   if (cmd.options.length) buildForm();
-  $("binfo").textContent = (meta.lean?.exe ? `CLI: ${meta.lean.exe}` : (meta.error ?? "")) + (external() ? `　external v${meta.external.version}` : "");
+  $("binfo").textContent = (meta.lean?.exe ? `wasm: ${meta.lean.exe}` : (meta.error ?? "")) + (external() ? `　external v${meta.external.version}` : "");
   if (meta.error) notice("error", meta.error);
+  return !meta.error;
 }
 $("reload").onclick = () => reproject();
 $("scenario").onchange = () => init();
@@ -378,7 +386,7 @@ $("clearlog").onclick = () => { inputLog.length = 0; $("log").textContent = ""; 
 $("savegolden").onclick = async () => {
   const name = $("goldenname").value.trim() || "session";
   if (!lastOk) { notice("error", "直前の応答が ok ではないので golden は組めない（開き直すか、通る手を送る）"); return; }
-  let body;
+  let requests;
   if (external()) {
     const actor = actorOf();
     const same = (a) => JSON.stringify(a) === JSON.stringify(actor);
@@ -391,17 +399,34 @@ $("savegolden").onclick = async () => {
     });
     // 環境を使い切っていなければ止めた cursor を stopAt に（使い切っていれば省く = 全消費の検査）
     const partial = env && env.cursor < (env.script ?? []).length ? { stopAt: env.cursor } : {};
-    body = { name, init: extReq("init", actor !== undefined ? { actor } : {}), flow: extReq("flow", { ...(actor !== undefined ? { actor } : {}), inputs, ...partial }) };
+    requests = { init: extReq("init", actor !== undefined ? { actor } : {}), flow: extReq("flow", { ...(actor !== undefined ? { actor } : {}), inputs, ...partial }) };
   } else {
     const base = { scenario: $("scenario").value, ...common() };
-    body = { name, init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands: inputLog } };
+    requests = { init: { cmd: "init", ...base }, flow: { cmd: "flow", ...base, commands: inputLog } };
   }
-  const res = await fetch("/api/golden", { method: "POST", body: JSON.stringify(body) });
-  const j = await res.json();
-  if (res.ok) notice("ok", "保存: " + JSON.stringify(j));
-  else notice("error", "保存しませんでした: " + JSON.stringify(j));
+  // 2 本とも Lean に流し、どちらかのトップが ok でなければ何も落とさない（golden は ok の応答そのもの）
+  const responses = {};
+  for (const kind of ["init", "flow"]) {
+    const r = await lean(requests[kind]);
+    if (!r || typeof r !== "object" || !("ok" in r)) { notice("error", `保存しませんでした: ${kind} の応答が ok ではない: ` + JSON.stringify(r)); return; }
+    responses[kind] = r;
+  }
+  const safe = name.replace(/[^\w.-]/g, "_");
+  const files = [
+    [`${safe}-init.json`, responses.init],
+    [`${safe}-flow.json`, responses.flow],
+    [`${safe}.request.json`, { version: 1, init: requests.init, flow: requests.flow }],
+  ];
+  // ブラウザからプロジェクトのフォルダには書けないのでダウンロードする。lean/golden/ に置くのは人の手
+  for (const [file, value] of files) {
+    const a = el("a", { href: URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) + "\n"], { type: "application/json" })), download: file });
+    a.click();
+    URL.revokeObjectURL(a.href);
+    await new Promise(ok => setTimeout(ok, 200));
+  }
+  notice("ok", `ダウンロードしました: ${files.map(f => f[0]).join(" / ")} — lean/golden/ に置き、cradle golden-check を通してください`);
 };
-loadMeta().then(init);
+if (loadMeta()) init().catch(e => notice("error", "Lean の wasm を起動できません: " + (e.message ?? e)));
 </script>
 </body>
 </html>
