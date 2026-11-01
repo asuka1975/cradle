@@ -299,6 +299,11 @@ export function arSymbols(buf) {
   return out;
 }
 
+/** text に残っている手元のパスを返す（無ければ null）。区切りまで含めて比べる — ホームが /home/web でも Emscripten の /home/web_user に当たらない。 */
+export function localPathIn(text, paths) {
+  return paths.map(p => `${p.replace(/\/+$/, "")}/`).find(p => p !== "/" && text.includes(p)) ?? null;
+}
+
 /** モジュール名 → 初期化子の C 名（標準ライブラリの Name.mangle）。 */
 export function initSymbolOf(moduleName) {
   return "initialize_" + moduleName.split(".").map(seg => seg.replace(/_/g, "__").replace(/[^A-Za-z0-9_]/g, c => `_u${c.codePointAt(0).toString(16).padStart(4, "0")}`)).join("_");

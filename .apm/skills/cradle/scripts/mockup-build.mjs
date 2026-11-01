@@ -14,7 +14,7 @@ import { availableParallelism, homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CHILD_OUTPUT_MAX, callLeanText, cradleScript, fail, glossaryEnglish, goldenDirOf, headerUsage, lakeBuild, loadConfigOrFail, parseArgs, readSidecar, readableEntries, sha256, walk } from "./lib.mjs";
-import { initSchedule, initSource, prunedSource, reach, symbolIndex } from "./wasm-closure.mjs";
+import { initSchedule, initSource, localPathIn, prunedSource, reach, symbolIndex } from "./wasm-closure.mjs";
 
 const opts = parseArgs(process.argv.slice(2), { help: "bool", "meta-only": "bool" });
 if (opts.help) { console.log(headerUsage(import.meta.url)); process.exit(0); }
@@ -25,7 +25,8 @@ if (!["always", "never"].includes(buildOpt)) fail(`--build は always | never �
 const TESTED_EMSCRIPTEN = "6.0.13";
 // wasm64 の命令を 32bit のメモリに落とす。C を吐いた Lean（64bit）と同じ幅なので USize も静的データもネイティブと揃い、ブラウザの Memory64 対応も要らない
 const TARGET = ["-sMEMORY64=2", "-fwasm-exceptions"];
-const OPTIMIZE = ["-O2", "-w"];
+// -DNDEBUG と -ffp-contract=off はネイティブ（Lake の release と leanc）に揃える。-DNDEBUG が無いと lean.h の assert が wasm でだけ生き、手元のパスも lean.js に残る
+const OPTIMIZE = ["-O2", "-w", "-DNDEBUG", "-ffp-contract=off"];
 // タスクの管理・libuv・OpenSSL は使わない。uv/* と openssl.cpp は要らない（libuv.cpp は初期化の入口だけ）
 const RUNTIME_SOURCES = ["debug", "thread", "mpz", "utf8", "object", "apply", "exception", "interrupt", "memory", "stackinfo", "compact", "init_module", "io", "hash", "byteslice", "platform", "alloc", "allocprof", "sharecommon", "stack_overflow", "process", "object_ref", "mpn", "mutex", "libuv"];
 const ASSETS = fileURLToPath(new URL("../assets/wasm/", import.meta.url));
@@ -306,6 +307,9 @@ async function buildLeanJs(meta) {
   const work = join(tmpdir(), `cradle-lean-out-${process.pid}.cjs`);
   try {
     await linkLeanJs(objects, rt, work);
+    // lean.js は配れる。手元の絶対パス（__FILE__ などから入る）が残っていれば置かない
+    const leaked = localPathIn(readFileSync(work, "utf8"), [cfg.root, cacheBase, homedir()]);
+    if (leaked) fail(`lean.js に手元の絶対パスが残っている（lean.js は置かない）: ${leaked}`);
     const requests = probeRequests(meta);
     const diffs = await selfTest(work, requests);
     if (diffs.length) {

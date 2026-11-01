@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classify, initSchedule, initSource, initSymbolOf, parseInitBody, parseModule, prunedSource, reach, splitItems, symbolIndex, tokensOf } from "../.apm/skills/cradle/scripts/wasm-closure.mjs";
+import { classify, initSchedule, initSource, initSymbolOf, localPathIn, parseInitBody, parseModule, prunedSource, reach, splitItems, symbolIndex, tokensOf } from "../.apm/skills/cradle/scripts/wasm-closure.mjs";
 
 // Lean が吐く C の形を小さく写した素材。A は別モジュールの関数と起動時の定数を使い、C は誰からも届かない
 const moduleA = `// Lean compiler output
@@ -216,6 +216,13 @@ test("symbolIndex は同じ名前のメンバーがあっても、メンバー�
 test("initSymbolOf は Lean の Name.mangle と同じ綴りにする", () => {
   assert.equal(initSymbolOf("Init.Data.List"), "initialize_Init_Data_List");
   assert.equal(initSymbolOf("A_B.C"), "initialize_A__B_C");
+});
+
+test("localPathIn は手元のパスだけを見つけ、Emscripten の既定のホームや / には当たらない", () => {
+  const built = 'x="/home/me/.cache/cradle/lean.h";HOME="/home/web_user"';
+  assert.equal(localPathIn(built, ["/srv/app", "/home/me"]), "/home/me/");
+  assert.equal(localPathIn(built, ["/home/web", "/home/me/"]), "/home/me/");
+  assert.equal(localPathIn('HOME="/home/web_user"', ["/home/web", "/"]), null);
 });
 
 test("parseModule は // Module: の無い C を断る", () => {
