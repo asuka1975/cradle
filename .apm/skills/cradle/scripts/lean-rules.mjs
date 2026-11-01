@@ -200,19 +200,20 @@ function scaffold({ cfg, add }) {
   if (sample.length && events) for (const f of sample) add("scaffold", "warn", f, 1, `骨格のサンプルドメイン（メモ）が残っている。documents/ddd に出来事 ${events} 件の事実があるので、lean-domain-model スキルで実ドメインに丸ごと置き換える`);
 }
 
-// orphan: ルートから import で辿れないモジュール
+// orphan: lake build の入口（ルートと CLI の Main.lean）のどちらからも import で辿れないモジュール
 function orphan({ cfg, root, modelDir, files, src, add }) {
   const rootFile = join(cfg.lean.rootDir, `${root}.lean`);
   if (!existsSync(rootFile)) return;
   const seen = new Set();
   const modOf = (f) => `${root}.${rel(modelDir, f).replace(/\.lean$/, "").split("/").join(".")}`;
   const fileOf = (mod) => join(cfg.lean.rootDir, ...mod.split(".")) + ".lean";
-  const stack = [rootFile];
+  // Runtime/Protocol.lean はルートを import するので Main.lean からしか辿れない
+  const stack = [rootFile, join(cfg.lean.rootDir, "Main.lean")];
   while (stack.length) {
     const f = stack.pop();
     if (!existsSync(f) || seen.has(f)) continue;
     seen.add(f);
     for (const m of src(f).code.matchAll(/^import\s+(\S+)/gm)) if (m[1].startsWith(root + ".")) stack.push(fileOf(m[1]));
   }
-  for (const f of files) if (!seen.has(f)) add("orphan", "warn", f, 1, `${modOf(f)} は ${root}.lean から辿れない（lake build が検査しない）`);
+  for (const f of files) if (!seen.has(f)) add("orphan", "warn", f, 1, `${modOf(f)} は ${root}.lean からも Main.lean からも辿れない（lake build が検査しない）`);
 }

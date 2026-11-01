@@ -30,6 +30,18 @@ function setup(t, files = model) {
 }
 const brief = (findings) => findings.map(f => [f.rule, f.severity, f.file, f.line]);
 
+test("orphan は Main.lean から辿れるモジュールを数えず、どちらの入口からも辿れないものだけを言う", (t) => {
+  const cfg = setup(t, {
+    ...model,
+    "lean/Main.lean": "import Example.Runtime.Protocol\ndef main : IO Unit := pure ()\n",
+    "lean/Example/Runtime/Protocol.lean": "import Example\nimport Example.Runtime.Wire\ndef x := 1\n",
+    "lean/Example/Runtime/Wire.lean": "def w := 1\n",
+  });
+  const orphans = checkLean(cfg).findings.filter(f => f.rule === "orphan");
+  assert.deepEqual(orphans.map(f => f.file), ["lean/Example/Orphan.lean"]);
+  assert.equal(orphans[0].message, "Example.Orphan は Example.lean からも Main.lean からも辿れない（lake build が検査しない）");
+});
+
 test("checkLean は行の規則・walls・cqrs をファイルごとに続けて（Main.lean は最後）、そのあと actor・annot/json・wiring・usecase・port・scaffold・orphan の順に並べる", (t) => {
   const cfg = setup(t);
   const { files, findings } = checkLean(cfg);

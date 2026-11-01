@@ -25,7 +25,7 @@
 //               内部入力の UseCase は名義（ActorContext）を受けない
 //   port      : Application/Port/<Port>/<操作>.lean（Domain/Port も同じ）は固定名 Request / Outcome を持ち、関数フィールドを持たない。Port 名は Repository で終えない
 //   --smoke   : CLI に init を流して ok が返ることを確かめる
-//   orphan    : <Root>.lean から import で辿れないモジュール（lake build が検査しないファイル）
+//   orphan    : <Root>.lean からも Main.lean からも import で辿れないモジュール（lake build が検査しないファイル）
 //   scaffold  : 骨格のサンプルドメイン（メモ）が残っているのに documents/ddd に探索の事実がある（実ドメインを形式化して置き換える）
 import { existsSync } from "node:fs";
 import { loadConfigOrFail, parseArgs, rel, lakeBuild, callLean, fail, scenarioNames } from "./lib.mjs";
