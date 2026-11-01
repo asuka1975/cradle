@@ -225,7 +225,7 @@ async function linkLeanJs(objects, ar, outFile) {
     await run("em++", ["-O2", ...TARGET, ...objects, ar, "-o", js,
       "-sMODULARIZE", "-sEXPORT_NAME=createCradleLeanModule", "-sENVIRONMENT=web,worker,node", "-sSINGLE_FILE",
       "-sALLOW_MEMORY_GROWTH", "-sINITIAL_MEMORY=64MB", "-sSTACK_SIZE=16MB", "-sFILESYSTEM=0",
-      "-sEXPORTED_FUNCTIONS=_cradle_init,_cradle_call,_free", "-sEXPORTED_RUNTIME_METHODS=UTF8ToString,stringToNewUTF8,lengthBytesUTF8",
+      "-sEXPORTED_FUNCTIONS=_cradle_init,_cradle_call,_malloc,_free", "-sEXPORTED_RUNTIME_METHODS=UTF8ToString,HEAPU8",
       "-sERROR_ON_UNDEFINED_SYMBOLS=1"], { what: "wasm のリンク" });
     writeFileSync(outFile, `${GENERATED_JS}${readFileSync(js, "utf8").trimEnd()}\n${readFileSync(join(ASSETS, "footer.js"), "utf8")}`);
   } finally { rmSync(work, { recursive: true, force: true }); }
@@ -244,7 +244,7 @@ function metaJson() {
 
 /** ネイティブの CLI と同じ応答を返すことを確かめるリクエスト: golden の init と flow、全シナリオの init と環境ごとの init、プロトコルエラー。 */
 function probeRequests(meta) {
-  const requests = ["not json", '{"cmd":"nope"}', '{"cmd":"nope"}\0garbage'];
+  const requests = ["not json", '{"cmd":"nope"}', '{"cmd":"nope"}\0garbage', '{"cmd":"\ud800あ"}'];
   const dir = goldenDirOf(cfg);
   if (existsSync(dir)) for (const f of readableEntries(dir).filter(n => n.endsWith(".request.json")).sort()) {
     const s = readSidecar(dir, f.slice(0, -".request.json".length));

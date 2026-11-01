@@ -8,6 +8,8 @@
 */
 (function (root) {
   const factory = createCradleLeanModule;
+  // CLI の stdin に渡るのと同じ UTF-8 にする（単独サロゲートは U+FFFD）。長さも実際のバイト列から取る
+  const encoder = new TextEncoder();
   async function open() {
     const m = await factory();
     if (m._cradle_init() !== 0) throw new Error("Lean の初期化に失敗しました");
@@ -18,9 +20,11 @@
     return async function lean(requestText) {
       if (!m) m = await open();
       try {
-        const req = BigInt(m.stringToNewUTF8(requestText));
+        const bytes = encoder.encode(requestText);
+        const req = BigInt(m._malloc(BigInt(bytes.length + 1)));   // 0 バイトでも NULL と紛れないように 1 足す。_malloc は Number を返し、_cradle_call は BigInt を受ける
         if (!req) throw new Error("リクエストを置くメモリが足りません");
-        const res = m._cradle_call(req, BigInt(m.lengthBytesUTF8(requestText)));
+        m.HEAPU8.set(bytes, Number(req));                  // _malloc でメモリが伸びると作り直されるので、そのあとで読む
+        const res = m._cradle_call(req, BigInt(bytes.length));
         m._free(req);
         if (!res) throw new Error("応答を置くメモリが足りません");
         const text = m.UTF8ToString(Number(res));
