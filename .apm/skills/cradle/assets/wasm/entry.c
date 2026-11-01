@@ -23,9 +23,9 @@ EMSCRIPTEN_KEEPALIVE int cradle_init(void) {
   return 0;
 }
 
-/* リクエスト（UTF-8）→ 応答（UTF-8、呼び手が free する） */
-EMSCRIPTEN_KEEPALIVE char* cradle_call(const char* request) {
-  lean_object* out = cradle_handle(lean_mk_string(request));
+/* リクエスト（UTF-8、長さで渡す — NUL で切らず CLI の stdin と同じに読む）→ 応答（UTF-8、呼び手が free する。メモリが足りなければ NULL） */
+EMSCRIPTEN_KEEPALIVE char* cradle_call(const char* request, size_t size) {
+  lean_object* out = cradle_handle(lean_mk_string_from_bytes(request, size));
   size_t n = lean_string_size(out);   /* 終端の NUL を含む */
   char* copy = (char*)malloc(n);
   if (copy) memcpy(copy, lean_string_cstr(out), n);

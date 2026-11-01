@@ -17,16 +17,19 @@
     let m = await open();
     return async function lean(requestText) {
       if (!m) m = await open();
-      const req = BigInt(m.stringToNewUTF8(requestText));
       try {
-        const res = m._cradle_call(req);
-        try { return m.UTF8ToString(Number(res)); } finally { m._free(res); }
+        const req = BigInt(m.stringToNewUTF8(requestText));
+        if (!req) throw new Error("リクエストを置くメモリが足りません");
+        const res = m._cradle_call(req, BigInt(m.lengthBytesUTF8(requestText)));
+        m._free(req);
+        if (!res) throw new Error("応答を置くメモリが足りません");
+        const text = m.UTF8ToString(Number(res));
+        m._free(res);
+        return text;
       } catch (e) {
-        // スタックの溢れなどで止まったインスタンスは使い回さない。プロトコルエラーの形で返し、次の呼び出しで作り直す
+        // スタックの溢れやメモリ不足で止まったインスタンスは使い回さない。プロトコルエラーの形で返し、次の呼び出しで作り直す
         m = null;
         return JSON.stringify({ error: `Lean の wasm が止まりました: ${e && e.message ? e.message : e}` });
-      } finally {
-        if (m) m._free(req);
       }
     };
   };
