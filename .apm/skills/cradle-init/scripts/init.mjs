@@ -2,7 +2,7 @@
 // init — 新しいプロダクトに Cradle の骨格を敷く。
 //   init --project <Root> [--domain "<一言>"] [--dir <path>] [--backend <package>] [--only <prefix>] [--dry-run] [--force]
 //   --domain "<一言>" はプロダクトの一言（documents/ddd/event-timeline.md の冒頭に書く。無ければ置き場だけ敷く）
-//   --only <prefix> は、そのパスで始まるファイルだけを対象にする（例: --only lean/mockup --force で骨格由来のモックアップだけ更新）
+//   --only <prefix> は、そのパスで始まるファイルだけを対象にする（例: --only lean/mockup --force で骨格由来のモックアップだけ更新）。当たるファイルが無ければ何も書かず 1 で止まる
 //   --backend <package> を付けると backend/ の骨格（ktlint 独自ルール・.editorconfig・gradle.properties）も敷く（例: com.example.notes）
 //   <Root> は Lean のルート名前空間（例: MonoWa）。lake の exe 名は小文字にしたもの。
 // 敷くもの: cradle.json / .apm/instructions/project.instructions.md（固有の事実。apm install が rules に写す。Codex は apm compile --single-agents で AGENTS.md に）/ .gitignore / documents/{ddd,ai-notes,infra-design,codebase} / lean/（動く最小ドメイン付き）
