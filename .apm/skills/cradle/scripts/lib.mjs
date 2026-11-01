@@ -220,7 +220,10 @@ export function rel(root, p) { return relative(root, p).split(sep).join("/"); }
 /** lean/ の全ファイルの sha256（lean/ からの相対パス → ハッシュ）。lake-manifest.json は lake build が書く（初回のビルドで現れる）ので数えない。 */
 export function leanSnapshot(cfg) {
   const out = {};
+  // mockup-build の生成物はモデルの編集ではない（探索の途中で作り直してよい）。置き場で決め打ちする — 同じ名前の手書きのファイルは比べる
+  const generated = cfg.lean.mockup ? ["lean.js", "meta.js"].map(f => join(cfg.root, cfg.lean.mockup, "public", f)) : [];
   for (const f of walk(cfg.lean.rootDir, { skip: [...DEFAULT_WALK_SKIP, "lake-manifest.json"] })) {
+    if (generated.includes(f)) continue;
     out[rel(cfg.lean.rootDir, f)] = sha256(readFileSync(f));
   }
   return out;

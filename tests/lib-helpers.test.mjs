@@ -83,6 +83,16 @@ test("walk の既定はビルド成果物と VCS の置き場を見ない。lean
   assert.deepEqual(leanSnapshot({ lean: { rootDir: join(root, "lean") } }), { "A.lean": sha256("a") });
 });
 
+test("leanSnapshot は mockup-build の生成物だけを外し、同じ名前の手書きのファイルと画面は比べる", (t) => {
+  const root = tempDir(t, "cradle-snapshot-");
+  writeTree(root, {
+    "lean/A.lean": "a", "lean/mockup/public/lean.js": "wasm", "lean/mockup/public/meta.js": "meta", "lean/mockup/public/index.html": "html",
+    "lean/tools/meta.js": "hand", "lean/lean.js": "hand",
+  });
+  const cfg = { root, lean: { rootDir: join(root, "lean"), mockup: "lean/mockup" } };
+  assert.deepEqual(Object.keys(leanSnapshot(cfg)).sort(), ["A.lean", "lean.js", "mockup/public/index.html", "tools/meta.js"]);
+});
+
 test("readText は無いファイルで fallback（既定は空文字）を返し、ディレクトリは無いものとして扱わず投げる", (t) => {
   const root = tempDir(t, "cradle-read-text-");
   writeTree(root, { "a.md": "中身\n", "d/x": "" });
